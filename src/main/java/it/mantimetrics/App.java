@@ -8,8 +8,6 @@ import it.mantimetrics.utils.MetricsConfiguration;
 import it.mantimetrics.utils.MetricsLogger;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
-import org.eclipse.jgit.transport.CredentialsProvider;
-import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 
 import java.io.FileWriter;
 import java.util.List;
@@ -19,7 +17,7 @@ public class App {
     public static void main(String[] args) {
         try {
             if (args.length < 1) {
-                System.err.println("Usage: mvn clean compile exec:java \"-Dexec.mainClass=it.mantimetrics.App\" \"-Dexec.args=config/config_avro.properties\"");
+                System.err.println("Usage: mvn exec:java \"-Dexec.mainClass=it.mantimetrics.App\" \"-Dexec.args=config/config_avro.properties\"");
                 System.exit(1);
             }
 
@@ -29,23 +27,28 @@ public class App {
 
             // Load dynamic metrics configuration
             MetricsConfiguration metricsConfig = new MetricsConfiguration(config);
-            CredentialsProvider credentialsProvider = new UsernamePasswordCredentialsProvider("username", "password"); // Se necessario
 
-            // Log of selected metrics (lists will be read and printed)
+            // Log of selected metrics
             MetricsLogger.logChosenMetrics(config);
 
-            // Extracting static metrics from remote Git repository
-            String repoUrl = config.get("git.repoUrl");
-            String branch = config.get("git.branch");
-            List<Map<String, Object>> staticMetrics = StaticMetricsExtractor.extract(repoUrl, branch, metricsConfig);
+            // Reads parameters for the remote repository
+            String repoUrl = config.get("repo.url");
+            String branch = config.get("branch");
+            if (repoUrl == null || branch == null) {
+                System.err.println("The properties 'repo.url' or 'branch' are not defined in the configuration file.");
+                System.exit(1);
+            }
 
-            // Extracting metrics from commits from the Git repository (remote)
-            List<Map<String, Object>> commitMetrics = CommitMetricsExtractor.extractFromRemoteRepo(config.get("git.repoUrl"), metricsConfig, branch, credentialsProvider);
+            // Extracts static metrics from the GitHub repository
+            List<Map<String, Object>> staticMetrics = StaticMetricsExtractor.extractFromGitHub(repoUrl, branch, metricsConfig);
 
-            // Fusion of datasets (static and commit)
+            // Extracts commit metrics from the GitHub repository
+            List<Map<String, Object>> commitMetrics = CommitMetricsExtractor.extractFromGitHub(repoUrl, branch, metricsConfig);
+
+            // Merges datasets (static and commit)
             List<Map<String, Object>> mergedData = DataMerger.merge(staticMetrics, commitMetrics, config);
 
-            // Writing the final CSV
+            // Writes the final CSV
             String csvOutput = config.get("output.csv");
             writeCSV(mergedData, csvOutput);
             System.out.println("CSV successfully generated in: " + csvOutput);

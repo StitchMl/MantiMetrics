@@ -10,7 +10,7 @@ public class MetricsLogger {
 
     /**
      * Reads the chosen metrics (static and commit) from the configuration
-     * and logs them for information purposes.
+     * and logs them at the information level.
      *
      * @param config The configuration map loaded from the properties file.
      */

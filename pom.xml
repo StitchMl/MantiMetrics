@@ -51,6 +51,12 @@
     </dependency>
 
     <!-- Other useful libraries: for code parsing or integration with CK if available as a Java library -->
+    <dependency>
+      <groupId>org.json</groupId>
+      <artifactId>json</artifactId>
+      <version>20231013</version>
+    </dependency>
+
     <!-- If CK is executable in command-line mode, it can be called up from the application. -->
   </dependencies>
 

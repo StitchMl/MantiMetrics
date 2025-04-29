@@ -55,7 +55,7 @@ MantiMetrics/
 
 ## ⚙️ Configuration
 
-For each Git project to be analysed, you must create a `.properties` configuration file like this one:
+For each Git project to be analyzed, you must create a `.properties` configuration file like this one:
 
 ### Example: `config/config_avro.properties`
 
@@ -81,13 +81,13 @@ method.pattern=.*
 
 ### Main parameters:
 
-| Parameter | Description |
-|:----------|:------------|
-| `code.directory` | Path to source files. |
-| `commit.repo.directory` | Path to the Git repository. |
-| `metrics.static` | Static metrics to be extracted (comma-separated). |
-| `metrics.commit` | Metrics on commits to be extracted (comma-separated). |
-| `output.csv` | Path where to save the resulting CSV file. |
+| Parameter               | Description                                           |
+|:------------------------|:------------------------------------------------------|
+| `code.directory`        | Path to source files.                                 |
+| `commit.repo.directory` | Path to the Git repository.                           |
+| `metrics.static`        | Static metrics to be extracted (comma-separated).     |
+| `metrics.commit`        | Metrics on commits to be extracted (comma-separated). |
+| `output.csv`            | Path where to save the resulting CSV file.            |
 
 ---
 
@@ -141,6 +141,6 @@ method.pattern=.*
 ---
 
 # 🔥 Ready to use!
-> Just change the `.properties` file and you can generate as many datasets as you need.
+> Change the `.properties` file, and you can generate as many datasets as you need.
 
 ---

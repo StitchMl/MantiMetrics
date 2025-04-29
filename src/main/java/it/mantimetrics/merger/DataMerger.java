@@ -1,50 +1,69 @@
 package it.mantimetrics.merger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class DataMerger {
 
-    public static List<Map<String, Object>> merge(List<Map<String, Object>> staticMetrics,
-                                                  List<Map<String, Object>> commitMetrics,
-                                                  java.util.Map<String, String> config) {
+    /**
+     * Merges static metrics records with those derived from commits,
+     * based on the 'methodName' and 'releaseId' fields.
+     * <p>
+     * The method uses the following logic:
+     * - For each static metrics record, a match is searched for in commitMetrics.
+     * - If a match is found, the data is merged.
+     * - Labelling logic is applied: if "ticketType" is "defect", "ticketStatus" is "Closed"
+     * (or "Resolved") and "resolution" is "Fixed", then the method is labeled "bug"; otherwise "not bug".
+     *
+     * @param staticMetrics list of records extracted from the static metrics part
+     * @param commitMetrics list of records extracted from the commit part
+     * @param config map of configurations (possibly for further future logics)
+     * @return list of merged records containing both metrics and the bug label
+     */
+    public static List<Map<String, Object>> merge(
+            List<Map<String, Object>> staticMetrics,
+            List<Map<String, Object>> commitMetrics,
+            Map<String, String> config) {
+
         List<Map<String, Object>> mergedRecords = new ArrayList<>();
 
-        // A simple example: merge based on 'methodName' and 'releaseId'.
-        // You will have to implement robust logic to merge records if there are multiple changes for the same method
-        for (Map<String, Object> s : staticMetrics) {
-            for (Map<String, Object> c : commitMetrics) {
-                if (s.get("methodName").equals(c.get("methodName"))
-                        && s.get("releaseId").equals(c.get("releaseId"))) {
-                    s.putAll(c);
-                    // Apply the filter on 33% of releases
-                    if (isWithinReleaseRange(s.get("releaseId").toString(), config.get("release.percentage"))) {
-                        // Determines the bugginess label
-                        String label = determineBugLabel(s);
-                        s.put("bugLabel", label);
-                        mergedRecords.add(s);
-                    }
+        for (Map<String, Object> staticRecord : staticMetrics) {
+            String staticMethod = (String) staticRecord.get("methodName");
+            String staticRelease = (String) staticRecord.get("releaseId");
+
+            // Creates a basic copy of the static record into which the data will be merged
+            Map<String, Object> mergedRecord = new HashMap<>(staticRecord);
+
+            // Search the commit dataset, using the keys 'methodName' and 'releaseId'.
+            for (Map<String, Object> commitRecord : commitMetrics) {
+                String commitMethod = (String) commitRecord.get("methodName");
+                String commitRelease = (String) commitRecord.get("releaseId");
+
+                if (staticMethod.equals(commitMethod) && staticRelease.equals(commitRelease)) {
+                    // Merging data: commit information overwrites any duplicates
+                    mergedRecord.putAll(commitRecord);
                 }
             }
+
+            // Applies logic for bugginess labeling:
+            // If ticketType is 'defect', ticketStatus is 'Closed' or 'Resolved' and resolution is 'Fixed'
+            String ticketType = (String) mergedRecord.get("ticketType");
+            String ticketStatus = (String) mergedRecord.get("ticketStatus");
+            String resolution = (String) mergedRecord.get("resolution");
+
+            if ("defect".equals(ticketType) &&
+                    (("Closed".equals(ticketStatus)) || ("Resolved".equals(ticketStatus))) &&
+                    "Fixed".equals(resolution)) {
+                mergedRecord.put("bugLabel", "bug");
+            } else {
+                mergedRecord.put("bugLabel", "non bug");
+            }
+
+            mergedRecords.add(mergedRecord);
         }
+
         return mergedRecords;
-    }
-
-    private static boolean isWithinReleaseRange(String releaseId, String percentageStr) {
-        // Implements the logic to consider only the first 33% of releases
-        // You can manage it by dates, semantic versions or an ordered list
-        return true; // placeholder
-    }
-
-    private static String determineBugLabel(Map<String, Object> record) {
-        // If the record contains ticket information in line with the criteria:
-        // ticketType = defect, ticketStatus in [Closed, Resolved] and resolution = Fixed, then label = "bug"
-        if ("defect".equals(record.get("ticketType"))
-                && "Closed".equals(record.get("ticketStatus"))
-                && "Fixed".equals(record.get("resolution"))) {
-            return "bug";
-        }
-        return "non bug";
     }
 }

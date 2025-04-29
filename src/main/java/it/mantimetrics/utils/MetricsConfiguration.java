@@ -5,15 +5,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-/**
- * Class that reads from the configuration the metrics to be considered (static and commit)
- * and stores them as dynamic lists.
- */
 public class MetricsConfiguration {
     private List<String> staticMetrics;
     private List<String> commitMetrics;
+    private String projectName;
 
     public MetricsConfiguration(Map<String, String> config) {
+        this.projectName = config.get("project.name");
         String staticMetricsConfig = config.get("metrics.static");
         String commitMetricsConfig = config.get("metrics.commit");
 
@@ -38,5 +36,9 @@ public class MetricsConfiguration {
 
     public List<String> getCommitMetrics() {
         return commitMetrics;
+    }
+
+    public String getProjectName() {
+        return projectName;
     }
 }

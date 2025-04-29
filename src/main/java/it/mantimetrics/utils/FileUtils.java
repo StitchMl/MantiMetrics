@@ -7,14 +7,14 @@ public class FileUtils {
 
     /**
      * Check that the paths indicated in the configuration file exist and are valid.
-     * If the output path (output.csv) does not exist, it attempts to create the directory.
+     * If the output path (output.csv) does not exist, try to create the directory.
      *
      * @param config The configuration map loaded from the properties file.
-     * @throws IllegalArgumentException if a mandatory route is not valid.
+     * @throws IllegalArgumentException if a mandatory path is not valid.
      * @throws IllegalStateException if it fails to create the output directory.
      */
     public static void validatePaths(Map<String, String> config) {
-        // Source code path validation
+        // Validation of the source code path
         String codeDirectory = config.get("code.directory");
         if (codeDirectory == null || codeDirectory.trim().isEmpty()) {
             throw new IllegalArgumentException("The property 'code.directory' is not specified in the configuration file.");
@@ -24,10 +24,10 @@ public class FileUtils {
             throw new IllegalArgumentException("Invalid code directory: " + codeDirectory);
         }
 
-        // Validation of the repository path for commits
+        // Validating the repository path for commits
         String commitRepoDirectory = config.get("commit.repo.directory");
         if (commitRepoDirectory == null || commitRepoDirectory.trim().isEmpty()) {
-            throw new IllegalArgumentException("La property 'commit.repo.directory' non è specificata nel file di configurazione.");
+            throw new IllegalArgumentException("The property 'commit.repo.directory' is not specified in the configuration file.");
         }
         File commitDir = new File(commitRepoDirectory);
         if (!commitDir.exists() || !commitDir.isDirectory()) {
@@ -44,7 +44,7 @@ public class FileUtils {
         if (outputDir != null && !outputDir.exists()) {
             boolean created = outputDir.mkdirs();
             if (!created) {
-                throw new IllegalStateException("Impossibile creare una directory di output: " + outputDir.getAbsolutePath());
+                throw new IllegalStateException("Failed to create output directory: " + outputDir.getAbsolutePath());
             }
         }
     }

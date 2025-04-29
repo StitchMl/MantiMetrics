@@ -1,127 +1,77 @@
 package it.mantimetrics.extractor;
 
 import it.mantimetrics.utils.MetricsConfiguration;
-import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.api.LogCommand;
-import org.eclipse.jgit.lib.Repository;
-import org.eclipse.jgit.revwalk.RevCommit;
-import org.eclipse.jgit.transport.CredentialsProvider;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.*;
 
 public class CommitMetricsExtractor {
 
     /**
-     * Extracts metrics from commits to a remote Git repository.
+     * Extracts commit metrics from a GitHub repository.
      *
-     * @param repoUrl URL of the remote Git repository
-     * @param metricsConfig The dynamic metrics configuration
-     * @param credentialsProvider The credentials for remote access (if needed)
-     * @return list of records with metrics extracted from commits
+     * @param repoUrl base URL of the repository (e.g., <a href="https://api.github.com/repos/apache/avro">...</a>)
+     * @param branch branch to be analyzed (e.g. "main")
+     * @param metricsConfig dynamic metrics configuration
+     * @return list of records with commit metrics
      */
-    public static List<Map<String, Object>> extractFromRemoteRepo(String repoUrl, MetricsConfiguration metricsConfig, String branch, CredentialsProvider credentialsProvider) {
+    public static List<Map<String, Object>> extractFromGitHub(String repoUrl, String branch, MetricsConfiguration metricsConfig) {
         List<Map<String, Object>> records = new ArrayList<>();
-        Git git = null;
         try {
-            // Clone the repository temporarily
-            File tempDir = File.createTempFile("tempRepo", "");
-            tempDir.delete();  // Ensure it's treated as a directory
-            git = Git.cloneRepository()
-                    .setURI(repoUrl)
-                    .setDirectory(tempDir)
-                    .setCredentialsProvider(credentialsProvider) // Provide credentials if necessary
-                    .call();
+            // Construct the URL to obtain commits
+            // Example: https://api.github.com/repos/apache/avro/commits?sha=main
+            String commitsUrl = repoUrl + "/commits?sha=" + branch;
+            String response = httpGet(commitsUrl);
+            JSONArray commitsArray = new JSONArray(response);
 
-            // Retrieve the commits from the repository
-            Repository repository = git.getRepository();
-            LogCommand log = git.log();
-            Iterable<RevCommit> commits = log.call();
-
-            // Process each commit and collect metrics
-            for (RevCommit commit : commits) {
-                List<Map<String, Object>> commitRecords = processCommit(commit, metricsConfig);
-                records.addAll(commitRecords);
+            for (int i = 0; i < commitsArray.length(); i++) {
+                JSONObject commitObj = commitsArray.getJSONObject(i);
+                Map<String, Object> record = new HashMap<>();
+                record.put("methodName", "exampleMethod()"); // Simulation: for real mapping, diffs must be analysed
+                record.put("releaseId", branch);
+                String commitMessage = commitObj.getJSONObject("commit").getString("message");
+                if (commitMessage.contains("defect")) {
+                    record.put("ticketType", "defect");
+                    record.put("ticketStatus", "Closed");
+                    record.put("resolution", "Fixed");
+                } else {
+                    record.put("ticketType", "other");
+                }
+                if (metricsConfig.getCommitMetrics().contains("methodHistories")) {
+                    record.put("methodHistories", 3);
+                }
+                if (metricsConfig.getCommitMetrics().contains("authors")) {
+                    record.put("authors", 2);
+                }
+                if (metricsConfig.getCommitMetrics().contains("churn")) {
+                    record.put("churn", 20);
+                }
+                records.add(record);
             }
         } catch (Exception e) {
             e.printStackTrace();
-        } finally {
-            // Clean up the cloned repository after processing
-            if (git != null) {
-                File tempDir = git.getRepository().getDirectory().getParentFile();
-                deleteDirectory(tempDir);  // Remove the temp directory after analysis
-            }
         }
         return records;
     }
 
-    /**
-     * Processes a single commit to simulate the extraction of configured metrics.
-     * In a real implementation, the method should parse the changes (diff) and map the changes to the methods.
-     */
-    private static List<Map<String, Object>> processCommit(RevCommit commit, MetricsConfiguration metricsConfig) {
-        List<Map<String, Object>> records = new ArrayList<>();
-        Map<String, Object> record = new HashMap<>();
-
-        // Basic information: fake values for the associated method
-        record.put("methodName", "exampleMethod()");
-        record.put("releaseId", "v1.0");
-
-        // Dynamic calculation of commit metrics
-        if (metricsConfig.getCommitMetrics().contains("methodHistories")) {
-            record.put("methodHistories", 3);  // Simulate
+    private static String httpGet(String urlStr) throws Exception {
+        URL url = new URL(urlStr);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+        BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+        String inputLine;
+        StringBuilder content = new StringBuilder();
+        while ((inputLine = in.readLine()) != null) {
+            content.append(inputLine);
         }
-        if (metricsConfig.getCommitMetrics().contains("authors")) {
-            record.put("authors", 2);  // Simulate
-        }
-        if (metricsConfig.getCommitMetrics().contains("stmtAdded")) {
-            record.put("stmtAdded", 15);  // Simulate
-        }
-        if (metricsConfig.getCommitMetrics().contains("stmtDeleted")) {
-            record.put("stmtDeleted", 5);  // Simulate
-        }
-        if (metricsConfig.getCommitMetrics().contains("churn")) {
-            record.put("churn", 20);  // Simulate
-        }
-        if (metricsConfig.getCommitMetrics().contains("maxStmtAdded")) {
-            record.put("maxStmtAdded", 10);  // Simulate
-        }
-        if (metricsConfig.getCommitMetrics().contains("avgStmtAdded")) {
-            record.put("avgStmtAdded", 7);  // Simulate
-        }
-        if (metricsConfig.getCommitMetrics().contains("maxStmtDeleted")) {
-            record.put("maxStmtDeleted", 4);  // Simulate
-        }
-        if (metricsConfig.getCommitMetrics().contains("avgStmtDeleted")) {
-            record.put("avgStmtDeleted", 2);  // Simulate
-        }
-
-        // Check if the commit message contains a reference to a 'defect'
-        String commitMsg = commit.getShortMessage();
-        if (commitMsg != null && commitMsg.contains("defect")) {
-            record.put("ticketType", "defect");
-            record.put("ticketStatus", "Closed");
-            record.put("resolution", "Fixed");
-        } else {
-            record.put("ticketType", "other");
-        }
-
-        records.add(record);
-        return records;
-    }
-
-    /**
-     * Deletes a directory and its contents recursively.
-     */
-    private static void deleteDirectory(File directory) {
-        if (directory.isDirectory()) {
-            for (File file : directory.listFiles()) {
-                deleteDirectory(file);
-            }
-        }
-        directory.delete();
+        in.close();
+        conn.disconnect();
+        return content.toString();
     }
 }
