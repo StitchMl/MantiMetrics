@@ -13,7 +13,7 @@ MantiMetrics:
 - Merges data
 - Exports the final dataset in `.csv` format
 
-All based **dynamically** on the required metrics, with no need to modify the code.
+All are based **dynamically** on the required metrics, with no need to modify the code.
 
 ---
 
