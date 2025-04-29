@@ -8,7 +8,7 @@ import java.util.stream.Collectors;
 public class MetricsConfiguration {
     private List<String> staticMetrics;
     private List<String> commitMetrics;
-    private String projectName;
+    private final String projectName;
 
     public MetricsConfiguration(Map<String, String> config) {
         this.projectName = config.get("project.name");

@@ -13,18 +13,16 @@ import java.util.*;
 public class CommitMetricsExtractor {
 
     /**
-     * Extracts commit metrics from a GitHub repository.
+     * Extracts commit metrics from the GitHub repository.
      *
      * @param repoUrl base URL of the repository (e.g., <a href="https://api.github.com/repos/apache/avro">...</a>)
-     * @param branch branch to be analyzed (e.g. "main")
-     * @param metricsConfig dynamic metrics configuration
-     * @return list of records with commit metrics
+     * @param branch Branch to be analyzed
+     * @param metricsConfig Dynamic metrics configuration
+     * @return List of records with metrics from the commits
      */
     public static List<Map<String, Object>> extractFromGitHub(String repoUrl, String branch, MetricsConfiguration metricsConfig) {
         List<Map<String, Object>> records = new ArrayList<>();
         try {
-            // Construct the URL to obtain commits
-            // Example: https://api.github.com/repos/apache/avro/commits?sha=main
             String commitsUrl = repoUrl + "/commits?sha=" + branch;
             String response = httpGet(commitsUrl);
             JSONArray commitsArray = new JSONArray(response);
@@ -32,24 +30,37 @@ public class CommitMetricsExtractor {
             for (int i = 0; i < commitsArray.length(); i++) {
                 JSONObject commitObj = commitsArray.getJSONObject(i);
                 Map<String, Object> record = new HashMap<>();
-                record.put("methodName", "exampleMethod()"); // Simulation: for real mapping, diffs must be analysed
+                // In a real environment, the mapping between commits and modified methods should be done.
+                // Here we use a generic identifier approach.
+                record.put("methodName", "exampleMethod()");
                 record.put("releaseId", branch);
-                String commitMessage = commitObj.getJSONObject("commit").getString("message");
-                if (commitMessage.contains("defect")) {
+
+                // Data extraction from a commit
+                JSONObject commitData = commitObj.getJSONObject("commit");
+                String commitMessage = commitData.getString("message");
+                // Determines whether the commit concerns a bug, based on the message
+                if (commitMessage.toLowerCase().contains("defect")) {
                     record.put("ticketType", "defect");
                     record.put("ticketStatus", "Closed");
                     record.put("resolution", "Fixed");
                 } else {
                     record.put("ticketType", "other");
+                    record.put("ticketStatus", "Open");
+                    record.put("resolution", "Unresolved");
+                }
+                // If the configuration requires methodHistories, authors, churn, etc.
+                if (metricsConfig.getCommitMetrics().contains("churn")) {
+                    int churn = calculateChurnFromCommit(commitObj);
+                    record.put("churn", churn);
                 }
                 if (metricsConfig.getCommitMetrics().contains("methodHistories")) {
-                    record.put("methodHistories", 3);
+                    // For a real implementation it would be necessary to aggregate the data, here we set a more realistic fake value
+                    record.put("methodHistories", 1);
                 }
                 if (metricsConfig.getCommitMetrics().contains("authors")) {
-                    record.put("authors", 2);
-                }
-                if (metricsConfig.getCommitMetrics().contains("churn")) {
-                    record.put("churn", 20);
+                    // Extract author from commit
+                    String author = commitData.getJSONObject("author").optString("name", "unknown");
+                    record.put("authors", author);
                 }
                 records.add(record);
             }
@@ -59,19 +70,30 @@ public class CommitMetricsExtractor {
         return records;
     }
 
+    private static int calculateChurnFromCommit(JSONObject commitObj) {
+        // If the commit has a 'stats' object, use it to calculate churn (additions and deletions)
+        if (commitObj.has("stats")) {
+            JSONObject stats = commitObj.getJSONObject("stats");
+            int additions = stats.optInt("additions", 0);
+            int deletions = stats.optInt("deletions", 0);
+            return additions + deletions;
+        }
+        return 0;
+    }
+
     private static String httpGet(String urlStr) throws Exception {
         URL url = new URL(urlStr);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
         conn.setRequestProperty("User-Agent", "Mozilla/5.0");
         BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+        StringBuilder responseContent = new StringBuilder();
         String inputLine;
-        StringBuilder content = new StringBuilder();
         while ((inputLine = in.readLine()) != null) {
-            content.append(inputLine);
+            responseContent.append(inputLine);
         }
         in.close();
         conn.disconnect();
-        return content.toString();
+        return responseContent.toString();
     }
 }

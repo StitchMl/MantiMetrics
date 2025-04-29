@@ -8,19 +8,14 @@ import java.util.Map;
 public class DataMerger {
 
     /**
-     * Merges static metrics records with those derived from commits,
-     * based on the 'methodName' and 'releaseId' fields.
-     * <p>
-     * The method uses the following logic:
-     * - For each static metrics record, a match is searched for in commitMetrics.
-     * - If a match is found, the data is merged.
-     * - Labelling logic is applied: if "ticketType" is "defect", "ticketStatus" is "Closed"
-     * (or "Resolved") and "resolution" is "Fixed", then the method is labeled "bug"; otherwise "not bug".
+     * Merges static metrics records with commit records.
+     * Applies labeling logic:
+     * - If ticketType is "defect", ticketStatus is "Closed" or "Resolved" and resolution is "Fixed", the method is buggy.
      *
-     * @param staticMetrics list of records extracted from the static metrics part
-     * @param commitMetrics list of records extracted from the commit part
-     * @param config map of configurations (possibly for further future logics)
-     * @return list of merged records containing both metrics and the bug label
+     * @param staticMetrics List of records extracted from static metrics
+     * @param commitMetrics List of records extracted from commits
+     * @param config Configuration (any other logics)
+     * @return List of merged records
      */
     public static List<Map<String, Object>> merge(
             List<Map<String, Object>> staticMetrics,
@@ -29,33 +24,32 @@ public class DataMerger {
 
         List<Map<String, Object>> mergedRecords = new ArrayList<>();
 
+        // Use "methodName" and "releaseId" as keys for the union
         for (Map<String, Object> staticRecord : staticMetrics) {
             String staticMethod = (String) staticRecord.get("methodName");
             String staticRelease = (String) staticRecord.get("releaseId");
 
-            // Creates a basic copy of the static record into which the data will be merged
+            // Start with the static record
             Map<String, Object> mergedRecord = new HashMap<>(staticRecord);
 
-            // Search the commit dataset, using the keys 'methodName' and 'releaseId'.
+            // Integrates data from commits that match
             for (Map<String, Object> commitRecord : commitMetrics) {
                 String commitMethod = (String) commitRecord.get("methodName");
                 String commitRelease = (String) commitRecord.get("releaseId");
 
                 if (staticMethod.equals(commitMethod) && staticRelease.equals(commitRelease)) {
-                    // Merging data: commit information overwrites any duplicates
                     mergedRecord.putAll(commitRecord);
                 }
             }
 
-            // Applies logic for bugginess labeling:
-            // If ticketType is 'defect', ticketStatus is 'Closed' or 'Resolved' and resolution is 'Fixed'
+            // Label buggy: checks whether the commit has indicated a bug according to the criteria
             String ticketType = (String) mergedRecord.get("ticketType");
             String ticketStatus = (String) mergedRecord.get("ticketStatus");
             String resolution = (String) mergedRecord.get("resolution");
 
-            if ("defect".equals(ticketType) &&
-                    (("Closed".equals(ticketStatus)) || ("Resolved".equals(ticketStatus))) &&
-                    "Fixed".equals(resolution)) {
+            if ("defect".equalsIgnoreCase(ticketType) &&
+                    ("Closed".equalsIgnoreCase(ticketStatus) || "Resolved".equalsIgnoreCase(ticketStatus)) &&
+                    "Fixed".equalsIgnoreCase(resolution)) {
                 mergedRecord.put("bugLabel", "bug");
             } else {
                 mergedRecord.put("bugLabel", "non bug");
@@ -63,7 +57,6 @@ public class DataMerger {
 
             mergedRecords.add(mergedRecord);
         }
-
         return mergedRecords;
     }
 }
