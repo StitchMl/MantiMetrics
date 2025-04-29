@@ -60,19 +60,25 @@ For each Git project to be analyzed, you must create a `.properties` configurati
 ### Example: `config/config_avro.properties`
 
 ```properties
+# Project Name
 project.name=AVRO
-code.directory=data/raw/avro/src
-commit.repo.directory=data/raw/avro
+# GitHub API URL of the repository (not the clone)
+repo.url=https://api.github.com/repos/apache/avro
+# Branch to be analyzed (typically 'main' or 'master')
+branch=main
+
+# Percentage of releases to be considered for analysis (e.g., 33 indicates the first 33% of releases)
 release.percentage=33
 output.csv=data/output/dataset_avro.csv
 
+# Configuration for integration with Jira (if available and necessary)
 jira.url=https://issues.apache.org/jira
 jira.projectKey=AVRO
 jira.ticketType=defect
 jira.ticketStatus=Closed,Resolved
 jira.resolution=Fixed
 
-# Metrics to be extracted
+# Metrics to be extracted (comma-separated list)
 metrics.static=LOC,cyclomaticComplexity,nestingDepth,branchCount
 metrics.commit=methodHistories,authors,churn
 
