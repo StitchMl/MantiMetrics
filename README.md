@@ -21,33 +21,39 @@ All are based **dynamically** on the required metrics, with no need to modify th
 
 ```
 MantiMetrics/
-├── config/
-│   ├── config_avro.properties
-│   └── config_bookkeeper.properties
-├── data/
-│   ├── raw/
-│   │   ├── avro/
-│   │   └── bookkeeper/
-│   └── output/
-│       ├── dataset_avro.csv
-│       └── dataset_bookkeeper.csv
+├── output/
+│   ├── avro_dataset.csv
+│   └── bookkeeper_dataset.csv
 ├── src/
 │   └── main/
-│       └── java/
-│           └── it/
-│               └── mantimetrics/
-│                   ├── App.java
-│                   ├── extractor/
-│                   │   ├── StaticMetricsExtractor.java
-│                   │   └── CommitMetricsExtractor.java
-│                   ├── merger/
-│                   │   └── DataMerger.java
-│                   ├── writer/
-│                   │   └── CsvWriter.java
-│                   └── utils/
-│                       ├── ConfigLoader.java
-│                       └── MetricsConfiguration.java
-├── pom.xml
+│       ├── java/
+│       │   └── com/
+│       │       └── mantimetrics/
+│       │           ├── MantiMetrics.java
+│       │           ├── config/
+│       │           │   └── ProjectConfigLoader.java
+│       │           ├── csv/
+│       │           │   └── CSVWriter.java                      
+│       │           ├── git/
+│       │           │   ├── GitService.java
+│       │           │   └── ProjectConfig.java
+│       │           ├── jira/
+│       │           │   └── JiraClient.java 
+│       │           ├── metrics/
+│       │           │   ├── MethodMetrics.java
+│       │           │   └── MetricsCalculator.java
+│       │           ├── model/
+│       │           │   └── MethodData.java
+│       │           ├── parser/
+│       │           │   └── CodeParser.java
+│       │           └── release/
+│       │               └── ReleaseSelector.java
+│       └── resources/
+│           ├── application.properties
+│           ├── github.properties
+│           └── log4j.properties
+│           └── projects-config.json
+├── pom.xml 
 └── README.md
 ```
 
@@ -55,61 +61,41 @@ MantiMetrics/
 
 ## ⚙️ Configuration
 
-For each Git project to be analyzed, you must create a `.properties` configuration file like this one:
+For each Git project to be analyzed, you must add in `projects-config.json` configuration file like this one:
 
-### Example: `config/config_avro.properties`
+### Example: `resources/projects-config.json`
 
 ```properties
-# Project Name
-project.name=AVRO
-# GitHub API URL of the repository (not the clone)
-repo.url=https://api.github.com/repos/apache/avro
-# Branch to be analyzed (typically 'main' or 'master')
-branch=main
-
-# Percentage of releases to be considered for analysis (e.g., 33 indicates the first 33% of releases)
-release.percentage=33
-output.csv=data/output/dataset_avro.csv
-
-# Configuration for integration with Jira (if available and necessary)
-jira.url=https://issues.apache.org/jira
-jira.projectKey=AVRO
-jira.ticketType=defect
-jira.ticketStatus=Closed,Resolved
-jira.resolution=Fixed
-
-# Metrics to be extracted (comma-separated list)
-metrics.static=LOC,cyclomaticComplexity,nestingDepth,branchCount
-metrics.commit=methodHistories,authors,churn
-
-method.pattern=.*
+[
+   {
+      "name": "BookKeeper",
+      "repoUrl": "https://github.com/apache/bookkeeper.git",
+      "jiraKey": "BOOKKEEPER"
+   },
+   {
+      "name": "Avro",
+      "repoUrl": "https://github.com/apache/avro.git",
+      "jiraKey": "AVRO"
+   }
+]
 ```
 
 ### Main parameters:
 
-| Parameter               | Description                                           |
-|:------------------------|:------------------------------------------------------|
-| `code.directory`        | Path to source files.                                 |
-| `commit.repo.directory` | Path to the Git repository.                           |
-| `metrics.static`        | Static metrics to be extracted (comma-separated).     |
-| `metrics.commit`        | Metrics on commits to be extracted (comma-separated). |
-| `output.csv`            | Path where to save the resulting CSV file.            |
-
+| Parameter        | Description                                           |
+|:-----------------|:------------------------------------------------------|
+| `name`           | Repo name.                                            |
+| `repoUrl`        | Path to the Git repository.                           |
+| `jiraKey`        | Name of repo on JIRA.                                 |
 ---
-
 ## 🏃‍♂️ How to Execute
 
 1. **Cleanliness and compilation:**
    ```bash
    mvn clean compile
    ```
-
-2. **Execution with configuration:**
-   ```bash
-   mvn clean compile exec:java "-Dexec.mainClass=it.mantimetrics.App" "-Dexec.args=config/config_avro.properties"
-   ```
-
-✅ The final CSV will be saved to the specified path (`data/output/dataset_avro.csv`).
+   
+✅ The final CSV will be saved to the specified path (`output/avro_dataset.csv`).
 
 ---
 
@@ -147,6 +133,6 @@ method.pattern=.*
 ---
 
 # 🔥 Ready to use!
-> Change the `.properties` file, and you can generate as many datasets as you need.
+> Change the `projects-config.json` file, and you can generate as many datasets as you need.
 
 ---

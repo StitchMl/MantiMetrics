@@ -54,7 +54,7 @@ public class MantiMetrics {
             );
 
             // 3) Export to CSV
-            String outCsv = cfg.getName() + "_dataset.csv";
+            String outCsv = "output/" + cfg.getName().toLowerCase() + "_dataset.csv";
             csvWriter.write(outCsv, allMethods);
             System.out.println("Generated CSV for project "
                     + cfg.getName() + ": " + outCsv);
