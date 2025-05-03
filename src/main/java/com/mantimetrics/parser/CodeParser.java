@@ -39,7 +39,7 @@ public class CodeParser {
                 // 3) for each method, create MethodData including issueKeys
                 for (MethodDeclaration m : cu.findAll(MethodDeclaration.class)) {
                     if (m.getRange().isEmpty()) continue;
-                    var mets = calc.computeAll(m, repo);
+                    var mets = calc.computeAll(m);
                     var md = new MethodData(
                             repo,
                             m.getDeclarationAsString(false, false, false),

@@ -44,10 +44,9 @@ MantiMetrics/
 │       │           │   └── MetricsCalculator.java
 │       │           ├── model/
 │       │           │   └── MethodData.java
-│       │           ├── parser/
-│       │           │   └── CodeParser.java
-│       │           └── release/
-│       │               └── ReleaseSelector.java
+│       │           └── parser/
+│       │               └── CodeParser.java
+│       │           
 │       └── resources/
 │           ├── application.properties
 │           ├── github.properties

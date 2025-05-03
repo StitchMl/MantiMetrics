@@ -8,12 +8,11 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.github.javaparser.Range;
 
-import java.util.Optional;
 import static java.lang.Math.log;
 
 public class MetricsCalculator {
 
-    public MethodMetrics computeAll(MethodDeclaration m, String repo) {
+    public MethodMetrics computeAll(MethodDeclaration m) {
         MethodMetrics mm = new MethodMetrics();
 
         // 1. LOC: use Optional<Range> instead of getBegin().get()/getEnd().get()
@@ -140,8 +139,15 @@ public class MetricsCalculator {
 
     // Inner class to collect Halstead values
     private static class HalsteadMetrics {
-        int n1, n2, N1, N2;
-        double vocabulary, length, volume, difficulty, effort;
+        final int n1;
+        final int n2;
+        final int N1;
+        final int N2;
+        final double vocabulary;
+        final double length;
+        final double volume;
+        final double difficulty;
+        final double effort;
         HalsteadMetrics(int n1, int n2, int N1, int N2,
                         double vocabulary, double length,
                         double volume, double difficulty,
