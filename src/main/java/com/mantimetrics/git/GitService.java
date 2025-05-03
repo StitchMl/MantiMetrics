@@ -5,57 +5,24 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.*;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Browse and download Java files from GitHub without cloning the repo.
- * Use the Git Trees API {{GET /repos/:owner/:repo/git/trees/:branch?recursive=1}}: contentReference[oaicite:0]{index=0}
- * and only filters .java blobs under src/main/java, excluding archetype resources.
- */
 public class GitService {
     private static final String API_URL = "https://api.github.com";
     private static final String RAW_URL = "https://raw.githubusercontent.com";
     private final OkHttpClient client = new OkHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
     private final String authToken;
-    private final Map<String,String> branchCache = new HashMap<>();
+    // Cache default branches per repo to avoid repeated calls
+    private final java.util.Map<String, String> branchCache = new java.util.HashMap<>();
     private static final Pattern JIRA_KEY_PATTERN = Pattern.compile("([A-Z]+-\\d+)");
 
     public GitService(String pat) {
         this.authToken = pat;
-    }
-
-    /** It gets (and caches) the default branch to avoid repeated calls. */
-    public String getDefaultBranch(String owner, String repo) throws IOException {
-        String key = owner+"/"+repo;
-        if (branchCache.containsKey(key)) return branchCache.get(key);
-
-        String url = String.format("%s/repos/%s/%s", API_URL, owner, repo);
-        Request req = new Request.Builder()
-                .url(url)
-                .header("Authorization", "token " + authToken)
-                .header("Accept", "application/vnd.github.v3+json")
-                .build();
-
-        try (Response resp = client.newCall(req).execute()) {
-            if (!resp.isSuccessful()) {
-                throw new IOException("GitHub API error fetching repo info: HTTP " + resp.code());
-            }
-            assert resp.body() != null;
-            JsonNode root = mapper.readTree(resp.body().string());
-            String branch = root.path("default_branch").asText();
-            branchCache.put(key, branch);
-            return branch;
-        }
     }
 
     /**
@@ -75,6 +42,7 @@ public class GitService {
                 .url(url)
                 .header("Authorization", "token " + authToken)
                 .header("Accept", "application/vnd.github.v3+json")
+                .header("User-Agent", "MantiMetricsApp")    // ← obbligatorio
                 .build();
 
         try (Response resp = client.newCall(req).execute()) {
@@ -96,18 +64,45 @@ public class GitService {
     }
 
     /**
-     * Recursively lists all .java blobs under src/main/java,
-     * excluding any path containing /src/main/resources/: contentReference[oaicite:1]{index=1}.
+     * Retrieves (and caches) the default branch name for the given repo.
+     */
+    public String getDefaultBranch(String owner, String repo) throws IOException {
+        String key = owner + "/" + repo;
+        if (branchCache.containsKey(key)) return branchCache.get(key);
+
+        String url = String.format("%s/repos/%s/%s", API_URL, owner, repo);
+        Request req = new Request.Builder()
+                .url(url)
+                .header("Authorization", "token " + authToken)
+                .header("Accept", "application/vnd.github.v3+json")
+                .header("User-Agent", "MantiMetricsApp")    // ← obbligatorio
+                .build();
+
+        try (Response resp = client.newCall(req).execute()) {
+            if (!resp.isSuccessful()) {
+                throw new IOException("GitHub API error fetching repo info: HTTP " + resp.code());
+            }
+            assert resp.body() != null;
+            JsonNode root = mapper.readTree(resp.body().string());
+            String branch = root.path("default_branch").asText();
+            branchCache.put(key, branch);
+            return branch;
+        }
+    }
+
+    /**
+     * Returns all paths to .java files under any src/main/java subtree of the repo,
+     * using the default branch.
      */
     public List<String> listJavaFiles(String owner, String repo) throws IOException {
         String branch = getDefaultBranch(owner, repo);
         String url = String.format("%s/repos/%s/%s/git/trees/%s?recursive=1",
                 API_URL, owner, repo, branch);
-
         Request req = new Request.Builder()
                 .url(url)
                 .header("Authorization", "token " + authToken)
                 .header("Accept", "application/vnd.github.v3+json")
+                .header("User-Agent", "MantiMetricsApp")    // ← obbligatorio
                 .build();
 
         try (Response resp = client.newCall(req).execute()) {
@@ -120,11 +115,9 @@ public class GitService {
             for (JsonNode entry : tree) {
                 String type = entry.get("type").asText();
                 String path = entry.get("path").asText();
-                // Includi SOLO i .java sotto src/main/java e NON in src/main/resources
                 if ("blob".equals(type)
                         && path.endsWith(".java")
-                        && path.contains("src/main/java")
-                        && !path.contains("/src/main/resources/")) {
+                        && path.contains("src/main/java")) {
                     javaFiles.add(path);
                 }
             }
@@ -133,17 +126,24 @@ public class GitService {
     }
 
     /**
-     * Download the raw content of a file, using raw.githubusercontent.com
-     * (without authentication, for public repos): contentReference[oaicite:2]{index=2}.
+     * Downloads the raw content of a file using the cached default branch.
      */
     public String fetchFileContent(String owner, String repo, String filePath) throws IOException {
         String branch = getDefaultBranch(owner, repo);
         String rawUrl = String.format("%s/%s/%s/%s/%s",
                 RAW_URL, owner, repo, branch, filePath);
-        Request req = new Request.Builder().url(rawUrl).build();
+
+        Request req = new Request.Builder()
+                .url(rawUrl)
+                .header("Authorization", "token " + authToken)
+                .header("Accept", "application/vnd.github.v3+json")
+                .header("User-Agent", "MantiMetricsApp")    // ← obbligatorio
+                .build();
+
         try (Response resp = client.newCall(req).execute()) {
             if (!resp.isSuccessful()) {
-                throw new IOException("Raw content error: HTTP " + resp.code());
+                throw new IOException("GitHub Raw URL error fetching " +
+                        filePath + ": HTTP " + resp.code());
             }
             assert resp.body() != null;
             return resp.body().string();

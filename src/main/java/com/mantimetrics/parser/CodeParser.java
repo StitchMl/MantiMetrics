@@ -10,10 +10,6 @@ import com.mantimetrics.model.MethodData;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Parses and calculates metrics directly online,
- * skipping files under src/main/resources.
- */
 public class CodeParser {
 
     private final GitService gh;
@@ -33,17 +29,17 @@ public class CodeParser {
 
         for (String path : paths) {
             try {
-                // 1) extract JIRA keys from commits on the file
+                // 1) extract JIRA keys from the commits to the file
                 List<String> issueKeys = gh.getIssueKeysForFile(owner, repo, path);
 
                 // 2) download and parse the source
                 String src = gh.fetchFileContent(owner, repo, path);
                 CompilationUnit cu = new JavaParser().parse(src).getResult().orElseThrow();
 
-                // 3) for each method, create MethodData by including issueKeys
+                // 3) for each method, create MethodData including issueKeys
                 for (MethodDeclaration m : cu.findAll(MethodDeclaration.class)) {
                     if (m.getRange().isEmpty()) continue;
-                    var mets = calc.computeAll(m);
+                    var mets = calc.computeAll(m, repo);
                     var md = new MethodData(
                             repo,
                             m.getDeclarationAsString(false, false, false),

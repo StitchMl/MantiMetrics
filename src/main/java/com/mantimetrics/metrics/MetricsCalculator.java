@@ -13,7 +13,7 @@ import static java.lang.Math.log;
 
 public class MetricsCalculator {
 
-    public MethodMetrics computeAll(MethodDeclaration m) {
+    public MethodMetrics computeAll(MethodDeclaration m, String repo) {
         MethodMetrics mm = new MethodMetrics();
 
         // 1. LOC: use Optional<Range> instead of getBegin().get()/getEnd().get()
