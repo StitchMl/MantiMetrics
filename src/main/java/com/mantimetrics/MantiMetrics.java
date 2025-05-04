@@ -30,6 +30,7 @@ public class MantiMetrics {
         if (githubPat == null || githubPat.isBlank()) {
             throw new IllegalStateException("The github.properties file must contain github.pat");
         }
+        System.out.println("GitHub PAT loaded successfully.");
 
         // Initialize services
         GitService gitService         = new GitService(githubPat);
@@ -40,20 +41,24 @@ public class MantiMetrics {
 
         // Process each project
         for (ProjectConfig cfg : configs) {
-            String owner = "apache";
+            String owner = cfg.getOwner();
             String repo  = cfg.getName().toLowerCase();
 
             // 1) Fetch & analyze methods online
+            System.out.println("Fetching and analyzing methods for project: " + cfg.getName());
             List<MethodData> allMethods = parser.parseAndComputeOnline(owner, repo, metricsCalc);
 
             // 2) Label buggy methods via JIRA
+            System.out.println("Labeling buggy methods for project: " + cfg.getName());
             jira.initialize(cfg.getJiraProjectKey());
             List<String> bugKeys = jira.fetchBugKeys();
+            System.out.println("Found " + bugKeys.size() + " JIRA issues for project " + cfg.getName());
             allMethods.forEach(md ->
                     md.setBuggy(jira.isMethodBuggy(md.getCommitHashes(), bugKeys))
             );
 
             // 3) Export to CSV
+            System.out.println("Exporting data to CSV for project: " + cfg.getName());
             String outCsv = "output/" + cfg.getName().toLowerCase() + "_dataset.csv";
             csvWriter.write(outCsv, allMethods);
             System.out.println("Generated CSV for project "

@@ -52,11 +52,13 @@ public class JiraClient {
     public List<String> fetchBugKeys() throws Exception {
         List<String> keys = new ArrayList<>();
 
+        System.out.println("DEBUG: Searching JIRA issues for project: " + this.searchEndpoint);
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpGet get = new HttpGet(this.searchEndpoint);
             get.setHeader("Authorization", this.authHeader);
             get.setHeader("Accept", "application/json");
 
+            System.out.println("DEBUG: HTTP GET: " + get.getRequestLine());
             try (CloseableHttpResponse resp = client.execute(get)) {
                 int status = resp.getStatusLine().getStatusCode();
                 String body = EntityUtils.toString(resp.getEntity(), StandardCharsets.UTF_8);
@@ -79,7 +81,7 @@ public class JiraClient {
                 }
             }
         }
-
+        System.out.println("DEBUG: Found " + keys.size() + " JIRA issues.");
         return keys;
     }
 

@@ -27,16 +27,20 @@ public class CodeParser {
         List<MethodData> out = new ArrayList<>();
         List<String> paths = gh.listJavaFiles(owner, repo);
 
+        System.out.println("Found " + paths.size() + " Java files in repo " + repo);
         for (String path : paths) {
             try {
                 // 1) extract JIRA keys from the commits to the file
                 List<String> issueKeys = gh.getIssueKeysForFile(owner, repo, path);
+                // System.out.println("Found " + issueKeys.size() + " JIRA keys for file " + path);
 
                 // 2) download and parse the source
                 String src = gh.fetchFileContent(owner, repo, path);
                 CompilationUnit cu = new JavaParser().parse(src).getResult().orElseThrow();
+                // System.out.println("Parsed file " + path + " successfully.");
 
                 // 3) for each method, create MethodData including issueKeys
+                // System.out.println("Computing metrics for file " + path + "...");
                 for (MethodDeclaration m : cu.findAll(MethodDeclaration.class)) {
                     if (m.getRange().isEmpty()) continue;
                     var mets = calc.computeAll(m);
@@ -52,7 +56,9 @@ public class CodeParser {
             } catch (Exception e) {
                 System.err.println("ERROR parsing remote file " + path + ": " + e.getMessage());
             }
+            //System.out.println("Parsed " + out.size() + " methods from repo " + repo);
         }
+        System.out.println("Parsed " + out.size() + " methods from repo " + repo);
         return out;
     }
 }

@@ -10,6 +10,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ProjectConfig {
 
+    private final String owner;
     private final String name;
     private final String repoUrl;
     private final String jiraProjectKey;
@@ -24,14 +25,20 @@ public class ProjectConfig {
      */
     @JsonCreator
     public ProjectConfig(
+            @JsonProperty("owner") String owner,
             @JsonProperty("name") String name,
             @JsonProperty("repoUrl") String repoUrl,
             @JsonProperty("jiraKey") String jiraProjectKey
     ) {
+        this.owner = owner;
         this.name = name;
         this.repoUrl = repoUrl;
         this.jiraProjectKey = jiraProjectKey;
         this.localPath = "repos/" + name.toLowerCase();
+    }
+
+    public String getOwner() {
+        return owner;
     }
 
     public String getName() {

@@ -1,10 +1,12 @@
 [
   {
+    "owner": "apache",
     "name": "BookKeeper",
     "repoUrl": "https://github.com/apache/bookkeeper.git",
     "jiraKey": "BOOKKEEPER"
   },
   {
+    "owner": "apache",
     "name": "Avro",
     "repoUrl": "https://github.com/apache/avro.git",
     "jiraKey": "AVRO"
