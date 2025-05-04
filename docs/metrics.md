@@ -14,7 +14,7 @@ Counter of non-empty source code lines, excluding comments and blank lines.Count
 
 ### 1.2 Statement Count
 Number of individual executable instructions (`Statements`) in the method.
-> **Significance:** provides a crude measure of the number of operations performed by the method.
+> **Meaning:** provides a crude measure of the number of operations performed by the method.
 > **Source:** Lines of Executable code - Microsoft.CodeAnalysis.Metrics: contentReference[oaicite:1]{index=1}
 
 ---
@@ -25,13 +25,13 @@ Number of individual executable instructions (`Statements`) in the method.
 Number of linearly independent paths in the method, calculated as **decision points + 1**.
 > **Formula (simple):**  
 > \(\text{CC} = \#{text{if, for, while, do, switch entries, conditional expressions} + 1\)  
-> **Significance:** measures the complexity of the control flow; high values imply more tests needed.  
+> **Meaning:** measures the complexity of the control flow; high values imply more tests needed.  
 > **Source:** Cyclomatic complexity, Wikipedia. contentReference[oaicite:2]{index=2}
 
 ### 2.2 Cognitive Complexity
 SonarSource's metric for assessing the mental difficulty of comprehension, which penalizes nesting and control structures.
 > **Algorithm (simplified):** each conditional or iteration construct increases by 1, nesting adds further weight.  
-> **Significance:** aligns the metric to the human perception of complexity.  
+> **Meaning:** aligns the metric to the human perception of complexity.  
 > **Source:** Cognitive Complexity | SonarSource. contentReference[oaicite:3]{index=3}
 
 ---
@@ -61,7 +61,7 @@ Introduced by Maurice Halstead (1977), they measure code properties based on ope
 
 ### 4.1 Max Nesting Depth
 Maximum nesting depth of `if`, `for`, `while`, `do` or `switch` in the method.
-> **Significance:** deep nodes make the code more difficult to follow.  
+> **Meaning:** deep nodes make the code more difficult to follow.  
 > **Source:** Number of call levels (nesting depth), MathWorks. contentReference[oaicite:5]{index=5}
 
 ---
