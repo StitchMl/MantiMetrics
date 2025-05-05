@@ -107,9 +107,9 @@ public class MetricsCalculator {
             }
         });
 
-        int n1 = distinctOps.size();
+        double n1 = distinctOps.size();
         int n2 = distinctOpr.size();
-        int N1 = totalOps.get();
+        double N1 = totalOps.get();
         int N2 = totalOpr.get();
         double vocabulary = n1 + n2;
         double length = N1 + N2;
@@ -118,7 +118,7 @@ public class MetricsCalculator {
         double difficulty = (n1 > 0 && n2 > 0) ? (n1 / 2.0) * (N2 / (double)n2) : 0;
         double effort = difficulty * volume;
 
-        return new HalsteadMetrics(n1, n2, N1, N2, vocabulary, length, volume, difficulty, effort);
+        return new HalsteadMetrics((int) n1, n2, (int) N1, N2, vocabulary, length, volume, difficulty, effort);
     }
 
     private int computeMaxNestingDepth(Node node, int currentDepth) {
