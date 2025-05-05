@@ -38,8 +38,15 @@ public class HalsteadMetrics {
     public double getEffort()           { return effort; }
 
     public static class Builder {
-        private int n1, n2, totalN1, totalN2;
-        private double vocabulary, length, volume, difficulty, effort;
+        private int n1;
+        private int n2;
+        private int totalN1;
+        private int totalN2;
+        private double vocabulary;
+        private double length;
+        private double volume;
+        private double difficulty;
+        private double effort;
 
         public Builder n1(int n1) {
             this.n1 = n1; return this;
