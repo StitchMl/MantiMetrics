@@ -48,8 +48,7 @@ public class CodeParser {
         try {
             paths = gh.listJavaFiles(owner, repo, ref);
         } catch (Exception e) {
-            logger.error("ListJavaFiles error for {}/{}@{}", owner, repo, ref, e);
-            throw new CodeParserException("Unable to list remote Java files", e);
+            throw new CodeParserException("ListJavaFiles error for " + owner + "/" + repo + "@" + repo, e);
         }
 
         logger.debug("Found {} Java files in{}/{}@{}", paths.size(), owner, repo, ref);
@@ -88,7 +87,7 @@ public class CodeParser {
                 // propagate our own
                 throw e;
             } catch (Exception e) {
-                logger.error("Remote file parsing error {}: {}", path, e.getMessage(), e);
+                throw new CodeParserException("Remote file parsing error " + path + ": " + e.getMessage(), e);
                 // I ignore a single file and continue
             }
         }
