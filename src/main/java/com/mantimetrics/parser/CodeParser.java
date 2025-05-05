@@ -15,7 +15,6 @@ import java.util.List;
 public class CodeParser {
 
     private static final Logger logger = LoggerFactory.getLogger(CodeParser.class);
-
     private final GitService gh;
 
     public CodeParser(GitService gh) {
@@ -23,32 +22,51 @@ public class CodeParser {
     }
 
     /**
-     * Scarica, analizza e costruisce i MethodData per ogni metodo Java
-     * alla reference (tag/branch/sha) specificata.
+     * Downloads, analyzes and constructs the MethodData for each Java method
+     * to the specified reference (tag/branch/sha).
+     *
+     * @throws CodeParserException in case of I/O or parsing errors
      */
     public List<MethodData> parseAndComputeOnline(
             String owner,
             String repo,
             String ref,
-            MetricsCalculator calc) throws Exception {
+            MetricsCalculator calc) throws CodeParserException {
 
-        String branch   = gh.getDefaultBranch(owner, repo);
-        String commitId = gh.getLatestCommitSha(owner, repo);
+        String branch;
+        String commitId;
+        try {
+            branch   = gh.getDefaultBranch(owner, repo);
+            commitId = gh.getLatestCommitSha(owner, repo);
+        } catch (Exception e) {
+            logger.error("Branch/commit recovery error for {}/{}@{}", owner, repo, ref, e);
+            throw new CodeParserException("Unable to retrieve branch or SHA commit", e);
+        }
+
         List<MethodData> out = new ArrayList<>();
+        List<String> paths;
+        try {
+            paths = gh.listJavaFiles(owner, repo, ref);
+        } catch (Exception e) {
+            logger.error("ListJavaFiles error for {}/{}@{}", owner, repo, ref, e);
+            throw new CodeParserException("Unable to list remote Java files", e);
+        }
 
-        List<String> paths = gh.listJavaFiles(owner, repo, ref);
-        logger.debug("Trovati {} file Java in {}/{}@{}", paths.size(), owner, repo, ref);
+        logger.debug("Found {} Java files in{}/{}@{}", paths.size(), owner, repo, ref);
 
         for (String path : paths) {
             try {
-                // 1) retrieve JIRA keys from commits touching this file
+                // 1) retrieve JIRA keys
                 List<String> issueKeys = gh.getIssueKeysForFile(owner, repo, path);
 
-                // 2) downloading and parsing the source
+                // 2) download and parse source
                 String src = gh.fetchFileContent(owner, repo, ref, path);
-                CompilationUnit cu = new JavaParser().parse(src).getResult().orElseThrow();
+                CompilationUnit cu = new JavaParser().parse(src)
+                        .getResult()
+                        .orElseThrow(() ->
+                                new CodeParserException("Parsing AST fallito per " + path));
 
-                // 3) for each method, compute metrics and create MethodData with the Builder
+                // 3) for each method, building MethodData
                 for (MethodDeclaration m : cu.findAll(MethodDeclaration.class)) {
                     m.getRange().ifPresent(r -> {
                         var mets = calc.computeAll(m);
@@ -61,15 +79,17 @@ public class CodeParser {
                                 .commitId(commitId)
                                 .metrics(mets)
                                 .commitHashes(issueKeys)
-                                // JiraClient will set up buggy later
                                 .buggy(false)
                                 .build();
                         out.add(md);
                     });
                 }
+            } catch (CodeParserException e) {
+                // propagate our own
+                throw e;
             } catch (Exception e) {
-                logger.error("Errore parsing remoto file {}: {}", path, e.getMessage(), e);
-                // continue with the next file
+                logger.error("Remote file parsing error {}: {}", path, e.getMessage(), e);
+                // I ignore a single file and continue
             }
         }
 
