@@ -105,19 +105,19 @@ public class MetricsCalculator {
 
         int n1       = distinctOps.size();
         int n2       = distinctOpr.size();
-        int N1       = totalOps.get();
-        int N2       = totalOpr.get();
+        int totalN1       = totalOps.get();
+        int totalN2       = totalOpr.get();
         double vocab = n1 + n2;
-        double len   = N1 + N2;
+        double len   = totalN1 + totalN2;
         double vol   = (vocab > 0) ? len * (log(vocab) / log(2)) : 0;
-        double diff  = (n1 > 0 && n2 > 0) ? (n1 / 2.0) * (N2 / (double)n2) : 0;
+        double diff  = (n1 > 0 && n2 > 0) ? (n1 / 2.0) * (totalN2 / (double)n2) : 0;
         double eff   = diff * vol;
 
         return new HalsteadMetrics.Builder()
                 .n1(n1)
                 .n2(n2)
-                .N1(N1)
-                .N2(N2)
+                .totalN1(totalN1)
+                .totalN2(totalN2)
                 .vocabulary(vocab)
                 .length(len)
                 .volume(vol)
