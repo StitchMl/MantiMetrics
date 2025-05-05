@@ -1,4 +1,3 @@
-// File: com/mantimetrics/config/ProjectConfigLoader.java
 package com.mantimetrics.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
