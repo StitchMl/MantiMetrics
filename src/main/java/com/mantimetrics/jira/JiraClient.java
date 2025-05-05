@@ -42,7 +42,8 @@ public class JiraClient {
             throw new JiraClientException("Error loading application.properties", e);
         }
 
-        String baseUrl  = props.getProperty("jira.url", "").replaceAll("/+$", "");
+        String rawUrl   = props.getProperty("jira.url", "");
+        String baseUrl  = stripTrailingSlashes(rawUrl);
         String pat      = props.getProperty("jira.pat");
         String jqlTempl = props.getProperty("jira.query");
 
@@ -132,5 +133,18 @@ public class JiraClient {
         logger.trace("isMethodBuggy? {} (commitKeys={} bugKeys={})",
                 result, commitIssueKeys, bugKeys);
         return result;
+    }
+
+    /**
+     * Remove all trailing '/' characters in O(n) time with no backtracking.
+     */
+    private static String stripTrailingSlashes(String url) {
+        if (url == null || url.isEmpty()) return url;
+        int end = url.length();
+        // walk backwards until the last non-slash
+        while (end > 0 && url.charAt(end - 1) == '/') {
+            end--;
+        }
+        return url.substring(0, end);
     }
 }
