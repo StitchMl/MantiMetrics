@@ -14,6 +14,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class MantiMetrics {
@@ -51,35 +52,68 @@ public class MantiMetrics {
             String repo  = cfg.getName().toLowerCase();
 
             // 1) estrai tutte le tag e seleziona la percentuale indicata
-            logger.info("Fetching and analyzing methods for project: " + cfg.getName());
+            if (logger.isLoggable(Level.INFO)) {
+                logger.log(Level.INFO,
+                        "Fetching and analyzing methods for project: {0}",
+                        new Object[]{cfg.getName() });
+            }
             List<String> tags     = gitService.listTags(owner, repo);
-            logger.info("Found " + tags.size() + " tags for project " + cfg.getName());
-            logger.info("Selecting first " + cfg.getPercentage() + "% of tags for project " + cfg.getName());
+            if (logger.isLoggable(Level.INFO)) {
+                logger.log(Level.INFO,
+                        "Found {0} tags for project {1}",
+                        new Object[]{ tags.size(), cfg.getName() });
+            }
+            if (logger.isLoggable(Level.INFO)) {
+                logger.log(Level.INFO,
+                        "Selecting first {0}% of tags for project {1}",
+                        new Object[]{ cfg.getPercentage(), cfg.getName() });
+            }
+
             List<String> selected = selector.selectFirstPercent(tags, cfg.getPercentage());
 
             List<MethodData> allMethods = new ArrayList<>();
             for (String tag : selected) {
-                logger.info("Analysing tag " + tag);
+                if (logger.isLoggable(Level.INFO)) {
+                    logger.log(Level.INFO,
+                            "Analysing tag {0}",
+                            new Object[]{ tag });
+                }
+
                 allMethods.addAll(
                         parser.parseAndComputeOnline(owner, repo, tag, metricsCalc)
                 );
             }
 
             // 2) Label buggy methods via JIRA
-            logger.info("Labeling buggy methods for project: " + cfg.getName());
+            if (logger.isLoggable(Level.INFO)) {
+                logger.log(Level.INFO,
+                        "Labeling buggy methods for project: {0}",
+                        new Object[]{ cfg.getName() });
+            }
             jira.initialize(cfg.getJiraProjectKey());
             List<String> bugKeys = jira.fetchBugKeys();
-            logger.info("Found " + bugKeys.size() + " JIRA issues for project " + cfg.getName());
+            if (logger.isLoggable(Level.INFO)) {
+                logger.log(Level.INFO,
+                        "Found {0} JIRA issues for project {1}",
+                        new Object[]{ bugKeys.size(), cfg.getName() });
+            }
             allMethods.forEach(md ->
                     md.setBuggy(jira.isMethodBuggy(md.getCommitHashes(), bugKeys))
             );
 
             // 3) Export to CSV
-            logger.info("Exporting data to CSV for project: " + cfg.getName());
+            if (logger.isLoggable(Level.INFO)) {
+                logger.log(Level.INFO,
+                        "Exporting data to CSV for project: {0}",
+                        new Object[]{ cfg.getName() });
+            }
             String outCsv = "output/" + cfg.getName().toLowerCase() + "_dataset.csv";
             csvWriter.write(outCsv, allMethods);
-            logger.info("Generated CSV for project "
-                    + cfg.getName() + ": " + outCsv);
+            if (logger.isLoggable(Level.INFO)) {
+                logger.log(Level.INFO,
+                        "Generated CSV for project {0}: {1}",
+                        new Object[]{ cfg.getName(), outCsv });
+            }
         }
     }
 }
