@@ -14,8 +14,11 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.logging.Logger;
 
 public class MantiMetrics {
+    static Logger logger = Logger.getLogger(MantiMetrics.class.getName());
+
     public static void main(String[] args) throws Exception {
         // Load project configurations
         ProjectConfig[] configs = ProjectConfigLoader.load();
@@ -32,7 +35,7 @@ public class MantiMetrics {
         if (githubPat == null || githubPat.isBlank()) {
             throw new IllegalStateException("The github.properties file must contain github.pat");
         }
-        System.out.println("GitHub PAT loaded successfully.");
+        logger.info("GitHub PAT loaded successfully.");
 
         // Initialize services
         GitService gitService         = new GitService(githubPat);
@@ -48,34 +51,34 @@ public class MantiMetrics {
             String repo  = cfg.getName().toLowerCase();
 
             // 1) estrai tutte le tag e seleziona la percentuale indicata
-            System.out.println("Fetching and analyzing methods for project: " + cfg.getName());
+            logger.info("Fetching and analyzing methods for project: " + cfg.getName());
             List<String> tags     = gitService.listTags(owner, repo);
-            System.out.println("Found " + tags.size() + " tags for project " + cfg.getName());
-            System.out.println("Selecting first " + cfg.getPercentage() + "% of tags for project " + cfg.getName());
+            logger.info("Found " + tags.size() + " tags for project " + cfg.getName());
+            logger.info("Selecting first " + cfg.getPercentage() + "% of tags for project " + cfg.getName());
             List<String> selected = selector.selectFirstPercent(tags, cfg.getPercentage());
 
             List<MethodData> allMethods = new ArrayList<>();
             for (String tag : selected) {
-                System.out.println("Analysing tag " + tag);
+                logger.info("Analysing tag " + tag);
                 allMethods.addAll(
                         parser.parseAndComputeOnline(owner, repo, tag, metricsCalc)
                 );
             }
 
             // 2) Label buggy methods via JIRA
-            System.out.println("Labeling buggy methods for project: " + cfg.getName());
+            logger.info("Labeling buggy methods for project: " + cfg.getName());
             jira.initialize(cfg.getJiraProjectKey());
             List<String> bugKeys = jira.fetchBugKeys();
-            System.out.println("Found " + bugKeys.size() + " JIRA issues for project " + cfg.getName());
+            logger.info("Found " + bugKeys.size() + " JIRA issues for project " + cfg.getName());
             allMethods.forEach(md ->
                     md.setBuggy(jira.isMethodBuggy(md.getCommitHashes(), bugKeys))
             );
 
             // 3) Export to CSV
-            System.out.println("Exporting data to CSV for project: " + cfg.getName());
+            logger.info("Exporting data to CSV for project: " + cfg.getName());
             String outCsv = "output/" + cfg.getName().toLowerCase() + "_dataset.csv";
             csvWriter.write(outCsv, allMethods);
-            System.out.println("Generated CSV for project "
+            logger.info("Generated CSV for project "
                     + cfg.getName() + ": " + outCsv);
         }
     }
