@@ -108,13 +108,20 @@ public class JiraClient {
                 logger.debug("Found {} issue keys", keys.size());
             }
         } catch (IOException e) {
-            logger.error("Communication error with JIRA", e);
-            throw new JiraClientException("Communication error with JIRA", e);
+            // network / I/O problems
+            logger.error("I/O error communicating with JIRA at {}", searchEndpoint, e);
+            throw new JiraClientException(
+                    "I/O error fetching bug keys from JIRA at " + searchEndpoint, e
+            );
         } catch (JiraClientException e) {
+            // rethrow our own exception unchanged
             throw e;
         } catch (Exception e) {
-            logger.error("Generic error during fetchBugKeys", e);
-            throw new JiraClientException("Generic error during fetchBugKeys", e);
+            // any other unexpected failure
+            logger.error("Unexpected error during fetchBugKeys()", e);
+            throw new JiraClientException(
+                    "Unexpected error while fetching bug keys from JIRA", e
+            );
         }
 
         return keys;
