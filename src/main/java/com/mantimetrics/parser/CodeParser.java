@@ -39,8 +39,7 @@ public class CodeParser {
             branch   = gh.getDefaultBranch(owner, repo);
             commitId = gh.getLatestCommitSha(owner, repo);
         } catch (Exception e) {
-            logger.error("Branch/commit recovery error for {}/{}@{}", owner, repo, ref, e);
-            throw new CodeParserException("Unable to retrieve branch or SHA commit", e);
+            throw new CodeParserException("Branch/commit recovery error for " + owner + "/" + repo + "@" + ref, e);
         }
 
         List<MethodData> out = new ArrayList<>();
@@ -48,7 +47,7 @@ public class CodeParser {
         try {
             paths = gh.listJavaFiles(owner, repo, ref);
         } catch (Exception e) {
-            throw new CodeParserException("ListJavaFiles error for " + owner + "/" + repo + "@" + repo, e);
+            throw new CodeParserException("ListJavaFiles error for " + owner + "/" + repo + "@" + ref, e);
         }
 
         logger.debug("Found {} Java files in{}/{}@{}", paths.size(), owner, repo, ref);
