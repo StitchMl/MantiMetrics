@@ -4,9 +4,9 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.stmt.*;
+import com.github.javaparser.Range;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import com.github.javaparser.Range;
 
 import static java.lang.Math.log;
 
@@ -18,7 +18,7 @@ public class MetricsCalculator {
         // 1. LOC: use Optional<Range> instead of getBegin().get()/getEnd().get()
         Optional<Range> rangeOpt = m.getRange();
         int loc = rangeOpt.map(r -> r.end.line - r.begin.line + 1).orElse(0);
-        mm.setLoc(loc);  // :contentReference[oaicite:0]{index=0}
+        mm.setLoc(loc);
 
         // 2. Statement count
         mm.setStmtCount(m.findAll(com.github.javaparser.ast.stmt.Statement.class).size());
@@ -30,17 +30,17 @@ public class MetricsCalculator {
         // 4. Cognitive complexity (simple proxy)
         mm.setCognitive(computeCognitive(m));
 
-        // 5. Halstead metrics
+        // 5. Halstead metrics via Builder
         HalsteadMetrics h = computeHalstead(m);
-        mm.setDistinctOperators(h.n1);
-        mm.setDistinctOperands(h.n2);
-        mm.setTotalOperators(h.totalN1);
-        mm.setTotalOperands(h.totalN2);
-        mm.setVocabulary(h.vocabulary);
-        mm.setLength(h.length);
-        mm.setVolume(h.volume);
-        mm.setDifficulty(h.difficulty);
-        mm.setEffort(h.effort);
+        mm.setDistinctOperators(h.getDistinctOperators());
+        mm.setDistinctOperands(h.getDistinctOperands());
+        mm.setTotalOperators(h.getTotalOperators());
+        mm.setTotalOperands(h.getTotalOperands());
+        mm.setVocabulary(h.getVocabulary());
+        mm.setLength(h.getLength());
+        mm.setVolume(h.getVolume());
+        mm.setDifficulty(h.getDifficulty());
+        mm.setEffort(h.getEffort());
 
         // 6. Nesting depth
         mm.setMaxNestingDepth(computeMaxNestingDepth(m, 0));
@@ -81,44 +81,49 @@ public class MetricsCalculator {
         AtomicInteger totalOps = new AtomicInteger();
         AtomicInteger totalOpr = new AtomicInteger();
 
-        // Visitor on expressions
         m.walk(node -> {
             if (node instanceof BinaryExpr) {
                 String op = ((BinaryExpr) node).getOperator().asString();
-                distinctOps.add(op);
-                totalOps.getAndIncrement();
+                distinctOps.add(op); totalOps.incrementAndGet();
             } else if (node instanceof UnaryExpr) {
                 String op = ((UnaryExpr) node).getOperator().asString();
-                distinctOps.add(op);
-                totalOps.getAndIncrement();
+                distinctOps.add(op); totalOps.incrementAndGet();
             } else if (node instanceof AssignExpr) {
                 String op = ((AssignExpr) node).getOperator().asString();
-                distinctOps.add(op);
-                totalOps.getAndIncrement();
+                distinctOps.add(op); totalOps.incrementAndGet();
             } else if (node instanceof MethodCallExpr) {
                 distinctOpr.add(((MethodCallExpr) node).getNameAsString());
-                totalOpr.getAndIncrement();
+                totalOpr.incrementAndGet();
             } else if (node instanceof NameExpr) {
                 distinctOpr.add(((NameExpr) node).getNameAsString());
-                totalOpr.getAndIncrement();
+                totalOpr.incrementAndGet();
             } else if (node instanceof LiteralExpr) {
                 distinctOpr.add(node.toString());
-                totalOpr.getAndIncrement();
+                totalOpr.incrementAndGet();
             }
         });
 
-        double n1 = distinctOps.size();
-        int n2 = distinctOpr.size();
-        double totalN1 = totalOps.get();
-        int totalN2 = totalOpr.get();
-        double vocabulary = n1 + n2;
-        double length = totalN1 + totalN2;
-        // to avoid log2(0)
-        double volume = vocabulary > 0 ? length * (log(vocabulary) / log(2)) : 0;
-        double difficulty = (n1 > 0 && n2 > 0) ? (n1 / 2.0) * (totalN2 / (double)n2) : 0;
-        double effort = difficulty * volume;
+        int n1       = distinctOps.size();
+        int n2       = distinctOpr.size();
+        int N1       = totalOps.get();
+        int N2       = totalOpr.get();
+        double vocab = n1 + n2;
+        double len   = N1 + N2;
+        double vol   = (vocab > 0) ? len * (log(vocab) / log(2)) : 0;
+        double diff  = (n1 > 0 && n2 > 0) ? (n1 / 2.0) * (N2 / (double)n2) : 0;
+        double eff   = diff * vol;
 
-        return new HalsteadMetrics((int) n1, n2, (int) totalN1, totalN2, vocabulary, length, volume, difficulty, effort);
+        return new HalsteadMetrics.Builder()
+                .n1(n1)
+                .n2(n2)
+                .N1(N1)
+                .N2(N2)
+                .vocabulary(vocab)
+                .length(len)
+                .volume(vol)
+                .difficulty(diff)
+                .effort(eff)
+                .build();
     }
 
     private int computeMaxNestingDepth(Node node, int currentDepth) {
@@ -135,26 +140,5 @@ public class MetricsCalculator {
             max = Math.max(max, computeMaxNestingDepth(child, depth));
         }
         return max;
-    }
-
-    // Inner class to collect Halstead values
-    private static class HalsteadMetrics {
-        final int n1;
-        final int n2;
-        final int totalN1;
-        final int totalN2;
-        final double vocabulary;
-        final double length;
-        final double volume;
-        final double difficulty;
-        final double effort;
-        HalsteadMetrics(int n1, int n2, int totalN1, int totalN2,
-                        double vocabulary, double length,
-                        double volume, double difficulty,
-                        double effort) {
-            this.n1 = n1; this.n2 = n2; this.totalN1 = totalN1; this.totalN2 = totalN2;
-            this.vocabulary = vocabulary; this.length = length;
-            this.volume = volume; this.difficulty = difficulty; this.effort = effort;
-        }
     }
 }
