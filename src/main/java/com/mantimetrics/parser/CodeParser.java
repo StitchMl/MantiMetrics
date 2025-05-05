@@ -6,11 +6,15 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.mantimetrics.git.GitService;
 import com.mantimetrics.metrics.MetricsCalculator;
 import com.mantimetrics.model.MethodData;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class CodeParser {
+
+    private static final Logger logger = LoggerFactory.getLogger(CodeParser.class);
 
     private final GitService gh;
 
@@ -18,54 +22,58 @@ public class CodeParser {
         this.gh = gh;
     }
 
-
-
+    /**
+     * Scarica, analizza e costruisce i MethodData per ogni metodo Java
+     * alla reference (tag/branch/sha) specificata.
+     */
     public List<MethodData> parseAndComputeOnline(
             String owner,
             String repo,
             String ref,
             MetricsCalculator calc) throws Exception {
 
-        String branch = gh.getDefaultBranch(owner, repo);
+        String branch   = gh.getDefaultBranch(owner, repo);
         String commitId = gh.getLatestCommitSha(owner, repo);
         List<MethodData> out = new ArrayList<>();
-        List<String> paths = gh.listJavaFiles(owner, repo, ref);
 
-        System.out.println("Found " + paths.size() + " Java files in repo " + repo);
+        List<String> paths = gh.listJavaFiles(owner, repo, ref);
+        logger.debug("Trovati {} file Java in {}/{}@{}", paths.size(), owner, repo, ref);
+
         for (String path : paths) {
             try {
-                // 1) extract JIRA keys from the commits to the file
+                // 1) retrieve JIRA keys from commits touching this file
                 List<String> issueKeys = gh.getIssueKeysForFile(owner, repo, path);
-                // System.out.println("Found " + issueKeys.size() + " JIRA keys for a file " + path);
 
-                // 2) download and parse the source
+                // 2) downloading and parsing the source
                 String src = gh.fetchFileContent(owner, repo, ref, path);
                 CompilationUnit cu = new JavaParser().parse(src).getResult().orElseThrow();
-                // System.out.println("Parsed file " + path + " successfully.");
 
-                // 3) for each method, create MethodData including issueKeys
-                // System.out.println("Computing metrics for file " + path + "...");
+                // 3) for each method, compute metrics and create MethodData with the Builder
                 for (MethodDeclaration m : cu.findAll(MethodDeclaration.class)) {
-                    if (m.getRange().isEmpty()) continue;
-                    var mets = calc.computeAll(m);
-                    var md = new MethodData(
-                            repo,
-                            "/" + path + "/",
-                            m.getDeclarationAsString(true, true, true),
-                            branch,
-                            ref,             // ref come identificatore di versione
-                            commitId,
-                            mets,
-                            issueKeys    // <— here we pass the JIRA keys
-                    );
-                    out.add(md);
+                    m.getRange().ifPresent(r -> {
+                        var mets = calc.computeAll(m);
+                        MethodData md = new MethodData.Builder()
+                                .projectName(repo)
+                                .path("/" + path + "/")
+                                .methodSignature(m.getDeclarationAsString(true, true, true))
+                                .releaseId(branch)
+                                .versionId(ref)
+                                .commitId(commitId)
+                                .metrics(mets)
+                                .commitHashes(issueKeys)
+                                // JiraClient will set up buggy later
+                                .buggy(false)
+                                .build();
+                        out.add(md);
+                    });
                 }
             } catch (Exception e) {
-                System.err.println("ERROR parsing remote file " + path + ": " + e.getMessage());
+                logger.error("Errore parsing remoto file {}: {}", path, e.getMessage(), e);
+                // continue with the next file
             }
-            //System.out.println("Parsed " + out.size() + " methods from repo " + repo);
         }
-        System.out.println("Parsed " + out.size() + " methods from repo " + repo);
+
+        logger.debug("Total methods analysed in {}/{}: {}", owner, repo, out.size());
         return out;
     }
 }

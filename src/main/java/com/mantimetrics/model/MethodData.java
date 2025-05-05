@@ -12,66 +12,121 @@ public class MethodData {
     private final String commitId;
     private final MethodMetrics metrics;
     private final List<String> commitHashes;
-    private boolean buggy;
+    private final boolean buggy;
 
-    public MethodData(String projectName,
-                      String methodPath,
-                      String methodSignature,
-                      String releaseId,
-                      String versionId,
-                      String commitId,
-                      MethodMetrics metrics,
-                      List<String> commitHashes) {
-        this.projectName     = projectName.toUpperCase();
-        this.path            = methodPath;
-        this.methodSignature = methodSignature;
-        this.releaseId       = releaseId;
-        this.versionId       = versionId;
-        this.commitId        = commitId;
-        this.metrics         = metrics;
-        this.commitHashes    = commitHashes;
+    private MethodData(Builder b) {
+        this.projectName     = b.projectName.toUpperCase();
+        this.path            = b.path;
+        this.methodSignature = b.methodSignature;
+        this.releaseId       = b.releaseId;
+        this.versionId       = b.versionId;
+        this.commitId        = b.commitId;
+        this.metrics         = b.metrics;
+        this.commitHashes    = List.copyOf(b.commitHashes);
+        this.buggy           = b.buggy;
     }
 
+    // getters...
     public List<String> getCommitHashes() { return commitHashes; }
-    public void setBuggy(boolean buggy) { this.buggy = buggy; }
+    public boolean isBuggy()              { return buggy; }
 
     public String toCsvLine() {
-        // Construct the feature list in a consistent order
         String feats = String.join(",",
-                // Complexity & Size
                 String.valueOf(metrics.getLoc()),
                 String.valueOf(metrics.getStmtCount()),
                 String.valueOf(metrics.getCyclomatic()),
                 String.valueOf(metrics.getCognitive()),
-                // Halstead
-                String.valueOf(metrics.getDistinctOperators()),   // n1
-                String.valueOf(metrics.getDistinctOperands()),    // n2
-                String.valueOf(metrics.getTotalOperators()),      // N1
-                String.valueOf(metrics.getTotalOperands()),       // N2
-                String.valueOf(metrics.getVocabulary()),          // n
-                String.valueOf(metrics.getLength()),              // N
-                String.valueOf(metrics.getVolume()),              // V
-                String.valueOf(metrics.getDifficulty()),          // D
-                String.valueOf(metrics.getEffort()),              // E
-                // Nesting
+                String.valueOf(metrics.getDistinctOperators()),
+                String.valueOf(metrics.getDistinctOperands()),
+                String.valueOf(metrics.getTotalOperators()),
+                String.valueOf(metrics.getTotalOperands()),
+                String.valueOf(metrics.getVocabulary()),
+                String.valueOf(metrics.getLength()),
+                String.valueOf(metrics.getVolume()),
+                String.valueOf(metrics.getDifficulty()),
+                String.valueOf(metrics.getEffort()),
                 String.valueOf(metrics.getMaxNestingDepth()),
-                // Code smells (1 = present, 0 = absent)
-                metrics.isLongMethod()     ? "1" : "0",
-                metrics.isGodClass()       ? "1" : "0",
-                metrics.isFeatureEnvy()    ? "1" : "0",
-                metrics.isDuplicatedCode() ? "1" : "0"
+                metrics.isLongMethod()     ? "1":"0",
+                metrics.isGodClass()       ? "1":"0",
+                metrics.isFeatureEnvy()    ? "1":"0",
+                metrics.isDuplicatedCode() ? "1":"0"
         );
 
-        // Build the complete CSV line
         return String.join(",",
                 projectName,
                 path,
-                "\"" + methodSignature.replace("\"", "\"\"") + "\"", // escape double inverted commas
+                "\"" + methodSignature.replace("\"","\"\"") + "\"",
                 releaseId,
                 versionId,
                 commitId,
                 feats,
                 buggy ? "yes" : "no"
         );
+    }
+
+    public Builder toBuilder() {
+        return new Builder()
+                .projectName(this.projectName)
+                .path(this.path)
+                .methodSignature(this.methodSignature)
+                .releaseId(this.releaseId)
+                .versionId(this.versionId)
+                .commitId(this.commitId)
+                .metrics(this.metrics)
+                .commitHashes(this.commitHashes)
+                .buggy(this.buggy);
+    }
+
+    public static class Builder {
+        private String projectName;
+        private String path;
+        private String methodSignature;
+        private String releaseId;
+        private String versionId;
+        private String commitId;
+        private MethodMetrics metrics;
+        private List<String> commitHashes;
+        private boolean buggy;
+
+        public Builder projectName(String projectName) {
+            this.projectName = projectName; return this;
+        }
+        public Builder path(String path) {
+            this.path = path; return this;
+        }
+        public Builder methodSignature(String sig) {
+            this.methodSignature = sig; return this;
+        }
+        public Builder releaseId(String releaseId) {
+            this.releaseId = releaseId; return this;
+        }
+        public Builder versionId(String versionId) {
+            this.versionId = versionId; return this;
+        }
+        public Builder commitId(String commitId) {
+            this.commitId = commitId; return this;
+        }
+        public Builder metrics(MethodMetrics metrics) {
+            this.metrics = metrics; return this;
+        }
+        public Builder commitHashes(List<String> hashes) {
+            this.commitHashes = List.copyOf(hashes); return this;
+        }
+        public Builder buggy(boolean buggy) {
+            this.buggy = buggy; return this;
+        }
+
+        private void validate() {
+            if (projectName == null || path == null || methodSignature == null
+                    || releaseId == null || versionId == null || commitId == null
+                    || metrics == null || commitHashes == null) {
+                throw new IllegalStateException("Missing required fields in MethodData");
+            }
+        }
+
+        public MethodData build() {
+            validate();
+            return new MethodData(this);
+        }
     }
 }

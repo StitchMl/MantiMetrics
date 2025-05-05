@@ -16,6 +16,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 public class MantiMetrics {
     // 1) inizializza il logger
@@ -77,9 +78,13 @@ public class MantiMetrics {
             jira.initialize(cfg.getJiraProjectKey());
             List<String> bugKeys = jira.fetchBugKeys();
             logger.info("JIRA returned {} bug issues", bugKeys.size());
-            allMethods.forEach(md ->
-                    md.setBuggy(jira.isMethodBuggy(md.getCommitHashes(), bugKeys))
-            );
+            allMethods = allMethods.stream()
+                    .map(md -> md.toBuilder()
+                            .buggy(jira.isMethodBuggy(md.getCommitHashes(), bugKeys))
+                            .build()
+                    )
+                    .collect(Collectors.toList());
+
 
             // 4) export CSV
             String outCsv = "output/" + repo + "_dataset.csv";
