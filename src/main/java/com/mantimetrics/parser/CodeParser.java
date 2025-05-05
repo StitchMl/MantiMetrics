@@ -33,13 +33,13 @@ public class CodeParser {
             String ref,
             MetricsCalculator calc) throws CodeParserException {
 
-        String branch;
-        String commitId;
+        String branch = "";
+        String commitId = "";
         try {
             branch   = gh.getDefaultBranch(owner, repo);
             commitId = gh.getLatestCommitSha(owner, repo);
         } catch (Exception e) {
-            throw new CodeParserException("Branch/commit recovery error for " + owner + "/" + repo + "@" + ref, e);
+            logger.error("Branch/commit recovery error for {}/{}@{}: {}",owner,repo,ref, e.getMessage());
         }
 
         List<MethodData> out = new ArrayList<>();
@@ -66,15 +66,17 @@ public class CodeParser {
 
                 // 3) for each method, building MethodData
                 for (MethodDeclaration m : cu.findAll(MethodDeclaration.class)) {
+                    String finalBranch = branch;
+                    String finalCommitId = commitId;
                     m.getRange().ifPresent(r -> {
                         var mets = calc.computeAll(m);
                         MethodData md = new MethodData.Builder()
                                 .projectName(repo)
                                 .path("/" + path + "/")
                                 .methodSignature(m.getDeclarationAsString(true, true, true))
-                                .releaseId(branch)
+                                .releaseId(finalBranch)
                                 .versionId(ref)
-                                .commitId(commitId)
+                                .commitId(finalCommitId)
                                 .metrics(mets)
                                 .commitHashes(issueKeys)
                                 .buggy(false)
