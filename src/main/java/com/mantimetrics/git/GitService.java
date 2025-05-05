@@ -94,10 +94,9 @@ public class GitService {
      * Returns all paths to .java files under any src/main/java subtree of the repo,
      * using the default branch.
      */
-    public List<String> listJavaFiles(String owner, String repo) throws IOException {
-        String branch = getDefaultBranch(owner, repo);
+    public List<String> listJavaFiles(String owner, String repo, String ref) throws IOException {
         String url = String.format("%s/repos/%s/%s/git/trees/%s?recursive=1",
-                API_URL, owner, repo, branch);
+                API_URL, owner, repo, ref);
         Request req = new Request.Builder()
                 .url(url)
                 .header("Authorization", "token " + authToken)
@@ -128,10 +127,9 @@ public class GitService {
     /**
      * Downloads the raw content of a file using the cached default branch.
      */
-    public String fetchFileContent(String owner, String repo, String filePath) throws IOException {
-        String branch = getDefaultBranch(owner, repo);
+    public String fetchFileContent(String owner, String repo, String ref, String filePath) throws IOException {
         String rawUrl = String.format("%s/%s/%s/%s/%s",
-                RAW_URL, owner, repo, branch, filePath);
+                RAW_URL, owner, repo, ref, filePath);
 
         Request req = new Request.Builder()
                 .url(rawUrl)
@@ -147,6 +145,54 @@ public class GitService {
             }
             assert resp.body() != null;
             return resp.body().string();
+        }
+    }
+
+    public String getLatestCommitSha(String owner, String repo) throws IOException {
+        String branch = getDefaultBranch(owner, repo);
+        String url = String.format("%s/repos/%s/%s/commits/%s", API_URL, owner, repo, branch);
+        Request req = new Request.Builder()
+                .url(url)
+                .header("Authorization", "token " + authToken)
+                .header("Accept", "application/vnd.github.v3+json")
+                .header("User-Agent", "MantiMetricsApp")
+                .build();
+        try (Response resp = client.newCall(req).execute()) {
+            if (!resp.isSuccessful()) {
+                throw new IOException("GitHub API error fetching latest commit: HTTP " + resp.code());
+            }
+            assert resp.body() != null;
+            JsonNode commit = mapper.readTree(resp.body().string());
+            return commit.path("sha").asText();  // sha of the commit object: contentReference[oaicite:0]{index=0}
+        }
+    }
+    /**
+     * Lists all tags for a repository via GitHub REST API:
+     * GET /repos/{owner}/{repo}/tags
+     */
+    public List<String> listTags(String owner, String repo) throws IOException {
+        String url = String.format("%s/repos/%s/%s/tags", API_URL, owner, repo);
+        Request req = new Request.Builder()
+                .url(url)
+                .header("Authorization", "token " + authToken)
+                .header("Accept", "application/vnd.github.v3+json")
+                .header("User-Agent", "MantiMetricsApp")
+                .build();
+
+        try (Response resp = client.newCall(req).execute()) {
+            if (!resp.isSuccessful()) {
+                throw new IOException("GitHub API error listing tags: HTTP " + resp.code());
+            }
+            assert resp.body() != null;
+            JsonNode array = mapper.readTree(resp.body().string());
+            List<String> tags = new ArrayList<>();
+            for (JsonNode tagNode : array) {
+                String name = tagNode.path("name").asText(null);
+                if (name != null) {
+                    tags.add(name);
+                }
+            }
+            return tags;
         }
     }
 }

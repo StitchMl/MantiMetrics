@@ -8,8 +8,10 @@ import com.mantimetrics.jira.JiraClient;
 import com.mantimetrics.csv.CSVWriter;
 import com.mantimetrics.model.MethodData;
 import com.mantimetrics.git.ProjectConfig;
+import com.mantimetrics.release.ReleaseSelector;
 
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
@@ -37,6 +39,7 @@ public class MantiMetrics {
         CodeParser parser             = new CodeParser(gitService);
         MetricsCalculator metricsCalc = new MetricsCalculator();
         JiraClient jira               = new JiraClient();
+        ReleaseSelector selector      = new ReleaseSelector();
         CSVWriter csvWriter           = new CSVWriter();
 
         // Process each project
@@ -44,9 +47,20 @@ public class MantiMetrics {
             String owner = cfg.getOwner();
             String repo  = cfg.getName().toLowerCase();
 
-            // 1) Fetch & analyze methods online
+            // 1) estrai tutte le tag e seleziona la percentuale indicata
             System.out.println("Fetching and analyzing methods for project: " + cfg.getName());
-            List<MethodData> allMethods = parser.parseAndComputeOnline(owner, repo, metricsCalc);
+            List<String> tags     = gitService.listTags(owner, repo);
+            System.out.println("Found " + tags.size() + " tags for project " + cfg.getName());
+            System.out.println("Selecting first " + cfg.getPercentage() + "% of tags for project " + cfg.getName());
+            List<String> selected = selector.selectFirstPercent(tags, cfg.getPercentage());
+
+            List<MethodData> allMethods = new ArrayList<>();
+            for (String tag : selected) {
+                System.out.println("Analysing tag " + tag);
+                allMethods.addAll(
+                        parser.parseAndComputeOnline(owner, repo, tag, metricsCalc)
+                );
+            }
 
             // 2) Label buggy methods via JIRA
             System.out.println("Labeling buggy methods for project: " + cfg.getName());

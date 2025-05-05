@@ -2,12 +2,14 @@
   {
     "owner": "apache",
     "name": "BookKeeper",
+    "percentage": 33,
     "repoUrl": "https://github.com/apache/bookkeeper.git",
     "jiraKey": "BOOKKEEPER"
   },
   {
     "owner": "apache",
     "name": "Avro",
+    "percentage": 33,
     "repoUrl": "https://github.com/apache/avro.git",
     "jiraKey": "AVRO"
   }

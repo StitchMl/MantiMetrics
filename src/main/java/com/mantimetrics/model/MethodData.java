@@ -5,20 +5,29 @@ import java.util.List;
 
 public class MethodData {
     private final String projectName;
+    private final String path;
     private final String methodSignature;
     private final String releaseId;
+    private final String versionId;
+    private final String commitId;
     private final MethodMetrics metrics;
     private final List<String> commitHashes;
     private boolean buggy;
 
     public MethodData(String projectName,
+                      String methodPath,
                       String methodSignature,
                       String releaseId,
+                      String versionId,
+                      String commitId,
                       MethodMetrics metrics,
                       List<String> commitHashes) {
-        this.projectName     = projectName;
+        this.projectName     = projectName.toUpperCase();
+        this.path            = methodPath;
         this.methodSignature = methodSignature;
         this.releaseId       = releaseId;
+        this.versionId       = versionId;
+        this.commitId        = commitId;
         this.metrics         = metrics;
         this.commitHashes    = commitHashes;
     }
@@ -56,8 +65,11 @@ public class MethodData {
         // Build the complete CSV line
         return String.join(",",
                 projectName,
+                path,
                 "\"" + methodSignature.replace("\"", "\"\"") + "\"", // escape double inverted commas
                 releaseId,
+                versionId,
+                commitId,
                 feats,
                 buggy ? "yes" : "no"
         );
