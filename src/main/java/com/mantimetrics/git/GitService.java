@@ -25,6 +25,15 @@ public class GitService {
         this.authToken = pat;
     }
 
+    private Request newRequestBuild(String url) {
+        return new Request.Builder()
+                .url(url)
+                .header("Authorization", "token " + authToken)
+                .header("Accept", "application/vnd.github.v3+json")
+                .header("User-Agent", "MantiMetricsApp")    // ← obbligatorio
+                .build();
+    }
+
     /**
      * Returns all JIRA issue keys found in commit messages
      * for each change to the filePath on the default branch.
@@ -38,12 +47,7 @@ public class GitService {
                 URLEncoder.encode(branch, StandardCharsets.UTF_8),
                 URLEncoder.encode(filePath, StandardCharsets.UTF_8));
 
-        Request req = new Request.Builder()
-                .url(url)
-                .header("Authorization", "token " + authToken)
-                .header("Accept", "application/vnd.github.v3+json")
-                .header("User-Agent", "MantiMetricsApp")    // ← obbligatorio
-                .build();
+        Request req = newRequestBuild(url);
 
         try (Response resp = client.newCall(req).execute()) {
             if (!resp.isSuccessful()) {
@@ -71,12 +75,7 @@ public class GitService {
         if (branchCache.containsKey(key)) return branchCache.get(key);
 
         String url = String.format("%s/repos/%s/%s", API_URL, owner, repo);
-        Request req = new Request.Builder()
-                .url(url)
-                .header("Authorization", "token " + authToken)
-                .header("Accept", "application/vnd.github.v3+json")
-                .header("User-Agent", "MantiMetricsApp")    // ← obbligatorio
-                .build();
+        Request req = newRequestBuild(url);
 
         try (Response resp = client.newCall(req).execute()) {
             if (!resp.isSuccessful()) {
@@ -97,12 +96,7 @@ public class GitService {
     public List<String> listJavaFiles(String owner, String repo, String ref) throws IOException {
         String url = String.format("%s/repos/%s/%s/git/trees/%s?recursive=1",
                 API_URL, owner, repo, ref);
-        Request req = new Request.Builder()
-                .url(url)
-                .header("Authorization", "token " + authToken)
-                .header("Accept", "application/vnd.github.v3+json")
-                .header("User-Agent", "MantiMetricsApp")    // ← obbligatorio
-                .build();
+        Request req = newRequestBuild(url);
 
         try (Response resp = client.newCall(req).execute()) {
             if (!resp.isSuccessful()) {
@@ -131,12 +125,7 @@ public class GitService {
         String rawUrl = String.format("%s/%s/%s/%s/%s",
                 RAW_URL, owner, repo, ref, filePath);
 
-        Request req = new Request.Builder()
-                .url(rawUrl)
-                .header("Authorization", "token " + authToken)
-                .header("Accept", "application/vnd.github.v3+json")
-                .header("User-Agent", "MantiMetricsApp")    // ← obbligatorio
-                .build();
+        Request req = newRequestBuild(rawUrl);
 
         try (Response resp = client.newCall(req).execute()) {
             if (!resp.isSuccessful()) {
@@ -151,12 +140,8 @@ public class GitService {
     public String getLatestCommitSha(String owner, String repo) throws IOException {
         String branch = getDefaultBranch(owner, repo);
         String url = String.format("%s/repos/%s/%s/commits/%s", API_URL, owner, repo, branch);
-        Request req = new Request.Builder()
-                .url(url)
-                .header("Authorization", "token " + authToken)
-                .header("Accept", "application/vnd.github.v3+json")
-                .header("User-Agent", "MantiMetricsApp")
-                .build();
+        Request req = newRequestBuild(url);
+
         try (Response resp = client.newCall(req).execute()) {
             if (!resp.isSuccessful()) {
                 throw new IOException("GitHub API error fetching latest commit: HTTP " + resp.code());
@@ -172,12 +157,7 @@ public class GitService {
      */
     public List<String> listTags(String owner, String repo) throws IOException {
         String url = String.format("%s/repos/%s/%s/tags", API_URL, owner, repo);
-        Request req = new Request.Builder()
-                .url(url)
-                .header("Authorization", "token " + authToken)
-                .header("Accept", "application/vnd.github.v3+json")
-                .header("User-Agent", "MantiMetricsApp")
-                .build();
+        Request req = newRequestBuild(url);
 
         try (Response resp = client.newCall(req).execute()) {
             if (!resp.isSuccessful()) {
