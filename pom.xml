@@ -27,14 +27,20 @@
   </properties>
 
   <dependencies>
-    <!-- Forza Groovy 3.x -->
+    <!-- Groovy, but without the old SLF4J→Log4j1 bridge -->
     <dependency>
       <groupId>org.codehaus.groovy</groupId>
       <artifactId>groovy-all</artifactId>
       <version>${groovy.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-log4j12</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
-    <!-- Forza Plexus‑Utils ≥ 3.0.16 -->
+    <!-- Forza Plexus‑Utils ≥ 3.0.16 -->
     <dependency>
       <groupId>org.codehaus.plexus</groupId>
       <artifactId>plexus-utils</artifactId>
@@ -83,25 +89,19 @@
       <version>${okio.version}</version>
     </dependency>
 
-    <!-- Add Log4j 2 dependencies to replace the old bridge -->
-    <dependency>
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-core</artifactId>
-      <version>${log4j2.version}</version>
-    </dependency>
+    <!-- Log4j2 binding for SLF4J -->
     <dependency>
       <groupId>org.apache.logging.log4j</groupId>
       <artifactId>log4j-slf4j-impl</artifactId>
       <version>${log4j2.version}</version>
     </dependency>
 
-    <!-- JGit (exclude old SLF4J→Log4j 1.x bridge) -->
+    <!-- JGit (you already excluded slf4j-log4j12 here) -->
     <dependency>
       <groupId>org.eclipse.jgit</groupId>
       <artifactId>org.eclipse.jgit</artifactId>
       <version>6.6.1.202309021850-r</version>
       <exclusions>
-        <!-- Exclude binding SLF4J→Log4j1 -->
         <exclusion>
           <groupId>org.slf4j</groupId>
           <artifactId>slf4j-log4j12</artifactId>
@@ -135,6 +135,12 @@
       <groupId>com.github.mauricioaniche</groupId>
       <artifactId>ck</artifactId>
       <version>0.7.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-log4j12</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
     <!-- Jackson for JSON parsing (JIRA) -->
