@@ -4,8 +4,15 @@ package com.mantimetrics.metrics;
  * Immutable object che contiene tutte le metriche di Halstead.
  */
 public class HalsteadMetrics {
-    private final int n1, n2, totalN1, totalN2;
-    private final double vocabulary, length, volume, difficulty, effort;
+    private final int n1;
+    private final int n2;
+    private final int totalN1;
+    private final int totalN2;
+    private final double vocabulary;
+    private final double length;
+    private final double volume;
+    private final double difficulty;
+    private final double effort;
 
     private HalsteadMetrics(Builder b) {
         this.n1         = b.n1;
