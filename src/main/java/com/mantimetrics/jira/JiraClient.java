@@ -62,7 +62,7 @@ public class JiraClient {
         this.searchEndpoint = baseUrl + "/rest/api/2/search?jql=" + encoded;
         this.authHeader     = "Bearer " + pat;
 
-        logger.debug("JIRA client initialized. Endpoint = {}", searchEndpoint);
+        logger.info("JIRA client initialized. Endpoint = {}", searchEndpoint);
     }
 
     /**
@@ -72,14 +72,14 @@ public class JiraClient {
      * @throws JiraClientException in case of HTTP or parsing error
      */
     public List<String> fetchBugKeys() throws JiraClientException {
-        logger.debug("Invoking JIRA at {}", searchEndpoint);
+        logger.info("Invoking JIRA at {}", searchEndpoint);
         List<String> keys = new ArrayList<>();
 
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpGet get = new HttpGet(this.searchEndpoint);
             get.setHeader("Authorization", this.authHeader);
             get.setHeader("Accept", "application/json");
-            logger.debug("HTTP GET: {}", get.getRequestLine());
+            logger.info("HTTP GET: {}", get.getRequestLine());
 
             try (CloseableHttpResponse resp = client.execute(get)) {
                 int status = resp.getStatusLine().getStatusCode();
@@ -105,7 +105,7 @@ public class JiraClient {
                     }
                 }
 
-                logger.debug("Found {} issue keys", keys.size());
+                logger.info("Found {} issue keys", keys.size());
             }
         } catch (IOException e) {
             // network / I/O problems

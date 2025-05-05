@@ -69,7 +69,7 @@ public class MantiMetrics {
             logger.info("Analyzing {} tags for project {}", selected.size(), cfg.getName());
             List<MethodData> allMethods = new ArrayList<>();
             for (String tag : selected) {
-                logger.debug("→ Analyzing tag {}", tag);
+                logger.info("→ Analyzing tag {}", tag);
                 allMethods.addAll(parser.parseAndComputeOnline(owner, repo, tag, metricsCalc));
             }
 

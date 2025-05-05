@@ -50,7 +50,7 @@ public class CodeParser {
             throw new CodeParserException("ListJavaFiles error for " + owner + "/" + repo + "@" + ref, e);
         }
 
-        logger.debug("Found {} Java files in{}/{}@{}", paths.size(), owner, repo, ref);
+        logger.info("Found {} Java files in {}/{}@{}", paths.size(), owner, repo, ref);
 
         for (String path : paths) {
             try {
@@ -62,7 +62,7 @@ public class CodeParser {
                 CompilationUnit cu = new JavaParser().parse(src)
                         .getResult()
                         .orElseThrow(() ->
-                                new CodeParserException("AST parsing failed for" + path));
+                                new CodeParserException("AST parsing failed for " + path));
 
                 // 3) for each method, building MethodData
                 for (MethodDeclaration m : cu.findAll(MethodDeclaration.class)) {
@@ -91,7 +91,7 @@ public class CodeParser {
             }
         }
 
-        logger.debug("Total methods analysed in {}/{}: {}", owner, repo, out.size());
+        logger.info("Total methods analysed in {}/{}: {}", owner, repo, out.size());
         return out;
     }
 }
