@@ -40,7 +40,4 @@ public class ReleaseSelector {
         logger.debug("Selected {} tags out of {}.", selected.size(), total);
         return selected;
     }
-
-    // prevent instantiation
-    public ReleaseSelector() { }
 }
