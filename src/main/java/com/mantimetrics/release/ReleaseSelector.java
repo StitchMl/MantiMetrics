@@ -42,5 +42,5 @@ public class ReleaseSelector {
     }
 
     // prevent instantiation
-    private ReleaseSelector() { }
+    public ReleaseSelector() { }
 }
