@@ -11,26 +11,27 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.*;
 
 public class CodeParser {
 
  private static final Logger logger = LoggerFactory.getLogger(CodeParser.class);
- private static final int MAX_RETRIES = 3;
- private static final long TIMEOUT_SECONDS = 30;
  private final GitService gh;
- private final ExecutorService executor;
 
  public CodeParser(GitService gh) {
  this.gh = gh;
- this.executor = Executors.newCachedThreadPool();
  }
 
+ /**
+ * Downloads, analyzes and constructs the MethodData for each Java method
+ * to the specified reference (tag/branch/sha).
+ *
+ * @throws CodeParserException in case of I/O or parsing errors
+ */
  public List<MethodData> parseAndComputeOnline(
  String owner,
  String repo,
  String ref,
- MetricsCalculator calc) throws CodeParserException, InterruptedException {
+ MetricsCalculator calc) throws CodeParserException {
 
  String branch;
  String commitId;
@@ -49,48 +50,21 @@ public class CodeParser {
  throw new CodeParserException("ListJavaFiles error for " + owner + "/" + repo + "@" + ref, e);
  }
 
- logger.debug("Found {} Java files in {}/{}@{}", paths.size(), owner, repo, ref);
+ logger.debug("Found {} Java files in{}/{}@{}", paths.size(), owner, repo, ref);
 
  for (String path : paths) {
- for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
  try {
- CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
- try {
- processFile(path, owner, repo, ref, branch, commitId, calc, out);
- } catch (Exception e) {
- throw new CompletionException(e);
- }
- }, executor);
-
- future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
- break; // Success, exit retry loop
-
- } catch (TimeoutException e) {
- if (attempt == MAX_RETRIES) {
- throw new CodeParserException("Failed to process file " + path + " after " + MAX_RETRIES + " attempts", e);
- }
- logger.warn("Attempt {} failed for file {}, retrying...", attempt, path);
- Thread.sleep(1000 * attempt); // Exponential backoff
- } catch (Exception e) {
- throw new CodeParserException("Error processing file " + path, e);
- }
- }
- }
-
- logger.debug("Total methods analysed in {}/{}: {}", owner, repo, out.size());
- return out;
- }
-
- private void processFile(String path, String owner, String repo, String ref,
- String branch, String commitId, MetricsCalculator calc,
- List<MethodData> out) throws Exception {
+ // 1) retrieve JIRA keys
  List<String> issueKeys = gh.getIssueKeysForFile(owner, repo, path);
- String src = gh.fetchFileContent(owner, repo, ref, path);
 
+ // 2) download and parse source
+ String src = gh.fetchFileContent(owner, repo, ref, path);
  CompilationUnit cu = new JavaParser().parse(src)
  .getResult()
- .orElseThrow(() -> new CodeParserException("Failed to parse AST for " + path));
+ .orElseThrow(() ->
+ new CodeParserException("AST parsing failed for" + path));
 
+ // 3) for each method, building MethodData
  for (MethodDeclaration m : cu.findAll(MethodDeclaration.class)) {
  m.getRange().ifPresent(r -> {
  var mets = calc.computeAll(m);
@@ -105,10 +79,19 @@ public class CodeParser {
  .commitHashes(issueKeys)
  .buggy(false)
  .build();
- synchronized (out) {
  out.add(md);
- }
  });
  }
+ } catch (CodeParserException e) {
+ // propagate our own
+ throw e;
+ } catch (Exception e) {
+ logger.error("Error while parsing the remote file {}: {}", path, e.getMessage(), e);
+ // Ignore a single file and continue
+ }
+ }
+
+ logger.debug("Total methods analysed in {}/{}: {}", owner, repo, out.size());
+ return out;
  }
 }
