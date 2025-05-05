@@ -10,47 +10,140 @@
   <name>Manti Metrics</name>
 
   <properties>
+    <!-- Compiler -->
     <maven.compiler.source>11</maven.compiler.source>
     <maven.compiler.target>11</maven.compiler.target>
+
+    <!-- Core library overrides -->
+    <commons.codec.version>1.15</commons.codec.version>             <!-- latest Commons‑Codec 1.x release -->
+    <commons.io.version>2.19.0</commons.io.version>                  <!-- latest Commons‑IO 2.x release -->
+    <guava.version>32.1.2-jre</guava.version>                        <!-- Guava 32.1.2‑jre released Aug 2023 -->
+    <okio.version>3.11.0</okio.version>                              <!-- Okio recommends 3.11.0 over 3.4.0 -->
+    <log4j2.version>2.20.0</log4j2.version>                          <!-- Log4j 2.20.0 is the latest stable -->
+    <!-- Versioni sicure per override -->
+    <groovy.version>2.4.21</groovy.version>
+    <plexus.utils.version>3.0.24</plexus.utils.version>
+    <maven.core.version>3.8.8</maven.core.version>
   </properties>
 
   <dependencies>
-    <!-- JGit for Git interaction -->
+    <!-- Forza Groovy 3.x -->
+    <dependency>
+      <groupId>org.codehaus.groovy</groupId>
+      <artifactId>groovy-all</artifactId>
+      <version>${groovy.version}</version>
+    </dependency>
+
+    <!-- Forza Plexus‑Utils ≥ 3.0.16 -->
+    <dependency>
+      <groupId>org.codehaus.plexus</groupId>
+      <artifactId>plexus-utils</artifactId>
+      <version>${plexus.utils.version}</version>
+    </dependency>
+
+    <!-- Forza Maven‑Core 3.8.8 -->
+    <dependency>
+      <groupId>org.apache.maven</groupId>
+      <artifactId>maven-core</artifactId>
+      <version>${maven.core.version}</version>
+    </dependency>
+
+    <!-- Log4j2 core + bridge Log4j‑1.2 API -->
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-1.2-api</artifactId>
+      <version>${log4j2.version}</version>
+    </dependency>
+
+    <!-- Force safe Commons‑Codec -->
+    <dependency>
+      <groupId>commons-codec</groupId>
+      <artifactId>commons-codec</artifactId>
+      <version>${commons.codec.version}</version>
+    </dependency>
+
+    <!-- Force safe Commons‑IO -->
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <version>${commons.io.version}</version>
+    </dependency>
+
+    <!-- Force safe Guava -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>${guava.version}</version>
+    </dependency>
+
+    <!-- Force safe Okio -->
+    <dependency>
+      <groupId>com.squareup.okio</groupId>
+      <artifactId>okio</artifactId>
+      <version>${okio.version}</version>
+    </dependency>
+
+    <!-- Add Log4j 2 dependencies to replace the old bridge -->
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+      <version>${log4j2.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-slf4j-impl</artifactId>
+      <version>${log4j2.version}</version>
+    </dependency>
+
+    <!-- JGit (exclude old SLF4J→Log4j 1.x bridge) -->
     <dependency>
       <groupId>org.eclipse.jgit</groupId>
       <artifactId>org.eclipse.jgit</artifactId>
       <version>6.6.1.202309021850-r</version>
+      <exclusions>
+        <!-- Exclude binding SLF4J→Log4j1 -->
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-log4j12</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
+
     <!-- JavaParser for AST parsing -->
     <dependency>
       <groupId>com.github.javaparser</groupId>
       <artifactId>javaparser-core</artifactId>
       <version>3.25.4</version>
     </dependency>
+
     <!-- Apache HttpClient for JIRA REST -->
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
       <artifactId>httpclient</artifactId>
       <version>4.5.14</version>
     </dependency>
+
     <!-- OpenCSV for CSV writing -->
     <dependency>
       <groupId>com.opencsv</groupId>
       <artifactId>opencsv</artifactId>
       <version>5.7.1</version>
     </dependency>
+
     <!-- (Optional) CK for complexity metrics -->
     <dependency>
       <groupId>com.github.mauricioaniche</groupId>
       <artifactId>ck</artifactId>
-      <version>0.6.1</version>
+      <version>0.7.0</version>
     </dependency>
+
     <!-- Jackson for JSON parsing (JIRA) -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
       <version>2.15.2</version>
     </dependency>
+
     <!-- JUnit for testing -->
     <dependency>
       <groupId>org.junit.jupiter</groupId>
@@ -58,11 +151,25 @@
       <version>5.10.0</version>
       <scope>test</scope>
     </dependency>
+
     <!-- OkHttp3 per chiamate HTTP a GitHub API -->
     <dependency>
       <groupId>com.squareup.okhttp3</groupId>
       <artifactId>okhttp</artifactId>
       <version>4.11.0</version>
+    </dependency>
+
+    <!-- Se qualche plugin porta maven-core:2.0.9, escludilo -->
+    <dependency>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-clean-plugin</artifactId>
+      <version>3.2.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.maven</groupId>
+          <artifactId>maven-core</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
   </dependencies>
 
