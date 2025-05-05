@@ -103,9 +103,9 @@ public class MetricsCalculator {
             }
         });
 
-        int n1       = distinctOps.size();
+        double n1       = distinctOps.size();
         int n2       = distinctOpr.size();
-        int totalN1       = totalOps.get();
+        double totalN1       = totalOps.get();
         int totalN2       = totalOpr.get();
         double vocab = n1 + n2;
         double len   = totalN1 + totalN2;
@@ -114,9 +114,9 @@ public class MetricsCalculator {
         double eff   = diff * vol;
 
         return new HalsteadMetrics.Builder()
-                .n1(n1)
+                .n1((int) n1)
                 .n2(n2)
-                .totalN1(totalN1)
+                .totalN1((int) totalN1)
                 .totalN2(totalN2)
                 .vocabulary(vocab)
                 .length(len)
