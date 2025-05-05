@@ -148,7 +148,7 @@ public class GitService {
             }
             assert resp.body() != null;
             JsonNode commit = mapper.readTree(resp.body().string());
-            return commit.path("sha").asText();  // sha of the commit object: contentReference[oaicite:0]{index=0}
+            return commit.path("sha").asText();
         }
     }
     /**
