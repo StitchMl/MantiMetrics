@@ -36,17 +36,17 @@ SonarSource's metric for assessing the mental difficulty of comprehension, which
 
 Introduced by Maurice Halstead (1977), they measure code properties based on operators and operands.
 
-| Symbol | Description                       |
-|:------:|-----------------------------------|
-|   n₁   | Number of distinct operators      |
-|   n₂   | Number of distinct operands       |
-|   N₁   | Total number of operators         |
-|   N₂   | Total number of operands          |
-|   n    | Vocabulary = n₁ + n₂              |
-|   N    | Length = N₁ + N₂                  |
-|   V    | Volume = N × log₂(n)              |
-|   D    | Difficulty = (n₁ / 2) × (N₂ / n₂) |
-|   E    | Effort = D × V                    |
+|  Symbol  | Description                             |
+|:--------:|-----------------------------------------|
+|    n₁    | Number of distinct operators            |
+|    n₂    | Number of distinct operands             |
+| total_n₁ | Total number of operators               |
+| total_n₂ | Total number of operands                |
+|    n     | Vocabulary = n₁ + n₂                    |
+| total_n  | Length = total_n₁ + total_n₂            |
+|    V     | Volume = total_n × log₂(n)              |
+|    D     | Difficulty = (n₁ / 2) × (total_n₂ / n₂) |
+|    E     | Effort = D × V                          |
 
 > **Meaning:** provide estimates of **volume**, **difficulty** and **effort** required to understand or write the method.  
 

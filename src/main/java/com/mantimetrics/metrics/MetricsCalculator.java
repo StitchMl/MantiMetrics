@@ -34,8 +34,8 @@ public class MetricsCalculator {
         HalsteadMetrics h = computeHalstead(m);
         mm.setDistinctOperators(h.n1);
         mm.setDistinctOperands(h.n2);
-        mm.setTotalOperators(h.N1);
-        mm.setTotalOperands(h.N2);
+        mm.setTotalOperators(h.total_n1);
+        mm.setTotalOperands(h.total_n2);
         mm.setVocabulary(h.vocabulary);
         mm.setLength(h.length);
         mm.setVolume(h.volume);
@@ -109,16 +109,16 @@ public class MetricsCalculator {
 
         double n1 = distinctOps.size();
         int n2 = distinctOpr.size();
-        double N1 = totalOps.get();
-        int N2 = totalOpr.get();
+        double total_n1 = totalOps.get();
+        int total_n2 = totalOpr.get();
         double vocabulary = n1 + n2;
-        double length = N1 + N2;
+        double length = total_n1 + total_n2;
         // to avoid log2(0)
         double volume = vocabulary > 0 ? length * (log(vocabulary) / log(2)) : 0;
-        double difficulty = (n1 > 0 && n2 > 0) ? (n1 / 2.0) * (N2 / (double)n2) : 0;
+        double difficulty = (n1 > 0 && n2 > 0) ? (n1 / 2.0) * (total_n2 / (double)n2) : 0;
         double effort = difficulty * volume;
 
-        return new HalsteadMetrics((int) n1, n2, (int) N1, N2, vocabulary, length, volume, difficulty, effort);
+        return new HalsteadMetrics((int) n1, n2, (int) total_n1, total_n2, vocabulary, length, volume, difficulty, effort);
     }
 
     private int computeMaxNestingDepth(Node node, int currentDepth) {
@@ -141,18 +141,18 @@ public class MetricsCalculator {
     private static class HalsteadMetrics {
         final int n1;
         final int n2;
-        final int N1;
-        final int N2;
+        final int total_n1;
+        final int total_n2;
         final double vocabulary;
         final double length;
         final double volume;
         final double difficulty;
         final double effort;
-        HalsteadMetrics(int n1, int n2, int N1, int N2,
+        HalsteadMetrics(int n1, int n2, int total_n1, int total_n2,
                         double vocabulary, double length,
                         double volume, double difficulty,
                         double effort) {
-            this.n1 = n1; this.n2 = n2; this.N1 = N1; this.N2 = N2;
+            this.n1 = n1; this.n2 = n2; this.total_n1 = total_n1; this.total_n2 = total_n2;
             this.vocabulary = vocabulary; this.length = length;
             this.volume = volume; this.difficulty = difficulty; this.effort = effort;
         }
