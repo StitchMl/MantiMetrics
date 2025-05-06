@@ -284,7 +284,6 @@ public class GitService {
                 .setURI("https://github.com/" + owner + "/" + repo + ".git")
                 .setDirectory(tmp.toFile())
                 .setBranch(branch)
-                .setDepth(0)   // 0 = tutta la history
                 .call()
                 .close();
         return tmp;
