@@ -2,6 +2,7 @@ package com.mantimetrics;
 
 import com.mantimetrics.config.ProjectConfigLoader;
 import com.mantimetrics.git.GitService;
+import com.mantimetrics.jira.JiraClient;
 import com.mantimetrics.parser.CodeParser;
 import com.mantimetrics.metrics.MetricsCalculator;
 import com.mantimetrics.csv.CSVWriter;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 public class MantiMetrics {
     private static final Logger logger = LoggerFactory.getLogger(MantiMetrics.class);
@@ -48,6 +50,7 @@ public class MantiMetrics {
         CodeParser parser             = new CodeParser(gitService);
         MetricsCalculator metricsCalc = new MetricsCalculator();
         ReleaseSelector selector      = new ReleaseSelector();
+        JiraClient jira               = new JiraClient();
         CSVWriter csvWriter           = new CSVWriter();
 
         // 4) project cycle
@@ -65,7 +68,7 @@ public class MantiMetrics {
             logger.info("Project {}: selected {}% → {} tags", cfg.getName(), pct, selected.size());
 
             // --- **ONE** call per file→JIRA-keys ---
-            logger.info("Labeling buggy methods via JIRA for project {}", cfg.getName());
+            logger.info("Project {}: fetching JIRA keys for {} tags", cfg.getName(), selected.size());
             // 1) fishing the default-branch from the GitHub repo
             String defaultBranch = gitService.getDefaultBranch(owner, repo);
             logger.debug("Default branch for {}: {}", cfg.getName(), defaultBranch);
@@ -85,6 +88,21 @@ public class MantiMetrics {
             }
             logger.info("Collected {} method data entries for {}", allMethods.size(), cfg.getName());
 
+            // --- JIRA LABELING phase ---
+            logger.info("Labeling buggy methods via JIRA for project {}", cfg.getName());
+            jira.initialize(cfg.getJiraProjectKey());
+            List<String> bugKeys = jira.fetchBugKeys();
+            logger.debug("JIRA returned {} bug issues", bugKeys.size());
+
+            // ricostruisco tutta la lista impostando buggy=true|false
+            allMethods = allMethods.stream()
+                    .map(md -> md.toBuilder()
+                            .buggy(jira.isMethodBuggy(md.getCommitHashes(), bugKeys))
+                            .build())
+                    .collect(Collectors.toList());
+
+            long buggyCount = allMethods.stream().filter(MethodData::isBuggy).count();
+            logger.info("Labeled {} methods as buggy out of {}", buggyCount, allMethods.size());
 
             // --- EXPORT CSV phase ---
             Files.createDirectories(Paths.get("output"));

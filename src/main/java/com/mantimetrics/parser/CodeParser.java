@@ -47,7 +47,8 @@ public class CodeParser {
                         String rel = repoRoot.relativize(path)
                                 .toString()
                                 .replace('\\','/');
-                        boolean isBuggy = !fileToKeys.getOrDefault(rel, List.of()).isEmpty();
+                        // estraggo le JIRA‑key per questo file dal map pre‑calcolato
+                        List<String> issueKeys = fileToKeys.getOrDefault(rel, List.of());
 
                         try {
                             String src = Files.readString(path);
@@ -63,8 +64,8 @@ public class CodeParser {
                                             .versionId(ref)
                                             .commitId(commitId)
                                             .metrics(mets)
-                                            .commitHashes(List.of())  // se vuoi, puoi comunque popolarlo
-                                            .buggy(isBuggy)
+                                            .commitHashes(issueKeys)
+                                            .buggy(false)
                                             .build();
                                     out.add(md);
                                 });
