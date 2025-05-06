@@ -13,6 +13,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -59,12 +61,10 @@ public class MantiMetrics {
             logger.info("Project {}: fetching tags", cfg.getName());
             List<String> tags = gitService.listTags(owner, repo);
             logger.debug("Found {} tags for project {}", tags.size(), cfg.getName());
-            logger.trace("Tags: {}", tags);
 
             int pct = cfg.getPercentage();
             List<String> selected = selector.selectFirstPercent(tags, pct);
             logger.info("Project {}: selected {}% → {} tags", cfg.getName(), pct, selected.size());
-            logger.trace("Selected tags: {}", selected);
 
             // --- Fase PARSING & METRICHE ---
             logger.info("Analyzing {} tags for project {}", selected.size(), cfg.getName());
@@ -79,7 +79,6 @@ public class MantiMetrics {
             logger.info("Labeling buggy methods via JIRA for project {}", cfg.getName());
             jira.initialize(cfg.getJiraProjectKey());
             List<String> bugKeys = jira.fetchBugKeys();
-            logger.debug("JIRA returned {} bug issues", bugKeys.size());
             allMethods = allMethods.stream()
                     .map(md -> md.toBuilder()
                             .buggy(jira.isMethodBuggy(md.getCommitHashes(), bugKeys))
@@ -90,6 +89,7 @@ public class MantiMetrics {
             logger.info("Labeled {} methods as buggy out of {}", buggyCount, allMethods.size());
 
             // --- Fase EXPORT CSV ---
+            Files.createDirectories(Paths.get("output"));
             String outCsv = "output/" + repo + "_dataset.csv";
             logger.info("Writing {} records to {}", allMethods.size(), outCsv);
             csvWriter.write(outCsv, allMethods);
