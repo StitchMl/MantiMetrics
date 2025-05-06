@@ -9,6 +9,7 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
@@ -22,6 +23,7 @@ import java.util.Properties;
  */
 public class JiraClient {
     private static final Logger logger = LoggerFactory.getLogger(JiraClient.class);
+
     private String searchEndpoint;
     private String authHeader;
 
@@ -32,37 +34,40 @@ public class JiraClient {
      * @throws JiraClientException in case of configuration problems
      */
     public void initialize(String projectKey) throws JiraClientException {
+        logger.info("Initializing JiraClient for project '{}'", projectKey);
+
         Properties props = new Properties();
         try (InputStream in = getClass().getResourceAsStream("/application.properties")) {
             if (in == null) {
                 throw new JiraClientException("application.properties not found in classpath");
             }
             props.load(in);
+            logger.debug("Loaded JIRA configuration properties");
         } catch (IOException e) {
-            throw new JiraClientException("Error loading application.properties", e);
+            throw new JiraClientException("Error loading JIRA configuration", e);
         }
 
-        String rawUrl   = props.getProperty("jira.url", "");
+        String rawUrl   = props.getProperty("jira.url", "").trim();
         String baseUrl  = stripTrailingSlashes(rawUrl);
-        String pat      = props.getProperty("jira.pat");
-        String jqlTempl = props.getProperty("jira.query");
+        String pat      = props.getProperty("jira.pat", "").trim();
+        String jqlTempl = props.getProperty("jira.query", "").trim();
 
-        if (baseUrl.isBlank() || pat == null || pat.isBlank() || jqlTempl == null) {
-            throw new JiraClientException("Missing or invalid JIRA properties in application.properties");
+        if (baseUrl.isEmpty() || pat.isEmpty() || jqlTempl.isEmpty()) {
+            throw new JiraClientException("Missing or invalid JIRA properties");
         }
 
         String jql = jqlTempl.replace("{projectKey}", projectKey);
-        String encoded;
+        String encodedJql;
         try {
-            encoded = URLEncoder.encode(jql, StandardCharsets.UTF_8);
+            encodedJql = URLEncoder.encode(jql, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            throw new JiraClientException("JQL encoding error: " + jql, e);
+            throw new JiraClientException("JQL encoding error", e);
         }
 
-        this.searchEndpoint = baseUrl + "/rest/api/2/search?jql=" + encoded;
+        this.searchEndpoint = baseUrl + "/rest/api/2/search?jql=" + encodedJql;
         this.authHeader     = "Bearer " + pat;
 
-        logger.info("JIRA client initialized. Endpoint = {}", searchEndpoint);
+        logger.debug("JIRA search endpoint set to {}", searchEndpoint);
     }
 
     /**
@@ -72,30 +77,27 @@ public class JiraClient {
      * @throws JiraClientException in case of HTTP or parsing error
      */
     public List<String> fetchBugKeys() throws JiraClientException {
-        logger.info("Invoking JIRA at {}", searchEndpoint);
-        List<String> keys = new ArrayList<>();
+        logger.info("Fetching bug keys from JIRA");
+        logger.trace("Sending GET {}", searchEndpoint);
 
+        List<String> keys = new ArrayList<>();
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpGet get = new HttpGet(this.searchEndpoint);
             get.setHeader("Authorization", this.authHeader);
             get.setHeader("Accept", "application/json");
-            logger.info("HTTP GET: {}", get.getRequestLine());
 
             try (CloseableHttpResponse resp = client.execute(get)) {
                 int status = resp.getStatusLine().getStatusCode();
                 String body = EntityUtils.toString(resp.getEntity(), StandardCharsets.UTF_8);
 
                 if (status != 200) {
-                    logger.error("JIRA API returned HTTP {}: {}", status, body);
-                    throw new JiraClientException(
-                            "JIRA API Error: HTTP " + status + "\nResponse body:\n" + body
-                    );
+                    throw new JiraClientException("JIRA API Error: HTTP " + status);
                 }
 
                 JsonNode root   = new ObjectMapper().readTree(body);
                 JsonNode issues = root.path("issues");
                 if (!issues.isArray()) {
-                    throw new JiraClientException("Unexpected JIRA response: 'issues' is not an array");
+                    throw new JiraClientException("'issues' not an array in JIRA response");
                 }
 
                 for (JsonNode issue : issues) {
@@ -105,21 +107,10 @@ public class JiraClient {
                     }
                 }
 
-                logger.info("Found {} issue keys", keys.size());
+                logger.info("Retrieved {} bug keys from JIRA", keys.size());
             }
         } catch (IOException e) {
-            // network / I/O problems
-            throw new JiraClientException(
-                    "I/O error fetching bug keys from JIRA at " + searchEndpoint, e
-            );
-        } catch (JiraClientException e) {
-            // rethrow our own exception unchanged
-            throw e;
-        } catch (Exception e) {
-            // any other unexpected failure
-            throw new JiraClientException(
-                    "Unexpected error while fetching bug keys from JIRA", e
-            );
+            throw new JiraClientException("I/O error communicating with JIRA", e);
         }
 
         return keys;
@@ -134,10 +125,10 @@ public class JiraClient {
      * @return true if at least one match
      */
     public boolean isMethodBuggy(List<String> commitIssueKeys, List<String> bugKeys) {
-        boolean result = commitIssueKeys.stream().anyMatch(bugKeys::contains);
-        logger.trace("isMethodBuggy? {} (commitKeys={} bugKeys={})",
-                result, commitIssueKeys, bugKeys);
-        return result;
+        boolean buggy = commitIssueKeys.stream().anyMatch(bugKeys::contains);
+        logger.trace("MethodBuggy? {} (commitKeys={} bugKeys={})",
+                buggy, commitIssueKeys, bugKeys);
+        return buggy;
     }
 
     /**
@@ -146,7 +137,6 @@ public class JiraClient {
     private static String stripTrailingSlashes(String url) {
         if (url == null || url.isEmpty()) return url;
         int end = url.length();
-        // walk backwards until the last non-slash
         while (end > 0 && url.charAt(end - 1) == '/') {
             end--;
         }

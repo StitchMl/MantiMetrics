@@ -19,15 +19,14 @@ import java.util.Properties;
 import java.util.stream.Collectors;
 
 public class MantiMetrics {
-    // 1) inizializza il logger
     private static final Logger logger = LoggerFactory.getLogger(MantiMetrics.class);
 
     public static void main(String[] args) throws Exception {
-        // caricamento configurazioni
+        // 1) caricamento configurazioni
         logger.info("Loading project configurations");
         ProjectConfig[] configs = ProjectConfigLoader.load();
 
-        // GitHub PAT
+        // 2) GitHub PAT
         Properties ghProps = new Properties();
         try (InputStream in = MantiMetrics.class.getResourceAsStream("/github.properties")) {
             if (in == null) {
@@ -41,9 +40,9 @@ public class MantiMetrics {
             logger.error("github.pat is missing in github.properties");
             throw new IllegalStateException("The github.properties file must contain github.pat");
         }
-        logger.info("GitHub PAT loaded successfully");
+        logger.info("GitHub PAT loaded");
 
-        // init services
+        // 3) inizializza i servizi
         GitService gitService         = new GitService(githubPat);
         CodeParser parser             = new CodeParser(gitService);
         MetricsCalculator metricsCalc = new MetricsCalculator();
@@ -51,46 +50,50 @@ public class MantiMetrics {
         ReleaseSelector selector      = new ReleaseSelector();
         CSVWriter csvWriter           = new CSVWriter();
 
-        // ciclo progetti
+        // 4) ciclo sui progetti
         for (ProjectConfig cfg : configs) {
             String owner = cfg.getOwner();
             String repo  = cfg.getName().toLowerCase();
 
-            // 1) tags
+            // --- Fase TAGS ---
             logger.info("Project {}: fetching tags", cfg.getName());
             List<String> tags = gitService.listTags(owner, repo);
-            logger.info("Found {} tags for project {}", tags.size(), cfg.getName());
+            logger.debug("Found {} tags for project {}", tags.size(), cfg.getName());
+            logger.trace("Tags: {}", tags);
 
             int pct = cfg.getPercentage();
-            logger.info("Selecting first {}% of tags", pct);
             List<String> selected = selector.selectFirstPercent(tags, pct);
+            logger.info("Project {}: selected {}% → {} tags", cfg.getName(), pct, selected.size());
+            logger.trace("Selected tags: {}", selected);
 
-            // 2) parsing & metriche
+            // --- Fase PARSING & METRICHE ---
             logger.info("Analyzing {} tags for project {}", selected.size(), cfg.getName());
             List<MethodData> allMethods = new ArrayList<>();
             for (String tag : selected) {
-                logger.info("→ Analyzing tag {}", tag);
+                logger.debug("Analyzing tag {}", tag);
                 allMethods.addAll(parser.parseAndComputeOnline(owner, repo, tag, metricsCalc));
             }
+            logger.info("Collected {} method data entries for {}", allMethods.size(), cfg.getName());
 
-            // 3) JIRA labeling
+            // --- Fase JIRA LABELING ---
             logger.info("Labeling buggy methods via JIRA for project {}", cfg.getName());
             jira.initialize(cfg.getJiraProjectKey());
             List<String> bugKeys = jira.fetchBugKeys();
-            logger.info("JIRA returned {} bug issues", bugKeys.size());
+            logger.debug("JIRA returned {} bug issues", bugKeys.size());
             allMethods = allMethods.stream()
                     .map(md -> md.toBuilder()
                             .buggy(jira.isMethodBuggy(md.getCommitHashes(), bugKeys))
-                            .build()
-                    )
+                            .build())
                     .collect(Collectors.toList());
 
+            long buggyCount = allMethods.stream().filter(MethodData::isBuggy).count();
+            logger.info("Labeled {} methods as buggy out of {}", buggyCount, allMethods.size());
 
-            // 4) export CSV
+            // --- Fase EXPORT CSV ---
             String outCsv = "output/" + repo + "_dataset.csv";
-            logger.info("Writing {} method records to {}", allMethods.size(), outCsv);
+            logger.info("Writing {} records to {}", allMethods.size(), outCsv);
             csvWriter.write(outCsv, allMethods);
-            logger.info("CSV generated: {}", outCsv);
+            logger.info("CSV generated at {}", outCsv);
         }
     }
 }

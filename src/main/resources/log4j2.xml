@@ -11,7 +11,7 @@
 
     <Loggers>
         <!-- default logger -->
-        <Root level="info">
+        <Root level="debug">
             <AppenderRef ref="Console"/>
         </Root>
     </Loggers>

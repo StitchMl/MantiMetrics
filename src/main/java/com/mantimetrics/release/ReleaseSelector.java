@@ -21,23 +21,27 @@ public class ReleaseSelector {
      *         or at least 1 if percent > 0, and the list is not empty.
      */
     public List<String> selectFirstPercent(List<String> tags, int percent) {
-        logger.info("Selecting first {}% of {} tags.", percent, tags.size());
+        logger.debug("Selecting first {}% of {} total tags", percent, tags.size());
 
-        if (tags.isEmpty() || percent <= 0) {
-            logger.info("No tags to select (empty list or non‐positive percentage).");
+        if (tags.isEmpty()) {
+            logger.info("No tags available to select");
+            return Collections.emptyList();
+        }
+        if (percent <= 0) {
+            logger.info("Percentage {} is non‑positive, returning empty list", percent);
             return Collections.emptyList();
         }
         if (percent >= 100) {
-            logger.info("Percentage >= 100, returning all tags.");
+            logger.info("Percentage {}≥100, returning all {} tags", percent, tags.size());
             return List.copyOf(tags);
         }
 
         int total = tags.size();
         int count = (int) Math.floor(total * percent / 100.0);
-        // ensure at least one element if percent > 0
-        count = Math.max(count, 1);
+        count = Math.max(count, 1);  // at least one of percent > 0
+
         List<String> selected = tags.subList(0, Math.min(count, total));
-        logger.info("Selected {} tags out of {}.", selected.size(), total);
+        logger.debug("Selected {} tags out of {}", selected.size(), total);
         return selected;
     }
 }
