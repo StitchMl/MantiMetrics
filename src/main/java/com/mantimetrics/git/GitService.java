@@ -36,7 +36,7 @@ public class GitService {
     private final ObjectMapper mapper = new ObjectMapper();
     private final String authToken;
     private final Map<String, String> branchCache = new ConcurrentHashMap<>();
-    private static final Pattern JIRA_KEY_PATTERN = Pattern.compile("([A-Z]+-\\d+)");
+    private static final Pattern JIRA_KEY_PATTERN = Pattern.compile("\\b(?>[A-Z]++-\\d++)\\b");
 
     public GitService(String pat) {
         this.authToken = pat;
