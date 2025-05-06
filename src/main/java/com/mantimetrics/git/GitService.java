@@ -3,6 +3,7 @@ package com.mantimetrics.git;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.*;
+import org.eclipse.jgit.api.Git;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,6 +17,15 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+
+import org.eclipse.jgit.diff.DiffEntry;
+import org.eclipse.jgit.diff.DiffFormatter;
+import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
+import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.revwalk.RevWalk;
+import org.eclipse.jgit.util.io.DisabledOutputStream;
 
 /**
  * Browse and download Java files from GitHub without cloning the repo.
@@ -171,23 +181,69 @@ public class GitService {
         }
     }
 
-    public Map<String, List<String>> getFileToIssueKeysMap(String owner, String repo) throws IOException {
-        String branch = getDefaultBranch(owner, repo);
-        List<JsonNode> commits = fetchAllCommits(owner, repo, branch);
+    /**
+     * Extracts **once** the map: path file.java → a list of JIRA keys
+     * taken from ALL commits of `branch`.
+     */
+    public Map<String,List<String>> getFileToIssueKeysMap(
+            String owner, String repo, String branch) throws Exception {
 
-        Map<String, List<String>> fileMap = new HashMap<>();
-        for (JsonNode commit : commits) {
-            List<String> keys = extractJiraKeys(commit);
+        // 1) Local cloning
+        Path repoDir = cloneRepository(owner, repo, branch);
+        logger.info("Cloned {}@{} into {}", owner, branch, repoDir);
+
+        // 2) I prepare JGit
+        Repository repository = new FileRepositoryBuilder()
+                .setGitDir(repoDir.resolve(".git").toFile())
+                .build();
+        RevWalk walk = new RevWalk(repository);
+
+        // 3) I point to the last branch commit
+        ObjectId headId = repository.resolve(branch);
+        walk.markStart(walk.parseCommit(headId));
+        logger.info("Last commit SHA: {}", headId.getName());
+
+        // 4) Formatter for diff
+        DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE);
+        df.setRepository(repository);
+        logger.info("Diff formatter created");
+
+        Map<String,List<String>> fileMap = new HashMap<>();
+        Pattern jiraPattern = Pattern.compile("\\b(?>[A-Z]++-\\d++)\\b");
+
+        // 5) Iterate all commit
+        logger.info("Iterating commits...");
+        for (RevCommit commit : walk) {
+            // I extract the JIRA keys
+            String msg = commit.getFullMessage();
+            Matcher m = jiraPattern.matcher(msg);
+            List<String> keys = new ArrayList<>();
+            while (m.find()) keys.add(m.group());
+
             if (keys.isEmpty()) continue;
 
-            String sha = commit.path("sha").asText();
-            List<String> javaFiles = getJavaFilesInCommit(owner, repo, sha);
-            for (String file : javaFiles) {
-                fileMap.computeIfAbsent(file, k -> new ArrayList<>()).addAll(keys);
+            // diff against parent (if any)
+            RevCommit parent = (commit.getParentCount() > 0)
+                    ? walk.parseCommit(commit.getParent(0).getId())
+                    : null;
+
+            List<DiffEntry> diffs = df.scan(parent, commit);
+            for (DiffEntry de : diffs) {
+                String path = de.getNewPath();
+                if (path.endsWith(".java")) {
+                    fileMap.computeIfAbsent(path, k -> new ArrayList<>())
+                            .addAll(keys);
+                }
             }
         }
+        logger.info("Found {} files with JIRA keys", fileMap.size());
 
-        logger.info("Built file→issueKeys map (entries={})", fileMap.size());
+        // 6) cleaning
+        df.close();
+        walk.close();
+        repository.close();
+        // (optional) delete the tmp folder: Files.walk(...) ...
+
         return fileMap;
     }
 
@@ -214,6 +270,24 @@ public class GitService {
             }
         }
         return commits;
+    }
+
+    /**
+     * Clone locally **all** the `branch` history into a bare tempdir,
+     * returning the Path of the cloned folder.
+     */
+    private Path cloneRepository(String owner, String repo, String branch) throws Exception {
+        Path tmp = Files.createTempDirectory("mantimetrics-git-" + repo + "-");
+        logger.info("Cloning {}@{} into {}", owner, branch, tmp);
+        logger.debug("https://github.com/{}/{}.git", owner, repo);
+        Git.cloneRepository()
+                .setURI("https://github.com/" + owner + "/" + repo + ".git")
+                .setDirectory(tmp.toFile())
+                .setBranch(branch)
+                .setDepth(0)   // 0 = tutta la history
+                .call()
+                .close();
+        return tmp;
     }
 
     private List<String> extractJiraKeys(JsonNode commit) {

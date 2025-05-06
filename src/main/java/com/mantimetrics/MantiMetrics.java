@@ -4,7 +4,6 @@ import com.mantimetrics.config.ProjectConfigLoader;
 import com.mantimetrics.git.GitService;
 import com.mantimetrics.parser.CodeParser;
 import com.mantimetrics.metrics.MetricsCalculator;
-import com.mantimetrics.jira.JiraClient;
 import com.mantimetrics.csv.CSVWriter;
 import com.mantimetrics.model.MethodData;
 import com.mantimetrics.git.ProjectConfig;
@@ -17,8 +16,8 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
-import java.util.stream.Collectors;
 
 public class MantiMetrics {
     private static final Logger logger = LoggerFactory.getLogger(MantiMetrics.class);
@@ -48,7 +47,6 @@ public class MantiMetrics {
         GitService gitService         = new GitService(githubPat);
         CodeParser parser             = new CodeParser(gitService);
         MetricsCalculator metricsCalc = new MetricsCalculator();
-        JiraClient jira               = new JiraClient();
         ReleaseSelector selector      = new ReleaseSelector();
         CSVWriter csvWriter           = new CSVWriter();
 
@@ -59,34 +57,34 @@ public class MantiMetrics {
 
             // --- TAGS phase ---
             logger.info("Project {}: fetching tags", cfg.getName());
-            List<String> tags = gitService.listTags(owner, repo);
+            var tags     = gitService.listTags(owner, repo);
             logger.debug("Found {} tags for project {}", tags.size(), cfg.getName());
 
             int pct = cfg.getPercentage();
-            List<String> selected = selector.selectFirstPercent(tags, pct);
+            var selected = selector.selectFirstPercent(tags, pct);
             logger.info("Project {}: selected {}% → {} tags", cfg.getName(), pct, selected.size());
+
+            // --- **ONE** call per file→JIRA-keys ---
+            logger.info("Labeling buggy methods via JIRA for project {}", cfg.getName());
+            // 1) fishing the default-branch from the GitHub repo
+            String defaultBranch = gitService.getDefaultBranch(owner, repo);
+            logger.debug("Default branch for {}: {}", cfg.getName(), defaultBranch);
+
+            // 2) construct the file→issueKeys map by passing the correct branch
+            Map<String,List<String>> fileToKeys =
+                    gitService.getFileToIssueKeysMap(owner, repo, defaultBranch);
+            logger.info("Found {} files with JIRA keys for project {}", fileToKeys.size(), cfg.getName());
+
 
             // --- PARSING & METRICS phase ---
             logger.info("Analyzing {} tags for project {}", selected.size(), cfg.getName());
             List<MethodData> allMethods = new ArrayList<>();
             for (String tag : selected) {
-                logger.debug("Analyzing tag {}", tag);
-                allMethods.addAll(parser.parseAndComputeOnline(owner, repo, tag, metricsCalc));
+                allMethods.addAll(parser.parseAndComputeOnline(
+                        owner, repo, tag, metricsCalc, fileToKeys));
             }
             logger.info("Collected {} method data entries for {}", allMethods.size(), cfg.getName());
 
-            // --- JIRA LABELING phase ---
-            logger.info("Labeling buggy methods via JIRA for project {}", cfg.getName());
-            jira.initialize(cfg.getJiraProjectKey());
-            List<String> bugKeys = jira.fetchBugKeys();
-            allMethods = allMethods.stream()
-                    .map(md -> md.toBuilder()
-                            .buggy(jira.isMethodBuggy(md.getCommitHashes(), bugKeys))
-                            .build())
-                    .collect(Collectors.toList());
-
-            long buggyCount = allMethods.stream().filter(MethodData::isBuggy).count();
-            logger.info("Labeled {} methods as buggy out of {}", buggyCount, allMethods.size());
 
             // --- EXPORT CSV phase ---
             Files.createDirectories(Paths.get("output"));
