@@ -204,13 +204,11 @@ public class GitService {
             String paged = baseUrl + "&page=" + page++;
             try (Response r = exec(build(paged))) {
                 // parse body only once
-                if (!r.isSuccessful() || r.body() == null) {
-                    break; // single break for all exit conditions
-                }
+                assert r.body() != null;
                 JsonNode arr = mapper.readTree(r.body().string());
                 // combine both array checks here
-                if (!arr.isArray() || arr.isEmpty()) {
-                    break; // still the same break
+                if (!r.isSuccessful() && (!arr.isArray() || arr.isEmpty())) {
+                    break; // single break for all exit conditions
                 }
                 arr.forEach(commits::add);
             }
