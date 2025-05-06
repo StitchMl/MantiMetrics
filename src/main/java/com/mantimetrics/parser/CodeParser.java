@@ -41,7 +41,8 @@ public class CodeParser {
         }
 
         // 2) retrieve branch and SHA
-        String branch, commitId;
+        String branch;
+        String commitId;
         try {
             branch   = gh.getDefaultBranch(owner, repo);
             commitId = gh.getLatestCommitSha(owner, repo);
