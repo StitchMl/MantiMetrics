@@ -24,7 +24,7 @@ public class MantiMetrics {
     private static final Logger logger = LoggerFactory.getLogger(MantiMetrics.class);
 
     public static void main(String[] args) throws Exception {
-        // 1) caricamento configurazioni
+        // 1) Loading configurations
         logger.info("Loading project configurations");
         ProjectConfig[] configs = ProjectConfigLoader.load();
 
@@ -44,7 +44,7 @@ public class MantiMetrics {
         }
         logger.info("GitHub PAT loaded");
 
-        // 3) inizializza i servizi
+        // 3) initialise services
         GitService gitService         = new GitService(githubPat);
         CodeParser parser             = new CodeParser(gitService);
         MetricsCalculator metricsCalc = new MetricsCalculator();
@@ -52,12 +52,12 @@ public class MantiMetrics {
         ReleaseSelector selector      = new ReleaseSelector();
         CSVWriter csvWriter           = new CSVWriter();
 
-        // 4) ciclo sui progetti
+        // 4) project cycle
         for (ProjectConfig cfg : configs) {
             String owner = cfg.getOwner();
             String repo  = cfg.getName().toLowerCase();
 
-            // --- Fase TAGS ---
+            // --- TAGS phase ---
             logger.info("Project {}: fetching tags", cfg.getName());
             List<String> tags = gitService.listTags(owner, repo);
             logger.debug("Found {} tags for project {}", tags.size(), cfg.getName());
@@ -66,7 +66,7 @@ public class MantiMetrics {
             List<String> selected = selector.selectFirstPercent(tags, pct);
             logger.info("Project {}: selected {}% → {} tags", cfg.getName(), pct, selected.size());
 
-            // --- Fase PARSING & METRICHE ---
+            // --- PARSING & METRICS phase ---
             logger.info("Analyzing {} tags for project {}", selected.size(), cfg.getName());
             List<MethodData> allMethods = new ArrayList<>();
             for (String tag : selected) {
@@ -75,7 +75,7 @@ public class MantiMetrics {
             }
             logger.info("Collected {} method data entries for {}", allMethods.size(), cfg.getName());
 
-            // --- Fase JIRA LABELING ---
+            // --- JIRA LABELING phase ---
             logger.info("Labeling buggy methods via JIRA for project {}", cfg.getName());
             jira.initialize(cfg.getJiraProjectKey());
             List<String> bugKeys = jira.fetchBugKeys();
@@ -88,7 +88,7 @@ public class MantiMetrics {
             long buggyCount = allMethods.stream().filter(MethodData::isBuggy).count();
             logger.info("Labeled {} methods as buggy out of {}", buggyCount, allMethods.size());
 
-            // --- Fase EXPORT CSV ---
+            // --- EXPORT CSV phase ---
             Files.createDirectories(Paths.get("output"));
             String outCsv = "output/" + repo + "_dataset.csv";
             logger.info("Writing {} records to {}", allMethods.size(), outCsv);
