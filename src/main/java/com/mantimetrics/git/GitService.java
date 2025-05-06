@@ -203,9 +203,15 @@ public class GitService {
         while (true) {
             String paged = baseUrl + "&page=" + page++;
             try (Response r = exec(build(paged))) {
-                if (!r.isSuccessful() || r.body() == null) break;
+                // parse body only once
+                if (!r.isSuccessful() || r.body() == null) {
+                    break; // single break for all exit conditions
+                }
                 JsonNode arr = mapper.readTree(r.body().string());
-                if (!arr.isArray() || arr.isEmpty()) break;
+                // combine both array checks here
+                if (!arr.isArray() || arr.isEmpty()) {
+                    break; // still the same break
+                }
                 arr.forEach(commits::add);
             }
         }
