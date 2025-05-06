@@ -43,24 +43,26 @@ public class GitService {
         this.client = new OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
                 .build();
 
-        // refill every hour
+        // hourly refills of up to 5000 permits
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleAtFixedRate(() -> {
-            int toRelease = MAX_PERMITS - ratePermits.availablePermits();
+            int toRelease = 5000 - ratePermits.availablePermits();
             if (toRelease > 0) {
                 ratePermits.release(toRelease);
-                logger.info("Refilled {} permits (available {})", toRelease, ratePermits.availablePermits());
+                logger.info("Refilled {} permits, available={}", toRelease, ratePermits.availablePermits());
             }
         }, 1, 1, TimeUnit.HOURS);
-
-        logger.info("GitService initialized—max {} requests/hour", MAX_PERMITS);
     }
 
     private void acquirePermit() {
         ratePermits.acquireUninterruptibly();
+    }
+
+    private Response exec(Request req) throws IOException {
+        acquirePermit();
+        return client.newCall(req).execute();
     }
 
     private Response executeWithRateLimit(Request req) throws IOException {
@@ -68,7 +70,7 @@ public class GitService {
         return client.newCall(req).execute();
     }
 
-    private Request newRequest(String url) {
+    private Request build(String url) {
         return new Request.Builder()
                 .url(url)
                 .header("Authorization", "token " + authToken)
@@ -128,7 +130,7 @@ public class GitService {
     public List<String> listTags(String owner, String repo) throws IOException {
         String url = String.format("%s/repos/%s/%s/tags", API_URL, owner, repo);
         logger.info("Listing tags for {}/{}", owner, repo);
-        try (Response resp = executeWithRateLimit(newRequest(url))) {
+        try (Response resp = executeWithRateLimit(build(url))) {
             if (!resp.isSuccessful()) {
                 throw new IOException("GitHub API error listing tags: HTTP " + resp.code());
             }
@@ -149,7 +151,7 @@ public class GitService {
             return branchCache.get(key);
         }
         String url = String.format("%s/repos/%s/%s", API_URL, owner, repo);
-        try (Response resp = executeWithRateLimit(newRequest(url))) {
+        try (Response resp = executeWithRateLimit(build(url))) {
             if (!resp.isSuccessful()) {
                 throw new IOException("GitHub API error fetching repo info: HTTP " + resp.code());
             }
@@ -164,7 +166,7 @@ public class GitService {
     public String getLatestCommitSha(String owner, String repo) throws IOException {
         String branch = getDefaultBranch(owner, repo);
         String url = String.format("%s/repos/%s/%s/commits/%s", API_URL, owner, repo, branch);
-        try (Response resp = executeWithRateLimit(newRequest(url))) {
+        try (Response resp = executeWithRateLimit(build(url))) {
             if (!resp.isSuccessful()) {
                 throw new IOException("GitHub API error fetching latest commit: HTTP " + resp.code());
             }
@@ -175,56 +177,54 @@ public class GitService {
     }
 
     /**
-     * Returns all JIRA issue keys found in commit messages
-     * for each change to the filePath on the default branch.
+     * New method: retrieves *all* commits from the branch and builds
+     * in memory the file→list map of JIRA keys.
      */
-    public Map<String, List<String>> getFileToIssueKeysMap(String owner, String repo) throws IOException {
+    public Map<String,List<String>> getFileToIssueKeysMap(String owner, String repo) throws IOException {
         String branch = getDefaultBranch(owner, repo);
-        String url = String.format("%s/repos/%s/%s/commits?sha=%s&per_page=100", API_URL, owner, repo, branch);
-
-        List<JsonNode> allCommits = new ArrayList<>();
+        String baseUrl = API_URL + "/repos/" + owner + "/" + repo + "/commits?sha="
+                + URLEncoder.encode(branch, StandardCharsets.UTF_8)
+                + "&per_page=100";
+        List<JsonNode> commits = new ArrayList<>();
         int page = 1;
-
+        // 1) paginazione dei commit
         while (true) {
-            String paginatedUrl = url + "&page=" + page;
-            try (Response resp = executeWithRateLimit(newRequest(paginatedUrl))) {
-                if (!resp.isSuccessful()) break;
-
-                assert resp.body() != null;
-                JsonNode array = mapper.readTree(resp.body().string());
-                if (!array.isArray() || array.isEmpty()) break;
-
-                for (JsonNode commitNode : array) {
-                    allCommits.add(commitNode);
-                }
+            String paged = baseUrl + "&page=" + page;
+            try (Response r = exec(build(paged))) {
+                if (!r.isSuccessful()) break;
+                assert r.body() != null;
+                JsonNode arr = mapper.readTree(r.body().string());
+                if (!arr.isArray() || arr.isEmpty()) break;
+                arr.forEach(commits::add);
             }
             page++;
         }
 
-        Map<String, List<String>> fileToKeys = new HashMap<>();
-
-        for (JsonNode commit : allCommits) {
-            String sha = commit.path("sha").asText();
-            String msg = commit.path("commit").path("message").asText("");
-            Matcher m = JIRA_KEY_PATTERN.matcher(msg);
+        Map<String,List<String>> fileMap = new HashMap<>();
+        // 2) for each commit containing JIRA-key ...
+        for (JsonNode c : commits) {
+            String sha = c.path("sha").asText();
+            String msg = c.path("commit").path("message").asText("");
             List<String> keys = new ArrayList<>();
+            Matcher m = JIRA_KEY_PATTERN.matcher(msg);
             while (m.find()) keys.add(m.group(1));
             if (keys.isEmpty()) continue;
 
-            // Now get the files for this commit
-            String commitUrl = String.format("%s/repos/%s/%s/commits/%s", API_URL, owner, repo, sha);
-            try (Response resp = executeWithRateLimit(newRequest(commitUrl))) {
-                if (!resp.isSuccessful()) continue;
-
-                assert resp.body() != null;
-                JsonNode files = mapper.readTree(resp.body().string()).path("files");
+            // 3) Download the list of files touched by this commit
+            String url = API_URL + "/repos/" + owner + "/" + repo + "/commits/" + sha;
+            try (Response r2 = exec(build(url))) {
+                if (!r2.isSuccessful()) continue;
+                assert r2.body() != null;
+                JsonNode files = mapper.readTree(r2.body().string()).path("files");
                 for (JsonNode f : files) {
-                    String filename = f.path("filename").asText();
-                    fileToKeys.computeIfAbsent(filename, k -> new ArrayList<>()).addAll(keys);
+                    String fn = f.path("filename").asText(null);
+                    if (fn!=null && fn.endsWith(".java")) {
+                        fileMap.computeIfAbsent(fn, k->new ArrayList<>()).addAll(keys);
+                    }
                 }
             }
         }
-
-        return fileToKeys;
+        logger.info("Built file→issueKeys map (entries={})", fileMap.size());
+        return fileMap;
     }
 }
