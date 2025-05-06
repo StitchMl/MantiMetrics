@@ -93,7 +93,13 @@ public class GitService {
                  ZipInputStream zipIn = new ZipInputStream(in)) {
                 ZipEntry entry;
                 while ((entry = zipIn.getNextEntry()) != null) {
-                    Path outPath = tmpDir.resolve(entry.getName());
+                    Path outPath = tmpDir.resolve(entry.getName()).normalize();
+
+                    // Prevention of vulnerability Zip Slip
+                    if (!outPath.startsWith(tmpDir)) {
+                        throw new IOException("Entry is outside of the target dir: " + entry.getName());
+                    }
+
                     if (entry.isDirectory()) {
                         Files.createDirectories(outPath);
                     } else {
@@ -101,7 +107,9 @@ public class GitService {
                         try (OutputStream out = Files.newOutputStream(outPath)) {
                             byte[] buf = new byte[4096];
                             int len;
-                            while ((len = zipIn.read(buf)) > 0) out.write(buf, 0, len);
+                            while ((len = zipIn.read(buf)) > 0) {
+                                out.write(buf, 0, len);
+                            }
                         }
                     }
                     zipIn.closeEntry();
