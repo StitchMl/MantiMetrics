@@ -87,7 +87,9 @@ public class GitService {
             if (!resp.isSuccessful()) {
                 throw new IOException("Error downloading zip: HTTP " + resp.code());
             }
-            Path tmpDir = Files.createTempDirectory("mantimetrics-" + repo + "-" + ref + "-");
+            Path secureTempDir = Paths.get("/path/to/secure/temp");
+            Files.createDirectories(secureTempDir);
+            Path tmpDir = Files.createTempDirectory(secureTempDir, "mantimetrics-" + repo + "-" + ref + "-");
             assert resp.body() != null;
             try (InputStream in = resp.body().byteStream();
                  ZipInputStream zipIn = new ZipInputStream(in)) {
