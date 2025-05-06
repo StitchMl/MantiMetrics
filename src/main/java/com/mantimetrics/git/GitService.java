@@ -80,10 +80,14 @@ public class GitService {
 
     public String getDefaultBranch(String owner, String repo) throws IOException {
         String cacheKey = owner + "/" + repo;
-        if (branchCache.containsKey(cacheKey)) {
-            logger.debug("Default branch for {}/{} retrieved from cache: {}", owner, repo, branchCache.get(cacheKey));
-            return branchCache.get(cacheKey);
+        // first, retrieve the branch from the cache
+        String cachedBranch = branchCache.get(cacheKey);
+        // if it is not null (was present), I log it in and return
+        if (cachedBranch != null) {
+            logger.debug("Default branch for {}/{} retrieved from cache: {}", owner, repo, cachedBranch);
+            return cachedBranch;
         }
+
 
         String url = String.format("%s/repos/%s/%s", API_URL, owner, repo);
         Request req = newRequestBuild(url);
