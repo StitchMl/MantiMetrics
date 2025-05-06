@@ -4,7 +4,7 @@
         <Console name="Console" target="SYSTEM_OUT">
             <PatternLayout disableAnsi="false">
                 <!-- %highlight applies ANSI colors based on level -->
-                <Pattern>%d{HH:mm:ss} [%t] %highlight{%-5level}{FATAL=bg_red, ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=blue} %style{%c{1.}}{bold} - %msg%n</Pattern>
+                <Pattern>%d{HH:mm:ss} [%t] %highlight{%-5level}{FATAL=bg_red, ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=blue} %style{%class{0}}{bold} - %msg%n</Pattern>
             </PatternLayout>
         </Console>
     </Appenders>

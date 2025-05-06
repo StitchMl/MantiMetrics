@@ -79,7 +79,7 @@ public class GitService {
      */
     public Path downloadAndUnzipRepo(String owner, String repo, String ref) throws IOException {
         String zipUrl = String.format("%s/%s/%s/zip/%s", CODELOAD_URL, owner, repo, URLEncoder.encode(ref, StandardCharsets.UTF_8));
-        logger.info("Downloading ZIP of {}/{}@{} …", owner, repo, ref);
+        logger.info("Downloading ZIP of {}/{}@{}…", owner, repo, ref);
 
         acquirePermit();
         Request req = new Request.Builder().url(zipUrl).build();
