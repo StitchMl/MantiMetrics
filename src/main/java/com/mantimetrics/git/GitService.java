@@ -65,11 +65,6 @@ public class GitService {
         return client.newCall(req).execute();
     }
 
-    private Response executeWithRateLimit(Request req) throws IOException {
-        acquirePermit();
-        return client.newCall(req).execute();
-    }
-
     private Request build(String url) {
         return new Request.Builder()
                 .url(url)
@@ -130,7 +125,7 @@ public class GitService {
     public List<String> listTags(String owner, String repo) throws IOException {
         String url = String.format("%s/repos/%s/%s/tags", API_URL, owner, repo);
         logger.info("Listing tags for {}/{}", owner, repo);
-        try (Response resp = executeWithRateLimit(build(url))) {
+        try (Response resp = exec(build(url))) {
             if (!resp.isSuccessful()) {
                 throw new IOException("GitHub API error listing tags: HTTP " + resp.code());
             }
@@ -151,7 +146,7 @@ public class GitService {
             return branchCache.get(key);
         }
         String url = String.format("%s/repos/%s/%s", API_URL, owner, repo);
-        try (Response resp = executeWithRateLimit(build(url))) {
+        try (Response resp = exec(build(url))) {
             if (!resp.isSuccessful()) {
                 throw new IOException("GitHub API error fetching repo info: HTTP " + resp.code());
             }
@@ -166,7 +161,7 @@ public class GitService {
     public String getLatestCommitSha(String owner, String repo) throws IOException {
         String branch = getDefaultBranch(owner, repo);
         String url = String.format("%s/repos/%s/%s/commits/%s", API_URL, owner, repo, branch);
-        try (Response resp = executeWithRateLimit(build(url))) {
+        try (Response resp = exec(build(url))) {
             if (!resp.isSuccessful()) {
                 throw new IOException("GitHub API error fetching latest commit: HTTP " + resp.code());
             }
@@ -176,55 +171,68 @@ public class GitService {
         }
     }
 
-    /**
-     * New method: retrieves *all* commits from the branch and builds
-     * in memory the file→list map of JIRA keys.
-     */
-    public Map<String,List<String>> getFileToIssueKeysMap(String owner, String repo) throws IOException {
+    public Map<String, List<String>> getFileToIssueKeysMap(String owner, String repo) throws IOException {
         String branch = getDefaultBranch(owner, repo);
+        List<JsonNode> commits = fetchAllCommits(owner, repo, branch);
+
+        Map<String, List<String>> fileMap = new HashMap<>();
+        for (JsonNode commit : commits) {
+            List<String> keys = extractJiraKeys(commit);
+            if (keys.isEmpty()) continue;
+
+            String sha = commit.path("sha").asText();
+            List<String> javaFiles = getJavaFilesInCommit(owner, repo, sha);
+            for (String file : javaFiles) {
+                fileMap.computeIfAbsent(file, k -> new ArrayList<>()).addAll(keys);
+            }
+        }
+
+        logger.info("Built file→issueKeys map (entries={})", fileMap.size());
+        return fileMap;
+    }
+
+// --- Helper Methods ---
+
+    private List<JsonNode> fetchAllCommits(String owner, String repo, String branch) throws IOException {
+        List<JsonNode> commits = new ArrayList<>();
         String baseUrl = API_URL + "/repos/" + owner + "/" + repo + "/commits?sha="
                 + URLEncoder.encode(branch, StandardCharsets.UTF_8)
                 + "&per_page=100";
-        List<JsonNode> commits = new ArrayList<>();
+
         int page = 1;
-        // 1) paginazione dei commit
         while (true) {
-            String paged = baseUrl + "&page=" + page;
+            String paged = baseUrl + "&page=" + page++;
             try (Response r = exec(build(paged))) {
-                if (!r.isSuccessful()) break;
-                assert r.body() != null;
+                if (!r.isSuccessful() || r.body() == null) break;
                 JsonNode arr = mapper.readTree(r.body().string());
                 if (!arr.isArray() || arr.isEmpty()) break;
                 arr.forEach(commits::add);
             }
-            page++;
         }
+        return commits;
+    }
 
-        Map<String,List<String>> fileMap = new HashMap<>();
-        // 2) for each commit containing JIRA-key ...
-        for (JsonNode c : commits) {
-            String sha = c.path("sha").asText();
-            String msg = c.path("commit").path("message").asText("");
-            List<String> keys = new ArrayList<>();
-            Matcher m = JIRA_KEY_PATTERN.matcher(msg);
-            while (m.find()) keys.add(m.group(1));
-            if (keys.isEmpty()) continue;
+    private List<String> extractJiraKeys(JsonNode commit) {
+        List<String> keys = new ArrayList<>();
+        String msg = commit.path("commit").path("message").asText("");
+        Matcher m = JIRA_KEY_PATTERN.matcher(msg);
+        while (m.find()) keys.add(m.group(1));
+        return keys;
+    }
 
-            // 3) Download the list of files touched by this commit
-            String url = API_URL + "/repos/" + owner + "/" + repo + "/commits/" + sha;
-            try (Response r2 = exec(build(url))) {
-                if (!r2.isSuccessful()) continue;
-                assert r2.body() != null;
-                JsonNode files = mapper.readTree(r2.body().string()).path("files");
-                for (JsonNode f : files) {
-                    String fn = f.path("filename").asText(null);
-                    if (fn!=null && fn.endsWith(".java")) {
-                        fileMap.computeIfAbsent(fn, k->new ArrayList<>()).addAll(keys);
-                    }
+    private List<String> getJavaFilesInCommit(String owner, String repo, String sha) throws IOException {
+        String url = API_URL + "/repos/" + owner + "/" + repo + "/commits/" + sha;
+        try (Response r = exec(build(url))) {
+            if (!r.isSuccessful() || r.body() == null) return List.of();
+            JsonNode files = mapper.readTree(r.body().string()).path("files");
+            List<String> javaFiles = new ArrayList<>();
+            for (JsonNode f : files) {
+                String filename = f.path("filename").asText(null);
+                if (filename != null && filename.endsWith(".java")) {
+                    javaFiles.add(filename);
                 }
             }
+            return javaFiles;
         }
-        logger.info("Built file→issueKeys map (entries={})", fileMap.size());
-        return fileMap;
     }
 }
