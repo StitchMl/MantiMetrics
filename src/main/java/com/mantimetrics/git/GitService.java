@@ -12,6 +12,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -34,6 +36,7 @@ public class GitService {
     private final ObjectMapper mapper = new ObjectMapper();
     private final String authToken;
     private final Map<String, String> branchCache = new ConcurrentHashMap<>();
+    private static final Pattern JIRA_KEY_PATTERN = Pattern.compile("([A-Z]+-\\d+)");
 
     public GitService(String pat) {
         this.authToken = pat;
@@ -169,5 +172,59 @@ public class GitService {
             return mapper.readTree(resp.body().string())
                     .path("sha").asText();
         }
+    }
+
+    /**
+     * Returns all JIRA issue keys found in commit messages
+     * for each change to the filePath on the default branch.
+     */
+    public Map<String, List<String>> getFileToIssueKeysMap(String owner, String repo) throws IOException {
+        String branch = getDefaultBranch(owner, repo);
+        String url = String.format("%s/repos/%s/%s/commits?sha=%s&per_page=100", API_URL, owner, repo, branch);
+
+        List<JsonNode> allCommits = new ArrayList<>();
+        int page = 1;
+
+        while (true) {
+            String paginatedUrl = url + "&page=" + page;
+            try (Response resp = executeWithRateLimit(newRequest(paginatedUrl))) {
+                if (!resp.isSuccessful()) break;
+
+                assert resp.body() != null;
+                JsonNode array = mapper.readTree(resp.body().string());
+                if (!array.isArray() || array.isEmpty()) break;
+
+                for (JsonNode commitNode : array) {
+                    allCommits.add(commitNode);
+                }
+            }
+            page++;
+        }
+
+        Map<String, List<String>> fileToKeys = new HashMap<>();
+
+        for (JsonNode commit : allCommits) {
+            String sha = commit.path("sha").asText();
+            String msg = commit.path("commit").path("message").asText("");
+            Matcher m = JIRA_KEY_PATTERN.matcher(msg);
+            List<String> keys = new ArrayList<>();
+            while (m.find()) keys.add(m.group(1));
+            if (keys.isEmpty()) continue;
+
+            // Now get the files for this commit
+            String commitUrl = String.format("%s/repos/%s/%s/commits/%s", API_URL, owner, repo, sha);
+            try (Response resp = executeWithRateLimit(newRequest(commitUrl))) {
+                if (!resp.isSuccessful()) continue;
+
+                assert resp.body() != null;
+                JsonNode files = mapper.readTree(resp.body().string()).path("files");
+                for (JsonNode f : files) {
+                    String filename = f.path("filename").asText();
+                    fileToKeys.computeIfAbsent(filename, k -> new ArrayList<>()).addAll(keys);
+                }
+            }
+        }
+
+        return fileToKeys;
     }
 }

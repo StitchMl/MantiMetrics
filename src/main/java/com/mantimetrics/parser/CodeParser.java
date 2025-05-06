@@ -15,6 +15,7 @@ import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 public class CodeParser {
@@ -52,39 +53,55 @@ public class CodeParser {
         }
 
         List<MethodData> out = new ArrayList<>();
+        // Retrieve map file → issue keys at once
+        Map<String, List<String>> fileToIssueKeys;
+        try {
+            fileToIssueKeys = gh.getFileToIssueKeysMap(owner, repo);
+        } catch (IOException e) {
+            logger.warn("Could not fetch file-to-JIRA mapping: {}", e.getMessage());
+            fileToIssueKeys = Collections.emptyMap();
+        }
+
 
         // 3) walk the dir for .java
         try (Stream<Path> files = Files.walk(repoRoot)) {
+            Map<String, List<String>> finalFileToIssueKeys = fileToIssueKeys;
             files.filter(p -> p.toString().endsWith(".java"))
                     .forEach(path -> {
                         String rel = repoRoot.relativize(path).toString();
                         try {
                             // 3.1) read the file
                             String src = Files.readString(path);
+
                             // 3.2) Analyses AST
                             CompilationUnit cu = new JavaParser().parse(src).getResult().orElseThrow(() ->
                                     new ParseProblemException(List.of()));
-                            // 3.3) extract methods
+
+                            // 3.3) get JIRA keys from commit messages that modified this file
+                            List<String> jiraKeys = finalFileToIssueKeys.getOrDefault(rel.replace('\\', '/'), List.of());
+                            boolean isBuggy = !jiraKeys.isEmpty();
+
+                            // 3.4) extract methods
                             for (MethodDeclaration m : cu.findAll(MethodDeclaration.class)) {
                                 m.getRange().ifPresent(r -> {
                                     var mets = calc.computeAll(m);
                                     MethodData md = new MethodData.Builder()
                                             .projectName(repo)
                                             .path("/" + rel + "/")
-                                            .methodSignature(m.getDeclarationAsString(true,true,true))
+                                            .methodSignature(m.getDeclarationAsString(true, true, true))
                                             .releaseId(branch)
                                             .versionId(ref)
                                             .commitId(commitId)
                                             .metrics(mets)
-                                            .commitHashes(Collections.emptyList())  // da popolare dopo
-                                            .buggy(false)
+                                            .commitHashes(Collections.emptyList())  // puoi riempirlo se necessario
+                                            .buggy(isBuggy)
                                             .build();
                                     out.add(md);
                                 });
                             }
                             logger.debug("Analysed {} methods in {}", cu.findAll(MethodDeclaration.class).size(), rel);
 
-                        } catch (IOException|ParseProblemException ex) {
+                        } catch (IOException | ParseProblemException ex) {
                             logger.warn("Skip file {} for error: {}", rel, ex.getMessage());
                         }
                     });
