@@ -3,6 +3,7 @@ package com.mantimetrics.git;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.*;
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -142,61 +143,67 @@ public class GitService {
     /**
      * @return mappa immutabile file.java → lista JIRA-key
      */
-    public Map<String, List<String>> getFileToIssueKeysMap(String owner,
-                                                           String repo,
-                                                           String branch) throws Exception {
+    public Map<String,List<String>> getFileToIssueKeysMap(
+            String owner,
+            String repo,
+            String branch) throws FileKeyMappingException {
         String key = owner + "/" + repo;
         if (projectCache.containsKey(key)) {
             return projectCache.get(key);
         }
 
-        Path dir = Files.createTempDirectory("mantimetrics-git-" + repo + "-");
-        tempDirs.add(dir);
-        log.info("Cloning https://github.com/{}/{} (full) → {}", owner, repo, dir);
+        try {
+            Path dir = Files.createTempDirectory("mantimetrics-git-" + repo + "-");
+            tempDirs.add(dir);
+            log.info("Cloning https://github.com/{}/{} (full) → {}", owner, repo, dir);
 
-        Git.cloneRepository()
-                .setURI("https://github.com/" + owner + "/" + repo + ".git")
-                .setDirectory(dir.toFile())
-                .setBranch(branch)              // default = master / main
-                .call()
-                .close();
+            Git.cloneRepository()
+                    .setURI("https://github.com/" + owner + "/" + repo + ".git")
+                    .setDirectory(dir.toFile())
+                    .setBranch(branch)              // default = master / main
+                    .call()
+                    .close();
 
-        /* ---------- JGit walk & diff ---------- */
-        Repository repository = new FileRepositoryBuilder()
-                .setGitDir(dir.resolve(".git").toFile())
-                .build();
+            /* ---------- JGit walk & diff ---------- */
+            Repository repository = new FileRepositoryBuilder()
+                    .setGitDir(dir.resolve(".git").toFile())
+                    .build();
 
-        Map<String, List<String>> fileMap = new HashMap<>();
-        try (RevWalk walk = new RevWalk(repository);
-             DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
+            Map<String, List<String>> fileMap = new HashMap<>();
+            try (RevWalk walk = new RevWalk(repository);
+                 DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
 
-            ObjectId head = repository.resolve(branch);
-            walk.markStart(walk.parseCommit(head));
-            df.setRepository(repository);
+                ObjectId head = repository.resolve(branch);
+                walk.markStart(walk.parseCommit(head));
+                df.setRepository(repository);
 
-            for (RevCommit c : walk) {
-                List<String> keys = extractKeys(c.getFullMessage());
-                if (keys.isEmpty()) continue;
+                for (RevCommit c : walk) {
+                    List<String> keys = extractKeys(c.getFullMessage());
+                    if (keys.isEmpty()) continue;
 
-                RevCommit parent = c.getParentCount() > 0
-                        ? walk.parseCommit(c.getParent(0).getId()) : null;
+                    RevCommit parent = c.getParentCount() > 0
+                            ? walk.parseCommit(c.getParent(0).getId()) : null;
 
-                for (DiffEntry d : df.scan(parent, c)) {
-                    String p = d.getNewPath();
-                    if (p.endsWith(".java")) {
-                        fileMap.computeIfAbsent(p, __ -> new ArrayList<>())
-                                .addAll(keys);
+                    for (DiffEntry d : df.scan(parent, c)) {
+                        String p = d.getNewPath();
+                        if (p.endsWith(".java")) {
+                            fileMap.computeIfAbsent(p, __ -> new ArrayList<>())
+                                    .addAll(keys);
+                        }
                     }
                 }
+            } finally {
+                repository.close();
             }
-        } finally {
-            repository.close();
-        }
 
-        log.info("Built file→JIRA map for {}: {} java files", key, fileMap.size());
-        Map<String, List<String>> unmodifiable = Collections.unmodifiableMap(fileMap);
-        projectCache.put(key, unmodifiable);
-        return unmodifiable;
+            log.info("Built file→JIRA map for {}: {} java files", key, fileMap.size());
+            Map<String, List<String>> unmodifiable = Collections.unmodifiableMap(fileMap);
+            projectCache.put(key, unmodifiable);
+            return unmodifiable;
+        } catch (IOException | GitAPIException e) {
+            throw new FileKeyMappingException("Failed to build file→issue map for "
+                    + owner + "/" + repo + "@" + branch, e);
+        }
     }
 
     /** Regex helper */
