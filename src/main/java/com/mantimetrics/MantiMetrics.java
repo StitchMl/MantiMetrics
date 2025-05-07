@@ -1,126 +1,95 @@
 package com.mantimetrics;
 
 import com.mantimetrics.config.ProjectConfigLoader;
-import com.mantimetrics.git.GitService;
-import com.mantimetrics.jira.JiraClient;
-import com.mantimetrics.parser.CodeParser;
-import com.mantimetrics.metrics.MetricsCalculator;
 import com.mantimetrics.csv.CSVWriter;
-import com.mantimetrics.model.MethodData;
+import com.mantimetrics.git.GitService;
 import com.mantimetrics.git.ProjectConfig;
+import com.mantimetrics.jira.JiraClient;
+import com.mantimetrics.metrics.MetricsCalculator;
+import com.mantimetrics.model.MethodData;
+import com.mantimetrics.parser.CodeParser;
 import com.mantimetrics.release.ReleaseSelector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.util.*;
 import java.util.stream.Collectors;
-
-import java.io.*;
-import java.nio.file.*;
 import java.util.stream.Stream;
 
 public class MantiMetrics {
-    private static final Logger logger = LoggerFactory.getLogger(MantiMetrics.class);
+    private static final Logger log = LoggerFactory.getLogger(MantiMetrics.class);
 
     public static void main(String[] args) throws Exception {
-        logger.info("Loading project configurations");
+
+        /* ---------- loading configs ---------- */
         ProjectConfig[] configs = ProjectConfigLoader.load();
 
-        // GitHub PAT
-        Properties ghProps = new Properties();
-        try (InputStream in = MantiMetrics.class.getResourceAsStream("/github.properties")) {
-            if (in == null) {
-                logger.error("github.properties missing");
-                throw new IllegalStateException("github.properties missing");
-            }
-            ghProps.load(in);
+        Properties props = new Properties();
+        try (var in = MantiMetrics.class.getResourceAsStream("/github.properties")) {
+            props.load(Objects.requireNonNull(in, "github.properties missing"));
         }
-        String githubPat = ghProps.getProperty("github.pat");
-        if (githubPat == null || githubPat.isBlank()) {
-            logger.error("github.pat missing");
-            throw new IllegalStateException("github.pat missing");
-        }
-        logger.info("GitHub PAT loaded");
+        String pat = props.getProperty("github.pat").trim();
 
-        // init services
-        GitService gitService         = new GitService(githubPat);
-        CodeParser parser             = new CodeParser(gitService);
-        MetricsCalculator metricsCalc = new MetricsCalculator();
-        ReleaseSelector selector      = new ReleaseSelector();
-        JiraClient jira               = new JiraClient();
-        CSVWriter csvWriter           = new CSVWriter();
+        /* ---------- services ---------- */
+        GitService git  = new GitService(pat);
+        CodeParser parser = new CodeParser(git);
+        MetricsCalculator calc = new MetricsCalculator();
+        ReleaseSelector selector = new ReleaseSelector();
+        JiraClient jira = new JiraClient();
+        CSVWriter writer = new CSVWriter();
 
+        /* ---------- projects loop ---------- */
         for (ProjectConfig cfg : configs) {
             String owner = cfg.getOwner();
             String repo  = cfg.getName().toLowerCase();
 
-            // --- TAGS ---
-            logger.info("Project {}: fetching tags", cfg.getName());
-            var tags     = gitService.listTags(owner, repo);
-            var selected = selector.selectFirstPercent(tags, cfg.getPercentage());
-            logger.info("Selected {} tags ({}%)", selected.size(), cfg.getPercentage());
+            /* tags */
+            var tags = git.listTags(owner, repo);
+            var chosen = selector.selectFirstPercent(tags, cfg.getPercentage());
+            log.info("{} – selected {} / {} tags", repo, chosen.size(), tags.size());
 
-            // --- JIRA bug keys (one call only) ---
+            /* one-shot JIRA fetch and one-shot file→keys map */
             jira.initialize(cfg.getJiraProjectKey());
-            List<String> bugKeys = jira.fetchBugKeys();
-            logger.info("JIRA returned {} bug issues", bugKeys.size());
+            var bugKeys = jira.fetchBugKeys();
 
-            List<MethodData> allMethods = new ArrayList<>();
-            for (String tag : selected) {
-                logger.info("Building file→JIRA‑keys map for {}/{}@{}", owner, repo, tag);
-                Map<String,List<String>> fileToKeys =
-                        gitService.getFileToIssueKeysMap(owner, repo, tag);
+            var fileToKeys = git.getFileToIssueKeysMap(
+                    owner, repo, "refs/heads/" + (tags.isEmpty() ? "master" : "main"));
 
-                logger.info("Analyzing {}/{}@{}", owner, repo, tag);
-                var methods = parser.parseAndComputeOnline(
-                        owner, repo, tag, metricsCalc, fileToKeys);
+            /* analyse releases */
+            List<MethodData> all = new ArrayList<>();
+            for (String tag : chosen) {
 
-                // buggy label
-                methods = methods.stream()
-                        .map(md -> md.toBuilder()
-                                .buggy(jira.isMethodBuggy(md.getCommitHashes(), bugKeys))
+                var methods = parser.parseAndComputeOnline(owner, repo, tag, calc, fileToKeys)
+                        .stream()
+                        .map(m -> m.toBuilder()
+                                .buggy(jira.isMethodBuggy(m.getCommitHashes(), bugKeys))
                                 .build())
                         .collect(Collectors.toList());
 
-                long cnt = methods.stream().filter(MethodData::isBuggy).count();
-                logger.info("Found {} buggy methods in {}", cnt, tag);
-                allMethods.addAll(methods);
+                log.info("{}@{} → {} methods ({} buggy)",
+                        repo, tag, methods.size(),
+                        methods.stream().filter(MethodData::isBuggy).count());
+
+                all.addAll(methods);
             }
 
-            // export CSV
-            Files.createDirectories(Paths.get("output"));
-            String outCsv = "output/" + repo + "_dataset.csv";
-            logger.info("Writing {} records to {}", allMethods.size(), outCsv);
-            csvWriter.write(outCsv, allMethods);
-            logger.info("CSV generated at {}", outCsv);
-
-            // after exporting all CSVs:
-            cleanupTempDirs(gitService);
-
-            logger.info("Done!");
+            /* CSV */
+            Path out = Paths.get("output", repo + "_dataset.csv");
+            Files.createDirectories(out.getParent());
+            writer.write(out, all);
         }
+
+        /* cleanup temp repos */
+        cleanupTempDirs(git);
     }
 
-    private static void cleanupTempDirs(GitService gitService) {
-        List<Path> dirs = gitService.getTempDirs();
-        for (Path dir : dirs) {
-            try (Stream<Path> walk = Files.walk(dir)) {
-                walk.sorted(Comparator.reverseOrder())
-                        .forEach(p -> {
-                            try {
-                                Files.deleteIfExists(p);
-                            } catch (IOException e) {
-                                // only DEBUG so as not to pollute WARN on Windows
-                                logger.warn("Failed to delete {}: {}", p, e.getMessage());
-                            }
-                        });
-                logger.info("Deleted temp repo {}", dir);
-            } catch (IOException e) {
-                logger.error("Error walking temp dir {}: {}", dir, e.getMessage());
-            }
-        }
+    private static void cleanupTempDirs(GitService g) {
+        for (Path d : g.getTempDirs()) try (Stream<Path> w = Files.walk(d)) {
+            w.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try { Files.deleteIfExists(p); } catch (Exception ignore) {}
+            });
+            log.info("Deleted {}", d);
+        } catch (Exception e) { log.warn("Cleanup failed: {}", e.getMessage()); }
     }
 }

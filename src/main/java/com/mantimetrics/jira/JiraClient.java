@@ -15,76 +15,90 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
+/**
+ * Fetches **all** fixed-bug issues for a project, transparently paging the
+ * JIRA Search REST API (default page size = 50).
+ */
 public class JiraClient {
-    private static final Logger logger = LoggerFactory.getLogger(JiraClient.class);
+    private static final Logger log = LoggerFactory.getLogger(JiraClient.class);
+    private static final int PAGE_SIZE = 100;
 
-    private String searchEndpoint;
+    private String searchBase;
     private String authHeader;
 
+    /* --------------------------------------------------- init -------- */
+
     public void initialize(String projectKey) throws JiraClientException {
-        logger.trace("Initializing JiraClient for project '{}'", projectKey);
-        Properties props = new Properties();
+        Properties p = new Properties();
         try (InputStream in = getClass().getResourceAsStream("/application.properties")) {
             if (in == null) throw new JiraClientException("application.properties missing");
-            props.load(in);
+            p.load(in);
         } catch (IOException e) {
             throw new JiraClientException("Error loading JIRA config", e);
         }
 
-        String base  = props.getProperty("jira.url",     "").trim().replaceAll("/+$", "");
-        String pat   = props.getProperty("jira.pat",     "").trim();
-        String query = props.getProperty("jira.query",   "").trim();
-        if (base.isEmpty() || pat.isEmpty() || query.isEmpty()) {
-            throw new JiraClientException("Invalid JIRA properties");
-        }
+        String base  = p.getProperty("jira.url" ).trim().replaceAll("/+$", "");
+        String pat   = p.getProperty("jira.pat" ).trim();
+        String jqlT  = p.getProperty("jira.query").trim();
+        if (base.isEmpty() || pat.isEmpty() || jqlT.isEmpty())
+            throw new JiraClientException("jira.url / jira.pat / jira.query must be set");
 
-        String jql = query.replace("{projectKey}", projectKey);
-        try {
-            jql = URLEncoder.encode(jql, StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            throw new JiraClientException("JQL encoding failed", e);
-        }
+        String jql = URLEncoder.encode(jqlT.replace("{projectKey}", projectKey),
+                StandardCharsets.UTF_8);
+        this.searchBase = base + "/rest/api/2/search?jql=" + jql;
+        this.authHeader = "Bearer " + pat;
 
-        this.searchEndpoint = base + "/rest/api/2/search?jql=" + jql;
-        this.authHeader     = "Bearer " + pat;
-        logger.debug("JIRA endpoint = {}", searchEndpoint);
+        log.debug("JIRA search base = {}", searchBase);
     }
 
+    /* ----------------------------------------------- public API ------ */
+
     public List<String> fetchBugKeys() throws JiraClientException {
-        logger.trace("Fetching bug keys from JIRA");
-        List<String> keys = new ArrayList<>();
+        var keys = new HashSet<String>();
+        int startAt = 0;
 
-        try (CloseableHttpClient client = HttpClients.createDefault()) {
-            HttpGet get = new HttpGet(searchEndpoint);
-            get.setHeader("Authorization", authHeader);
-            get.setHeader("Accept", "application/json");
+        try (CloseableHttpClient http = HttpClients.createDefault()) {
+            while (true) {
+                String url = searchBase +
+                        "&startAt="  + startAt +
+                        "&maxResults=" + PAGE_SIZE;
+                JsonNode root = execute(http, url);
 
-            try (CloseableHttpResponse resp = client.execute(get)) {
-                int status = resp.getStatusLine().getStatusCode();
-                String body = EntityUtils.toString(resp.getEntity(), StandardCharsets.UTF_8);
-                if (status != 200) {
-                    throw new JiraClientException("JIRA API error HTTP " + status);
-                }
-
-                JsonNode root = new ObjectMapper().readTree(body);
+                int total     = root.path("total").asInt(0);
                 JsonNode issues = root.path("issues");
-                if (!issues.isArray()) {
-                    throw new JiraClientException("Unexpected JIRA response");
-                }
-                for (JsonNode issue : issues) {
-                    JsonNode k = issue.get("key");
-                    if (k != null && k.isTextual()) keys.add(k.asText());
-                }
-                logger.trace("Retrieved {} bug keys", keys.size());
+                issues.forEach(n -> {
+                    String k = n.path("key").asText(null);
+                    if (k != null) keys.add(k);
+                });
+
+                startAt += PAGE_SIZE;
+                if (startAt >= total || issues.isEmpty()) break;
             }
-        } catch (IOException e) {
-            throw new JiraClientException("I/O error talking to JIRA", e);
+        } catch (IOException io) {
+            throw new JiraClientException("I/O error talking to JIRA", io);
         }
 
-        return keys;
+        log.trace("Fetched {} bug keys from JIRA", keys.size());
+        return new ArrayList<>(keys);
     }
 
     public boolean isMethodBuggy(List<String> commitKeys, List<String> bugKeys) {
         return commitKeys.stream().anyMatch(bugKeys::contains);
+    }
+
+    /* ----------------------------------------------- helpers --------- */
+
+    private JsonNode execute(CloseableHttpClient http, String url) throws IOException, JiraClientException {
+        HttpGet get = new HttpGet(url);
+        get.setHeader("Authorization", authHeader);
+        get.setHeader("Accept", "application/json");
+
+        try (CloseableHttpResponse resp = http.execute(get)) {
+            int code = resp.getStatusLine().getStatusCode();
+            if (code != 200)
+                throw new JiraClientException("JIRA search failed HTTP " + code);
+            String body = EntityUtils.toString(resp.getEntity(), StandardCharsets.UTF_8);
+            return new ObjectMapper().readTree(body);
+        }
     }
 }
