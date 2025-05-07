@@ -26,7 +26,7 @@ public final class GitService {
     private static final Logger  LOG   = LoggerFactory.getLogger(GitService.class);
     private static final String  API   = "https://api.github.com";
     private static final String  ZIP   = "https://codeload.github.com";
-    private static final String dirSuffix = ".mantimetrics-tmp";
+    private static final String DIR_SUFF = ".mantimetrics-tmp";
     private static final int     MAX_R = 5;
     private static final Pattern JIRA  =
             Pattern.compile("\\b(?>[A-Z][A-Z0-9]++-\\d++)\\b");
@@ -178,7 +178,7 @@ public final class GitService {
     }
 
     private static Path privateBox() throws IOException{
-        Path home=Paths.get(System.getProperty("user.home")); Path box=home.resolve(dirSuffix);
+        Path home=Paths.get(System.getProperty("user.home")); Path box=home.resolve(DIR_SUFF);
         if(Files.notExists(box)){
             if(FileSystems.getDefault().supportedFileAttributeViews().contains("posix")){
                 Files.createDirectory(box, PosixFilePermissions.asFileAttribute(
