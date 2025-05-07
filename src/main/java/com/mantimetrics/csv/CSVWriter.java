@@ -5,13 +5,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedWriter;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.List;
 
-public class CSVWriter {
-    private static final Logger log = LoggerFactory.getLogger(CSVWriter.class);
+public final class CSVWriter {
+    private static final Logger LOG = LoggerFactory.getLogger(CSVWriter.class);
 
     private static final String HEADER = String.join(",",
             "Project","Path","Method","ReleaseId","VersionId","CommitId",
@@ -22,24 +21,20 @@ public class CSVWriter {
             "MaxNestingDepth","isLongMethod","isGodClass","isFeatureEnvy",
             "isDuplicatedCode","Buggy");
 
-    /** Writes all rows; never throws raw IOException. */
     public void write(Path file, List<MethodData> rows) throws CsvWriteException {
         try (BufferedWriter w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
-            w.write(HEADER);
-            w.write('\n');
+            w.write(HEADER); w.write('\n');
             for (MethodData m : rows) {
-                w.write(escape(m.toCsvLine()));
-                w.write('\n');
+                w.write(escape(m.toCsvLine())); w.write('\n');
             }
-            log.info("CSV [{}] written – {} rows", file.getFileName(), rows.size());
-        } catch (IOException io) {
-            throw new CsvWriteException("Failed to write CSV: " + file, io);
+            LOG.info("CSV [{}] written – {} rows", file.getFileName(), rows.size());
+        } catch (Exception e) {
+            throw new CsvWriteException("Failed to write " + file, e);
         }
     }
 
     private static String escape(String s) {
-        return s.indexOf('"') >= 0 || s.indexOf(',') >= 0 || s.indexOf('\n') >= 0
-                ? '"' + s.replace("\"", "\"\"") + '"'
-                : s;
+        return s.indexOf('"')>=0||s.indexOf(',')>=0||s.indexOf('\n')>=0
+                ? '"' + s.replace("\"", "\"\"") + '"' : s;
     }
 }

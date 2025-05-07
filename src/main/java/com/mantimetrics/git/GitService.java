@@ -3,24 +3,6 @@ package com.mantimetrics.git;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.*;
-import org.eclipse.jgit.api.errors.GitAPIException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.*;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
-import java.nio.file.attribute.PosixFilePermissions;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
-
-import java.io.IOException;
-import java.util.concurrent.CopyOnWriteArrayList;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
@@ -30,31 +12,51 @@ import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class GitService {
+import java.io.*;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+import java.util.concurrent.*;
+
+/** Git-utility layer: rate-limit aware, caches maps in-memory, produces temp-dirs safely. */
+public final class GitService {
+    /* cache for one-time look-ups */
+    private final Map<String,String>   defaultBranchCache = new ConcurrentHashMap<>();
+    private final Map<String,Map<String,List<String>>> projectCache = new ConcurrentHashMap<>();
+    /* ---------- constants ---------- */
+    private static final Logger  LOG = LoggerFactory.getLogger(GitService.class);
+    private static final String  API = "https://api.github.com";
+    private static final int     MAX_RETRIES = 5;
+    /** safe, no-back-tracking regex (atomic groups and possessive quantifiers) */
+    private static final Pattern JIRA_RE = Pattern.compile("\\b(?>[A-Z][A-Z0-9]++-\\d++)\\b");
+    private static final String PRIV_DIR_NAME = ".mantimetrics-tmp";
+
+    /* ---------- state ---------- */
+    private final OkHttpClient client;
+    private final ObjectMapper json = new ObjectMapper();
+    private final String token;
+    private final List<Path> tmpDirs = new CopyOnWriteArrayList<>();
+    /** cache project → branch → map(file→keys) */
     private static final Logger logger = LoggerFactory.getLogger(GitService.class);
     private static final String CODELOAD_URL = "https://codeload.github.com";
     private static final int MAX_PERMITS = 5000;
 
-    private final ObjectMapper mapper = new ObjectMapper();
     private final Semaphore ratePermits = new Semaphore(MAX_PERMITS, true);
-    /** Keeps track of all temporary folders created */
-    private final List<Path> tempDirs = new CopyOnWriteArrayList<>();
-    private static final String PRIV_DIR_NAME = ".mantimetrics-tmp";
 
-    // ---------- constants --------------------------------------------------
-    private static final Logger  log          = LoggerFactory.getLogger(GitService.class);
-    private static final String  API          = "https://api.github.com";
-    private static final int     MAX_RETRIES  = 5;
-
-    // ---------- state ------------------------------------------------------
-    private final OkHttpClient client;
-    private final String         token;
-    private static final Pattern JIRA_RE = Pattern.compile("\\b([A-Z][A-Z0-9]+-\\d+)\\b");
-
-    /* ───────────────────────────────── cache in-memory ───────────────────────── */
-    private final Map<String, Map<String, List<String>>> projectCache = new HashMap<>();
-
+    /* ---------- ctor ---------- */
     public GitService(String pat) {
         this.token = pat;
         this.client = new OkHttpClient.Builder()
@@ -64,14 +66,6 @@ public class GitService {
 
     private void acquirePermit() {
         ratePermits.acquireUninterruptibly();
-    }
-
-    private Request build(String url) {
-        return new Request.Builder()
-                .url(url)
-                .header("Authorization", "token " + token)
-                .header("Accept", "application/vnd.github.v3+json")
-                .build();
     }
 
     /** It downloads the ZIP of the release and extracts it into a temporary dir. */
@@ -91,7 +85,7 @@ public class GitService {
             Path tempRoot = Files.createTempDirectory(
                     privateSandbox(),
                     "mantimetrics-"+repo+"-"+ref+"-");
-            tempDirs.add(tempRoot);
+            tmpDirs.add(tempRoot);
             assert resp.body() != null;
             try (InputStream in = resp.body().byteStream();
                  ZipInputStream zipIn = new ZipInputStream(in)) {
@@ -121,173 +115,176 @@ public class GitService {
         }
     }
 
-    // ----------------------------------------------------------------------
-    // public helpers
-    // ----------------------------------------------------------------------
+    /* ====================================================================== */
+    /* public helpers                                                         */
+    /* ====================================================================== */
 
-    /** full, paginated list of tags – with automatic retry on 403 RateLimit. */
-    public List<String> listTags(String owner, String repo) throws IOException, InterruptedException {
+    /** Return the default branch as declared by GitHub (`main`, `master`, …). */
+    public String getDefaultBranch(String owner,String repo) {
+
+        return defaultBranchCache.computeIfAbsent(owner+'/'+repo, k -> {
+            try {
+                JsonNode n = getWithRetry(API+"/repos/"+owner+"/"+repo);
+                return n.path("default_branch").asText("master");
+            } catch(Exception e){ throw new UncheckedIOException(new IOException(e)); }
+        });
+    }
+
+    /** List *all* tags, paging 100 × 100 until exhausted. */
+    public List<String> listTags(String owner, String repo)
+            throws IOException, InterruptedException {
+
         List<String> out = new ArrayList<>();
-        int page = 1;
-        while (true) {
-            String u = String.format("%s/repos/%s/%s/tags?per_page=100&page=%d",
-                    API, owner, repo, page);
+        for (int page = 1; ; page++) {
+            String u = String.format(
+                    "%s/repos/%s/%s/tags?per_page=100&page=%d", API, owner, repo, page);
             JsonNode arr = getWithRetry(u);
             if (!arr.isArray() || arr.isEmpty()) break;
-            arr.forEach(n -> Optional.ofNullable(n.path("name").asText(null))
+            arr.forEach(x -> Optional.ofNullable(x.path("name").asText(null))
                     .ifPresent(out::add));
-            page++;
         }
-        log.info("Found {} total tags for {}/{}", out.size(), owner, repo);
+        LOG.info("Found {} tags for {}/{}", out.size(), owner, repo);
         return out;
     }
-
-    /* ───────────────────────────────── public API ────────────────────────────── */
 
     /**
-     * @return mappa immutabile file.java → lista JIRA-key
+     * Lazily builds (and then reuses) the file → JIRA-key map for an entire project.
+     * <p>⚠️ The <strong>branch</strong> parameter is only used on the first call;
+     * later calls for the same {@code owner/repo} will return the cached map.</p>
      */
-    public Map<String,List<String>> getFileToIssueKeysMap(
-            String owner,
-            String repo,
-            String branch) throws FileKeyMappingException {
-        String key = owner + "/" + repo;
-        if (projectCache.containsKey(key)) {
-            return projectCache.get(key);
-        }
+    public Map<String,List<String>> getFileToIssueKeysMap(String owner,
+                                                          String repo,
+                                                          String branch)
+            throws FileKeyMappingException {
+
+        String cacheKey = owner + "/" + repo;
 
         try {
-            Path dir = Files.createTempDirectory(
-                    privateSandbox(),
-                    "mantimetrics-git-"+repo+"-");
-            tempDirs.add(dir);
-            log.info("Cloning https://github.com/{}/{} (full) → {}", owner, repo, dir);
+            /* -- computeIfAbsent guarantees the value is *read* after it is created -- */
+            return projectCache.computeIfAbsent(cacheKey, k -> {
+                try {
+                    /* ---------- clone once (shallow) ---------- */
+                    Path dir = Files.createTempDirectory(
+                            privateSandbox(), "mantimetrics-git-"+repo+"-");
+                    tmpDirs.add(dir);
 
-            Git.cloneRepository()
-                    .setURI("https://github.com/" + owner + "/" + repo + ".git")
-                    .setDirectory(dir.toFile())
-                    .setBranch(branch)              // default = master / main
-                    .call()
-                    .close();
+                    LOG.info("Cloning https://github.com/{}/{}#{} → {}", owner, repo, branch, dir);
 
-            /* ---------- JGit walk & diff ---------- */
-            Repository repository = new FileRepositoryBuilder()
-                    .setGitDir(dir.resolve(".git").toFile())
-                    .build();
+                    Git.cloneRepository()
+                            .setURI("https://github.com/"+owner+"/"+repo+".git")
+                            .setDirectory(dir.toFile())
+                            .setBranch(branch)
+                            .setCloneAllBranches(false)
+                            .call()
+                            .close();
 
-            Map<String, List<String>> fileMap = new HashMap<>();
-            try (RevWalk walk = new RevWalk(repository);
-                 DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
+                    /* ---------- JGit scan ---------- */
+                    return Collections.unmodifiableMap(buildFileMap(dir, branch));
 
-                ObjectId head = repository.resolve(branch);
-                walk.markStart(walk.parseCommit(head));
-                df.setRepository(repository);
-
-                for (RevCommit c : walk) {
-                    List<String> keys = extractKeys(c.getFullMessage());
-                    if (keys.isEmpty()) continue;
-
-                    RevCommit parent = c.getParentCount() > 0
-                            ? walk.parseCommit(c.getParent(0).getId()) : null;
-
-                    for (DiffEntry d : df.scan(parent, c)) {
-                        String p = d.getNewPath();
-                        if (p.endsWith(".java")) {
-                            fileMap.computeIfAbsent(p, str -> new ArrayList<>())
-                                    .addAll(keys);
-                        }
-                    }
+                } catch (Exception e) {
+                    throw new UncheckedIOException(new IOException(e));
                 }
-            } finally {
-                repository.close();
-            }
-
-            log.info("Built file→JIRA map for {}: {} java files", key, fileMap.size());
-            Map<String, List<String>> unmodifiable = Collections.unmodifiableMap(fileMap);
-            projectCache.put(key, unmodifiable);
-            return unmodifiable;
-        } catch (IOException | GitAPIException e) {
-            throw new FileKeyMappingException("Failed to build file→issue map for "
-                    + owner + "/" + repo + "@" + branch, e);
+            });
+        } catch (UncheckedIOException uio) {
+            throw new FileKeyMappingException(
+                    "Failed to build file→issue map for "+cacheKey+"@"+branch,
+                    uio.getCause());
         }
     }
 
-    /** Regex helper */
-    private static List<String> extractKeys(String msg) {
-        List<String> out = new ArrayList<>();
-        Matcher m = JIRA_RE.matcher(msg);
-        while (m.find()) out.add(m.group(1));
-        return out;
+    /* helper that performs the RevWalk / Diff scan; identical to your previous code */
+    private Map<String,List<String>> buildFileMap(Path repoDir, String branch) throws Exception {
+
+        Map<String,List<String>> fileMap = new HashMap<>();
+
+        try (Repository repo = new FileRepositoryBuilder()
+                .setGitDir(repoDir.resolve(".git").toFile())
+                .build();
+             RevWalk walk     = new RevWalk(repo);
+             DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
+
+            df.setRepository(repo);
+            ObjectId head = repo.resolve(branch);
+            walk.markStart(walk.parseCommit(head));
+
+            for (RevCommit c : walk) {
+                List<String> keys = extractKeys(c.getFullMessage());
+                if (keys.isEmpty()) continue;
+
+                RevCommit parent = c.getParentCount() > 0 ? walk.parseCommit(c.getParent(0)) : null;
+                for (DiffEntry d : df.scan(parent, c)) {
+                    String p = d.getNewPath();
+                    if (p.endsWith(".java")) {
+                        fileMap.computeIfAbsent(p, __ -> new ArrayList<>()).addAll(keys);
+                    }
+                }
+            }
+        }
+        LOG.info("Built file→JIRA map: {} java files", fileMap.size());
+        return fileMap;
     }
 
-    // ----------------------------------------------------------------------
-    // private – generic REST call with rate-limit handling
-    // ----------------------------------------------------------------------
+    /* ====================================================================== */
+    /* small utilities                                                        */
+    /* ====================================================================== */
+    private static List<String> extractKeys(String msg) {
+        List<String> list = new ArrayList<>();
+        Matcher m = JIRA_RE.matcher(msg);
+        while (m.find()) list.add(m.group(1));
+        return list;
+    }
 
-    private JsonNode getWithRetry(String url) throws IOException, InterruptedException {
+    private JsonNode getWithRetry(String url) throws IOException,InterruptedException {
+        for (int a = 0; a < MAX_RETRIES; a++) {
+            Request r = new Request.Builder()
+                    .url(url)
+                    .header("Authorization", "token " + token)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .build();
+            try (Response resp = client.newCall(r).execute()) {
+                if (resp.isSuccessful() && resp.body() != null)
+                    return json.readTree(resp.body().string());
 
-        for (int attempts = 0; attempts < MAX_RETRIES; attempts++) {
-
-            try (Response resp = client.newCall(build(url)).execute()) {
-                if (resp.isSuccessful() && resp.body() != null) {
-                    return mapper.readTree(resp.body().string());
-                }
-
-                /* ---------------- rate-limit handling ---------------- */
-                if ((resp.code() == 403 || resp.code() == 429)) {
-
-                    long sleepMs = computeBackOff(resp, attempts);
-                    log.warn("Rate-limit hit (HTTP {}), retry {}/{} in {} s – {}",
-                            resp.code(), attempts, MAX_RETRIES, sleepMs / 1000, url);
-
-                    TimeUnit.MILLISECONDS.sleep(sleepMs);
+                if (resp.code() == 403 || resp.code() == 429) {
+                    long wait = computeBackoff(resp, a);
+                    LOG.warn("Rate-limit {}, retry {}/{} in {} s – {}",
+                            resp.code(), a+1, MAX_RETRIES, wait/1_000, url);
+                    TimeUnit.MILLISECONDS.sleep(wait);
                     continue;
                 }
-
-                /* ----- other HTTP errors: propagate immediately ------ */
                 throw new IOException("GitHub HTTP " + resp.code() + " – " + url);
             }
         }
-        throw new IOException("Retries exhausted (" + MAX_RETRIES + ") for " + url);
+        throw new IOException("Retries exhausted for " + url);
     }
 
-    private static long computeBackOff(Response r, int attempt) {
-        // 1) Honor explicit Retry-After first
-        String ra = r.header("Retry-After");
-        if (ra != null) {
-            return (Long.parseLong(ra) + 1) * 1_000L;
-        }
-        // 2) Primary rate-limit: wait until X-RateLimit-Reset
-        String remain = r.header("X-RateLimit-Remaining");
-        String reset  = r.header("X-RateLimit-Reset");
-        if ("0".equals(remain) && reset != null) {
-            long resetMillis = Long.parseLong(reset) * 1_000L;
-            return Math.max(resetMillis - System.currentTimeMillis(), 5_000);
-        }
-        // 3) Fallback: exponential (3 s, 6 s, 12 s, …)
-        return (long) (3_000L * Math.pow(2, attempt - 1.0));
+    private static long computeBackoff(Response resp, int attempt) {
+        String reset = resp.header("X-RateLimit-Reset");
+        if (reset != null)
+            return Math.max(Long.parseLong(reset)*1_000 - System.currentTimeMillis(), 5_000);
+        return (long) (3_000 * Math.pow(2, attempt));
     }
 
-    /** Return a process-private directory (700 / rwx------) under the user-home. */
+    /** PRIVATE sandbox – now 100 % portable. */
     private static Path privateSandbox() throws IOException {
         Path home = Paths.get(System.getProperty("user.home"));
         Path box  = home.resolve(PRIV_DIR_NAME);
-        // create once with 0700; Posix not available on Windows so ignore silently
+
         if (Files.notExists(box)) {
-            try {
+            /* POSIX permissions only when the FS supports them – avoids the Windows crash */
+            if (FileSystems.getDefault()
+                    .supportedFileAttributeViews()
+                    .contains("posix")) {
                 Files.createDirectory(
                         box,
                         PosixFilePermissions.asFileAttribute(
                                 PosixFilePermissions.fromString("rwx------")));
-            } catch (UnsupportedOperationException e) {
-                Files.createDirectory(box);          // fallback (Windows ACLs)
+            } else {
+                Files.createDirectory(box);
             }
         }
         return box;
     }
 
-
-    /* ───────────────────────────────── housekeeping ─────────────────────────── */
-
-    public List<Path> getTempDirs() { return List.copyOf(tempDirs); }
+    public List<Path> getTmpDirs() { return List.copyOf(tmpDirs); }
 }

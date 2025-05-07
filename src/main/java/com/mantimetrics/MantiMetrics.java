@@ -2,6 +2,7 @@ package com.mantimetrics;
 
 import com.mantimetrics.config.ProjectConfigLoader;
 import com.mantimetrics.csv.CSVWriter;
+import com.mantimetrics.git.FileKeyMappingException;
 import com.mantimetrics.git.GitService;
 import com.mantimetrics.git.ProjectConfig;
 import com.mantimetrics.jira.JiraClient;
@@ -32,60 +33,60 @@ public class MantiMetrics {
         String pat = props.getProperty("github.pat").trim();
 
         /* ---------- services ---------- */
-        GitService git  = new GitService(pat);
+        GitService git   = new GitService(pat);
         CodeParser parser = new CodeParser(git);
         MetricsCalculator calc = new MetricsCalculator();
         ReleaseSelector selector = new ReleaseSelector();
         JiraClient jira = new JiraClient();
-        CSVWriter writer = new CSVWriter();
+        CSVWriter csv   = new CSVWriter();
 
-        /* ---------- projects loop ---------- */
         for (ProjectConfig cfg : configs) {
             String owner = cfg.getOwner();
-            String repo  = cfg.getName().toLowerCase();
+            String repo = cfg.getName().toLowerCase();
 
-            /* tags */
-            var tags = git.listTags(owner, repo);
-            var chosen = selector.selectFirstPercent(tags, cfg.getPercentage());
-            log.info("{} – selected {} / {} tags", repo, chosen.size(), tags.size());
+            List<String> tags = git.listTags(owner, repo);
+            List<String> chosen = selector.selectFirstPercent(tags, cfg.getPercentage());
+            String defBranch = git.getDefaultBranch(owner, repo);
+            log.info("{}/{} – selected {} / {} tags", repo, defBranch, chosen.size(), tags.size());
 
-            /* one-shot JIRA fetch and one-shot file→keys map */
             jira.initialize(cfg.getJiraProjectKey());
-            var bugKeys = jira.fetchBugKeys();
+            List<String> bugKeys = jira.fetchBugKeys();
 
-            var fileToKeys = git.getFileToIssueKeysMap(
-                    owner, repo, "refs/heads/" + (tags.isEmpty() ? "master" : "main"));
+            /* one single map built on the tip of default_branch */
+            String defaultBranch = git.getDefaultBranch(owner, repo);
+            Map<String, List<String>> fileToKeys;
+            try {
+                fileToKeys = git.getFileToIssueKeysMap(owner, repo, defaultBranch);
+            } catch (FileKeyMappingException e) {
+                log.error("Skipping {} – {}", repo, e.getMessage());
+                continue;
+            }
 
-            /* analyse releases */
             List<MethodData> all = new ArrayList<>();
             for (String tag : chosen) {
-
-                var methods = parser.parseAndComputeOnline(owner, repo, tag, calc, fileToKeys)
+                List<MethodData> ms = parser
+                        .parseAndComputeOnline(owner, repo, tag, calc, fileToKeys)
                         .stream()
                         .map(m -> m.toBuilder()
                                 .buggy(jira.isMethodBuggy(m.getCommitHashes(), bugKeys))
                                 .build())
                         .collect(Collectors.toList());
-
                 log.info("{}@{} → {} methods ({} buggy)",
-                        repo, tag, methods.size(),
-                        methods.stream().filter(MethodData::isBuggy).count());
-
-                all.addAll(methods);
+                        repo, tag, ms.size(),
+                        ms.stream().filter(MethodData::isBuggy).count());
+                all.addAll(ms);
             }
 
-            /* CSV */
             Path out = Paths.get("output", repo + "_dataset.csv");
             Files.createDirectories(out.getParent());
-            writer.write(out, all);
+            csv.write(out, all);
         }
 
-        /* cleanup temp repos */
         cleanupTempDirs(git);
     }
 
     private static void cleanupTempDirs(GitService g) {
-        for (Path d : g.getTempDirs()) try (Stream<Path> w = Files.walk(d)) {
+        for (Path d : g.getTmpDirs()) try (Stream<Path> w = Files.walk(d)) {
             w.sorted(Comparator.reverseOrder()).forEach(p -> {
                 try {
                     Files.deleteIfExists(p);
