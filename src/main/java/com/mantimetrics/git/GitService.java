@@ -157,7 +157,9 @@ public class GitService {
         }
 
         try {
-            Path dir = Files.createTempDirectory("mantimetrics-git-" + repo + "-");
+            Path dir = Files.createTempDirectory(
+                    privateSandbox(),
+                    "mantimetrics-git-"+repo+"-");
             tempDirs.add(dir);
             log.info("Cloning https://github.com/{}/{} (full) → {}", owner, repo, dir);
 
