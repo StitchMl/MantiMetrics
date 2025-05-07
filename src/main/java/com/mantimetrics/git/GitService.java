@@ -3,6 +3,7 @@ package com.mantimetrics.git;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.*;
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -142,14 +143,16 @@ public class GitService {
  /**
  * @return mappa immutabile file.java → lista JIRA-key
  */
- public Map<String, List<String>> getFileToIssueKeysMap(String owner,
+ public Map<String,List<String>> getFileToIssueKeysMap(
+ String owner,
  String repo,
- String branch) throws Exception {
+ String branch) throws FileKeyMappingException {
  String key = owner + "/" + repo;
  if (projectCache.containsKey(key)) {
  return projectCache.get(key);
  }
 
+ try {
  Path dir = Files.createTempDirectory("mantimetrics-git-" + repo + "-");
  tempDirs.add(dir);
  log.info("Cloning https://github.com/{}/{} (full) → {}", owner, repo, dir);
@@ -197,6 +200,10 @@ public class GitService {
  Map<String, List<String>> unmodifiable = Collections.unmodifiableMap(fileMap);
  projectCache.put(key, unmodifiable);
  return unmodifiable;
+ } catch (IOException | GitAPIException e) {
+ throw new FileKeyMappingException("Failed to build file→issue map for "
+ + owner + "/" + repo + "@" + branch, e);
+ }
  }
 
  /** Regex helper */
