@@ -23,13 +23,14 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public class GitService {
     private static final Logger logger = LoggerFactory.getLogger(GitService.class);
 
-    private static final String API_URL     = "https://api.github.com";
+    private static final String API_URL      = "https://api.github.com";
     private static final String CODELOAD_URL = "https://codeload.github.com";
     private static final Pattern JIRA_KEY_PATTERN = Pattern.compile("\\b(?>[A-Z]++-\\d++)\\b");
     private static final int MAX_PERMITS = 5000;
@@ -38,7 +39,8 @@ public class GitService {
     private final ObjectMapper mapper = new ObjectMapper();
     private final String authToken;
     private final Semaphore ratePermits = new Semaphore(MAX_PERMITS, true);
-    private final Map<String, String> branchCache = new ConcurrentHashMap<>();
+    /** Keeps track of all temporary folders created */
+    private final List<Path> tempDirs = new CopyOnWriteArrayList<>();
 
     public GitService(String pat) {
         this.authToken = pat;
@@ -47,17 +49,21 @@ public class GitService {
                 .readTimeout(30, TimeUnit.SECONDS)
                 .build();
 
-        // refill token bucket ogni ora
+        // refill token bucket every hour
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleAtFixedRate(() -> {
             int toRelease = MAX_PERMITS - ratePermits.availablePermits();
             if (toRelease > 0) {
                 ratePermits.release(toRelease);
-                logger.info("Refilled {} permits (available={})", toRelease, ratePermits.availablePermits());
+                logger.info("Refilled {} permits (available={})",
+                        toRelease, ratePermits.availablePermits());
             }
         }, 1, 1, TimeUnit.HOURS);
 
-        logger.info("GitService initialized—max {} requests/hour", MAX_PERMITS);
+        // disable JGit DEBUG logs
+        java.util.logging.Logger.getLogger("org.eclipse.jgit").setLevel(java.util.logging.Level.WARNING);
+
+        logger.trace("GitService initialized—max {} requests/hour", MAX_PERMITS);
     }
 
     private void acquirePermit() {
@@ -78,14 +84,13 @@ public class GitService {
                 .build();
     }
 
-    /**
-     * Scarica lo ZIP della release (tag/sha), lo estrae in una dir temporanea
-     * e ne restituisce il path.
-     */
+    /** It downloads the ZIP of the release and extracts it into a temporary dir. */
     public Path downloadAndUnzipRepo(String owner, String repo, String ref) throws IOException {
         String zipUrl = String.format("%s/%s/%s/zip/%s",
-                CODELOAD_URL, owner, repo, URLEncoder.encode(ref, StandardCharsets.UTF_8));
-        logger.info("Downloading ZIP of {}/{}@{} …", owner, repo, ref);
+                CODELOAD_URL,
+                owner, repo,
+                URLEncoder.encode(ref, StandardCharsets.UTF_8));
+        logger.trace("Downloading ZIP of {}/{}@{} …", owner, repo, ref);
 
         acquirePermit();
         Request req = new Request.Builder().url(zipUrl).build();
@@ -94,10 +99,10 @@ public class GitService {
                 throw new IOException("Error downloading ZIP: HTTP " + resp.code());
             }
             Path tempRoot = Files.createTempDirectory("mantimetrics-" + repo + "-" + ref + "-");
+            tempDirs.add(tempRoot);
             assert resp.body() != null;
             try (InputStream in = resp.body().byteStream();
                  ZipInputStream zipIn = new ZipInputStream(in)) {
-
                 ZipEntry entry;
                 while ((entry = zipIn.getNextEntry()) != null) {
                     Path out = tempRoot.resolve(entry.getName()).normalize();
@@ -119,70 +124,67 @@ public class GitService {
                     zipIn.closeEntry();
                 }
             }
-            logger.info("Unzipped to {}", tempRoot);
+            logger.trace("Unzipped to {}", tempRoot);
             return tempRoot;
         }
     }
 
+    /**
+     * List *all* tags (pages of 100) until it finds no more
+     * to retrieve even the oldest ones.
+     */
     public List<String> listTags(String owner, String repo) throws IOException {
-        String url = String.format("%s/repos/%s/%s/tags", API_URL, owner, repo);
-        logger.info("Listing tags for {}/{}", owner, repo);
-        try (Response resp = exec(build(url))) {
-            if (!resp.isSuccessful()) {
-                throw new IOException("GitHub API error listing tags: HTTP " + resp.code());
-            }
-            assert resp.body() != null;
-            JsonNode arr = mapper.readTree(resp.body().string());
-            List<String> tags = new ArrayList<>();
-            for (JsonNode n : arr) {
-                String name = n.path("name").asText(null);
-                if (name != null) tags.add(name);
-            }
-            return tags;
-        }
-    }
+        List<String> tags = new ArrayList<>();
+        int page = 1;
 
-    public String getDefaultBranch(String owner, String repo) throws IOException {
-        String key = owner + "/" + repo;
-        if (branchCache.containsKey(key)) {
-            return branchCache.get(key);
-        }
-        String url = String.format("%s/repos/%s/%s", API_URL, owner, repo);
-        try (Response resp = exec(build(url))) {
-            if (!resp.isSuccessful()) {
-                throw new IOException("GitHub API error fetching repo info: HTTP " + resp.code());
+        while (true) {
+            String url = String.format(
+                    API_URL + "/repos/%s/%s/tags?per_page=100&page=%d",
+                    owner, repo, page++
+            );
+            logger.trace("Listing tags page {} for {}/{}", page-1, owner, repo);
+            Request req = build(url);
+            try (Response resp = exec(req)) {
+                if (!resp.isSuccessful() || resp.body() == null) {
+                    logger.warn("GitHub API error listing tags: HTTP {}", resp.code());
+                    break;
+                }
+                JsonNode array = mapper.readTree(resp.body().string());
+                if (!array.isArray() || array.isEmpty()) {
+                    // there are no more pages
+                    break;
+                }
+                for (JsonNode node : array) {
+                    String name = node.path("name").asText(null);
+                    if (name != null) tags.add(name);
+                }
             }
-            assert resp.body() != null;
-            String branch = mapper.readTree(resp.body().string())
-                    .path("default_branch").asText();
-            branchCache.put(key, branch);
-            return branch;
         }
-    }
 
-    public String getLatestCommitSha(String owner, String repo) throws IOException {
-        String branch = getDefaultBranch(owner, repo);
-        String url = String.format("%s/repos/%s/%s/commits/%s", API_URL, owner, repo, branch);
-        try (Response resp = exec(build(url))) {
-            if (!resp.isSuccessful()) {
-                throw new IOException("GitHub API error fetching latest commit: HTTP " + resp.code());
-            }
-            assert resp.body() != null;
-            return mapper.readTree(resp.body().string())
-                    .path("sha").asText();
-        }
+        logger.info("Found {} total tags for {}/{}", tags.size(), owner, repo);
+        return tags;
     }
 
     /**
-     * Clona localmente il branch/tag in un bare repo e ne costruisce la mappa
-     * file → lista di JIRA‑keys (da tutti i commit di quel branch).
+     * Clone the branch/tag locally and create the map in memory
+     * file → list of JIRA keys from commits that have modified it.
      */
-    public Map<String,List<String>> getFileToIssueKeysMap(String owner, String repo, String branch) throws Exception {
-        // 1) clone
-        Path repoDir = cloneRepository(owner, repo, branch);
-        logger.info("Cloned {}@{} into {}", owner, branch, repoDir);
+    public Map<String,List<String>> getFileToIssueKeysMap(
+            String owner, String repo, String branch) throws Exception {
 
-        // 2) prepare JGit
+        // 1) clone
+        Path repoDir = Files.createTempDirectory("mantimetrics-git-" + repo + "-");
+        logger.trace("Cloning in {}", repoDir);
+        Git.cloneRepository()
+                .setURI("https://github.com/" + owner + "/" + repo + ".git")
+                .setDirectory(repoDir.toFile())
+                .setBranch(branch)
+                .setCloneAllBranches(false)
+                .setDepth(1)
+                .call()
+                .close();
+
+        // 2) prepares JGit
         Repository repository = new FileRepositoryBuilder()
                 .setGitDir(repoDir.resolve(".git").toFile())
                 .build();
@@ -190,21 +192,17 @@ public class GitService {
         ObjectId head = repository.resolve(branch);
         walk.markStart(walk.parseCommit(head));
 
-        // 3) diff formatter
         DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE);
         df.setRepository(repository);
 
         Map<String,List<String>> fileMap = new HashMap<>();
-
         for (RevCommit commit : walk) {
-            // estrai JIRA keys
-            String msg = commit.getFullMessage();
-            Matcher m = JIRA_KEY_PATTERN.matcher(msg);
+            // extract the JIRA keys
+            Matcher m = JIRA_KEY_PATTERN.matcher(commit.getFullMessage());
             List<String> keys = new ArrayList<>();
             while (m.find()) keys.add(m.group());
             if (keys.isEmpty()) continue;
 
-            // diff vs parent
             RevCommit parent = commit.getParentCount()>0
                     ? walk.parseCommit(commit.getParent(0).getId())
                     : null;
@@ -216,78 +214,34 @@ public class GitService {
             }
         }
 
-        // cleanup
+        // cleanup JGit
         df.close();
         walk.close();
         repository.close();
 
-        logger.info("Built file→JIRA-keys map: {} files", fileMap.size());
+        // delete the cloned folder
+        try (Stream<Path> stream = Files.walk(repoDir)) {
+            stream.sorted(Comparator.reverseOrder())
+                    .forEach(p -> {
+                        try {
+                            Files.deleteIfExists(p);
+                        } catch (IOException e) {
+                            // on Windows often pack/.idx is still locked: it only logs to debug
+                            logger.warn("Failed to delete {}: {}", p, e.getMessage());
+                        }
+                    });
+        } catch (IOException e) {
+            logger.error("Error walking temp dir {}: {}", repoDir, e.getMessage());
+        }
+
+        logger.trace("Deleted cloned repo {}", repoDir);
+
+        logger.trace("Built file→JIRA-keys map: {} files", fileMap.size());
         return fileMap;
     }
 
-// --- Helper Methods ---
-
-    private List<JsonNode> fetchAllCommits(String owner, String repo, String branch) throws IOException {
-        List<JsonNode> commits = new ArrayList<>();
-        String baseUrl = API_URL + "/repos/" + owner + "/" + repo + "/commits?sha="
-                + URLEncoder.encode(branch, StandardCharsets.UTF_8)
-                + "&per_page=100";
-
-        int page = 1;
-        while (true) {
-            String paged = baseUrl + "&page=" + page++;
-            try (Response r = exec(build(paged))) {
-                // parse body only once
-                assert r.body() != null;
-                JsonNode arr = mapper.readTree(r.body().string());
-                // combine both array checks here
-                if (!r.isSuccessful() && (!arr.isArray() || arr.isEmpty())) {
-                    break; // single break for all exit conditions
-                }
-                arr.forEach(commits::add);
-            }
-        }
-        return commits;
-    }
-
-    /**
-     * Clone locally **all** the `branch` history into a bare tempdir,
-     * returning the Path of the cloned folder.
-     */
-    private Path cloneRepository(String owner, String repo, String branch) throws Exception {
-        Path tmp = Files.createTempDirectory("mantimetrics-git-" + repo + "-");
-        logger.info("Cloning https://github.com/{}/{}.git#{} → {}", owner, repo, branch, tmp);
-        Git.cloneRepository()
-                .setURI("https://github.com/" + owner + "/" + repo + ".git")
-                .setDirectory(tmp.toFile())
-                .setBranch(branch)
-                .setCloneAllBranches(false)
-                .call()
-                .close();
-        return tmp;
-    }
-
-    private List<String> extractJiraKeys(JsonNode commit) {
-        List<String> keys = new ArrayList<>();
-        String msg = commit.path("commit").path("message").asText("");
-        Matcher m = JIRA_KEY_PATTERN.matcher(msg);
-        while (m.find()) keys.add(m.group(1));
-        return keys;
-    }
-
-    private List<String> getJavaFilesInCommit(String owner, String repo, String sha) throws IOException {
-        String url = API_URL + "/repos/" + owner + "/" + repo + "/commits/" + sha;
-        try (Response r = exec(build(url))) {
-            if (!r.isSuccessful() || r.body() == null) return List.of();
-            JsonNode files = mapper.readTree(r.body().string()).path("files");
-            List<String> javaFiles = new ArrayList<>();
-            for (JsonNode f : files) {
-                String filename = f.path("filename").asText(null);
-                if (filename != null && filename.endsWith(".java")) {
-                    javaFiles.add(filename);
-                }
-            }
-            return javaFiles;
-        }
+    /** Returns the list of folders to be cleaned */
+    public List<Path> getTempDirs() {
+        return List.copyOf(tempDirs);
     }
 }

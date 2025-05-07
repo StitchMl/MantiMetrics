@@ -22,7 +22,7 @@ public class JiraClient {
     private String authHeader;
 
     public void initialize(String projectKey) throws JiraClientException {
-        logger.info("Initializing JiraClient for project '{}'", projectKey);
+        logger.trace("Initializing JiraClient for project '{}'", projectKey);
         Properties props = new Properties();
         try (InputStream in = getClass().getResourceAsStream("/application.properties")) {
             if (in == null) throw new JiraClientException("application.properties missing");
@@ -51,7 +51,7 @@ public class JiraClient {
     }
 
     public List<String> fetchBugKeys() throws JiraClientException {
-        logger.info("Fetching bug keys from JIRA");
+        logger.trace("Fetching bug keys from JIRA");
         List<String> keys = new ArrayList<>();
 
         try (CloseableHttpClient client = HttpClients.createDefault()) {
@@ -75,7 +75,7 @@ public class JiraClient {
                     JsonNode k = issue.get("key");
                     if (k != null && k.isTextual()) keys.add(k.asText());
                 }
-                logger.info("Retrieved {} bug keys", keys.size());
+                logger.trace("Retrieved {} bug keys", keys.size());
             }
         } catch (IOException e) {
             throw new JiraClientException("I/O error talking to JIRA", e);
@@ -85,9 +85,6 @@ public class JiraClient {
     }
 
     public boolean isMethodBuggy(List<String> commitKeys, List<String> bugKeys) {
-        boolean buggy = commitKeys.stream().anyMatch(bugKeys::contains);
-        logger.trace("MethodBuggy? {} (commitKeys={}, bugKeys.size={})",
-                buggy, commitKeys, bugKeys.size());
-        return buggy;
+        return commitKeys.stream().anyMatch(bugKeys::contains);
     }
 }

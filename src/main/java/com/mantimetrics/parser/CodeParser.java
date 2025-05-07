@@ -2,7 +2,6 @@ package com.mantimetrics.parser;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseProblemException;
-import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.mantimetrics.git.GitService;
 import com.mantimetrics.metrics.MetricsCalculator;
@@ -34,9 +33,7 @@ public class CodeParser {
             Map<String,List<String>> fileToKeys
     ) throws CodeParserException {
 
-        logger.info("Analysing {}/{}@{}", owner, repo, tag);
-
-        // 1) unzip the release
+        logger.trace("Analysing {}/{}@{}", owner, repo, tag);
         Path repoRoot;
         try {
             repoRoot = gh.downloadAndUnzipRepo(owner, repo, tag);
@@ -44,51 +41,60 @@ public class CodeParser {
             throw new CodeParserException("Download/Unzip failed for " + repo + "@" + tag, e);
         }
 
-        // 2) releaseId and commitId = tag
-
         List<MethodData> out = new ArrayList<>();
-
         try (Stream<Path> files = Files.walk(repoRoot)) {
             files.filter(p -> p.toString().endsWith(".java"))
                     .forEach(path -> {
-                        // relative path calculation without the root folder created by the ZIP
                         Path relPath = repoRoot.relativize(path);
                         if (relPath.getNameCount() > 1) {
                             relPath = relPath.subpath(1, relPath.getNameCount());
                         }
                         String rel = relPath.toString().replace('\\','/');
 
-                        // JIRA-keys for this file
                         List<String> issueKeys = fileToKeys.getOrDefault(rel, List.of());
 
                         try {
                             String src = Files.readString(path);
-                            CompilationUnit cu = new JavaParser().parse(src).getResult().orElseThrow(() ->
-                                    new CodeParserException("Parsing failed"));
-
-                            cu.findAll(MethodDeclaration.class).forEach(m -> m.getRange().ifPresent(r -> {
-                                var mets = calc.computeAll(m);
-                                MethodData md = new MethodData.Builder()
-                                        .projectName(repo)
-                                        .path("/" + rel + "/")
-                                        .methodSignature(m.getDeclarationAsString(true, true, true))
-                                        .releaseId(tag)
-                                        .versionId(tag)
-                                        .commitId(tag)
-                                        .metrics(mets)
-                                        .commitHashes(issueKeys)
-                                        .buggy(false)  // will be overwritten in MantiMetrics
-                                        .build();
-                                out.add(md);
-                            }));
-
-                            logger.debug("File {}: parsed {} methods", rel, cu.findAll(MethodDeclaration.class).size());
-                        } catch (IOException | ParseProblemException | CodeParserException ex) {
+                            new JavaParser().parse(src)
+                                    .getResult()
+                                    .ifPresent(cu -> cu.findAll(MethodDeclaration.class)
+                                            .forEach(m -> m.getRange().ifPresent(r -> {
+                                                var mets = calc.computeAll(m);
+                                                MethodData md = new MethodData.Builder()
+                                                        .projectName(repo)
+                                                        .path("/" + rel + "/")
+                                                        .methodSignature(m.getDeclarationAsString(true, true, true))
+                                                        .releaseId(tag)
+                                                        .versionId(tag)
+                                                        .commitId(tag)
+                                                        .metrics(mets)
+                                                        .commitHashes(issueKeys)
+                                                        .buggy(false)
+                                                        .build();
+                                                out.add(md);
+                                            })));
+                        } catch (IOException | ParseProblemException ex) {
                             logger.warn("Skipping {} due to {}", rel, ex.getMessage());
                         }
                     });
         } catch (IOException e) {
             throw new CodeParserException("Directory walk failed", e);
+        } finally {
+            // cleaning the temporary dir
+            try (Stream<Path> stream = Files.walk(repoRoot)) {
+                stream.sorted(Comparator.reverseOrder())
+                        .forEach(p -> {
+                            try {
+                                Files.deleteIfExists(p);
+                            } catch (IOException e) {
+                                // on Windows often pack/.idx is still locked: it only logs to debug
+                                logger.warn("Failed to delete {}: {}", p, e.getMessage());
+                            }
+                        });
+                logger.trace("Deleted temp dir {}", repoRoot);
+            } catch (IOException e) {
+                logger.error("Failed to delete temp dir {}: {}", repoRoot, e.getMessage());
+            }
         }
 
         return out;

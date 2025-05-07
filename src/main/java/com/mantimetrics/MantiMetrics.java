@@ -18,15 +18,18 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import java.io.*;
+import java.nio.file.*;
+import java.util.stream.Stream;
+
 public class MantiMetrics {
     private static final Logger logger = LoggerFactory.getLogger(MantiMetrics.class);
 
     public static void main(String[] args) throws Exception {
-        // 1) load config
         logger.info("Loading project configurations");
         ProjectConfig[] configs = ProjectConfigLoader.load();
 
-        // 2) GitHub PAT
+        // GitHub PAT
         Properties ghProps = new Properties();
         try (InputStream in = MantiMetrics.class.getResourceAsStream("/github.properties")) {
             if (in == null) {
@@ -42,7 +45,7 @@ public class MantiMetrics {
         }
         logger.info("GitHub PAT loaded");
 
-        // 3) init services
+        // init services
         GitService gitService         = new GitService(githubPat);
         CodeParser parser             = new CodeParser(gitService);
         MetricsCalculator metricsCalc = new MetricsCalculator();
@@ -50,35 +53,32 @@ public class MantiMetrics {
         JiraClient jira               = new JiraClient();
         CSVWriter csvWriter           = new CSVWriter();
 
-        // 4) for each project
         for (ProjectConfig cfg : configs) {
             String owner = cfg.getOwner();
             String repo  = cfg.getName().toLowerCase();
 
             // --- TAGS ---
             logger.info("Project {}: fetching tags", cfg.getName());
-            var tags = gitService.listTags(owner, repo);
-            logger.debug("Found {} tags", tags.size());
+            var tags     = gitService.listTags(owner, repo);
             var selected = selector.selectFirstPercent(tags, cfg.getPercentage());
             logger.info("Selected {} tags ({}%)", selected.size(), cfg.getPercentage());
 
-            // --- JIRA mapping (once per release) ---
-            List<MethodData> allMethods = new ArrayList<>();
+            // --- JIRA bug keys (one call only) ---
             jira.initialize(cfg.getJiraProjectKey());
             List<String> bugKeys = jira.fetchBugKeys();
             logger.info("JIRA returned {} bug issues", bugKeys.size());
 
+            List<MethodData> allMethods = new ArrayList<>();
             for (String tag : selected) {
-                // 1) build map file→JIRA-keys
-                logger.info("Building file→JIRA-keys map for {}/{}@{}", owner, repo, tag);
+                logger.info("Building file→JIRA‑keys map for {}/{}@{}", owner, repo, tag);
                 Map<String,List<String>> fileToKeys =
                         gitService.getFileToIssueKeysMap(owner, repo, tag);
 
-                // 2) parse & metrics
-                logger.info("Analyzing {}@{}", repo, tag);
-                var methods = parser.parseAndComputeOnline(owner, repo, tag, metricsCalc, fileToKeys);
+                logger.info("Analyzing {}/{}@{}", owner, repo, tag);
+                var methods = parser.parseAndComputeOnline(
+                        owner, repo, tag, metricsCalc, fileToKeys);
 
-                // 3) label buggy = intersection(commitHashes, bugKeys)
+                // buggy label
                 methods = methods.stream()
                         .map(md -> md.toBuilder()
                                 .buggy(jira.isMethodBuggy(md.getCommitHashes(), bugKeys))
@@ -86,17 +86,41 @@ public class MantiMetrics {
                         .collect(Collectors.toList());
 
                 long cnt = methods.stream().filter(MethodData::isBuggy).count();
-                logger.info(" → Found {} buggy methods in {}", cnt, tag);
-
+                logger.info("Found {} buggy methods in {}", cnt, tag);
                 allMethods.addAll(methods);
             }
 
-            // --- CSV export ---
+            // export CSV
             Files.createDirectories(Paths.get("output"));
             String outCsv = "output/" + repo + "_dataset.csv";
             logger.info("Writing {} records to {}", allMethods.size(), outCsv);
             csvWriter.write(outCsv, allMethods);
             logger.info("CSV generated at {}", outCsv);
+
+            // after exporting all CSVs:
+            cleanupTempDirs(gitService);
+
+            logger.info("Done!");
+        }
+    }
+
+    private static void cleanupTempDirs(GitService gitService) {
+        List<Path> dirs = gitService.getTempDirs();
+        for (Path dir : dirs) {
+            try (Stream<Path> walk = Files.walk(dir)) {
+                walk.sorted(Comparator.reverseOrder())
+                        .forEach(p -> {
+                            try {
+                                Files.deleteIfExists(p);
+                            } catch (IOException e) {
+                                // only DEBUG so as not to pollute WARN on Windows
+                                logger.warn("Failed to delete {}: {}", p, e.getMessage());
+                            }
+                        });
+                logger.info("Deleted temp repo {}", dir);
+            } catch (IOException e) {
+                logger.error("Error walking temp dir {}: {}", dir, e.getMessage());
+            }
         }
     }
 }

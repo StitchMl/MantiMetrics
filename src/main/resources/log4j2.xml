@@ -10,8 +10,26 @@
     </Appenders>
 
     <Loggers>
+        <!-- 1) Turn JGit down to WARN (no DEBUG/TRACE) -->
+        <Logger name="org.eclipse.jgit" level="warn" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
+        <!-- 2) Silences all DEBUGs of Apache HttpClient -->
+        <Logger name="org.apache.http" level="warn" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="okhttp3" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
+        <!-- 3) Completely disable wire-logging (byte swapping) -->
+        <Logger name="org.apache.http.wire" level="off" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
         <!-- default logger -->
-        <Root level="debug">
+        <Root level="trace">
             <AppenderRef ref="Console"/>
         </Root>
     </Loggers>
