@@ -87,7 +87,11 @@ public class MantiMetrics {
     private static void cleanupTempDirs(GitService g) {
         for (Path d : g.getTempDirs()) try (Stream<Path> w = Files.walk(d)) {
             w.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try { Files.deleteIfExists(p); } catch (Exception ignore) {}
+                try {
+                    Files.deleteIfExists(p);
+                } catch (Exception e) {
+                    log.warn("Failed to delete {}: {}", p, e.getMessage());
+                }
             });
             log.info("Deleted {}", d);
         } catch (Exception e) { log.warn("Cleanup failed: {}", e.getMessage()); }

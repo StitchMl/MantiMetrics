@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedWriter;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.List;
@@ -21,14 +22,19 @@ public class CSVWriter {
             "MaxNestingDepth","isLongMethod","isGodClass","isFeatureEnvy",
             "isDuplicatedCode","Buggy");
 
-    public void write(Path file, List<MethodData> rows) throws Exception {
+    /** Writes all rows; never throws raw IOException. */
+    public void write(Path file, List<MethodData> rows) throws CsvWriteException {
         try (BufferedWriter w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
-            w.write(HEADER); w.write('\n');
+            w.write(HEADER);
+            w.write('\n');
             for (MethodData m : rows) {
-                w.write(escape(m.toCsvLine())); w.write('\n');
+                w.write(escape(m.toCsvLine()));
+                w.write('\n');
             }
+            log.info("CSV [{}] written – {} rows", file.getFileName(), rows.size());
+        } catch (IOException io) {
+            throw new CsvWriteException("Failed to write CSV: " + file, io);
         }
-        log.info("CSV [{}] written – {} rows", file.getFileName(), rows.size());
     }
 
     private static String escape(String s) {

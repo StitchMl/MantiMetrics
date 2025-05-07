@@ -187,7 +187,7 @@ public class GitService {
                     for (DiffEntry d : df.scan(parent, c)) {
                         String p = d.getNewPath();
                         if (p.endsWith(".java")) {
-                            fileMap.computeIfAbsent(p, __ -> new ArrayList<>())
+                            fileMap.computeIfAbsent(p, str -> new ArrayList<>())
                                     .addAll(keys);
                         }
                     }
@@ -259,7 +259,7 @@ public class GitService {
             return Math.max(resetMillis - System.currentTimeMillis(), 5_000);
         }
         // 3) Fallback: exponential (3 s, 6 s, 12 s, …)
-        return (long) (3_000L * Math.pow(2, attempt - 1));
+        return (long) (3_000L * Math.pow(2, attempt - 1.0));
     }
 
 
