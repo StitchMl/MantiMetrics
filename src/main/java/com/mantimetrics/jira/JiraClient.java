@@ -2,10 +2,8 @@ package com.mantimetrics.jira;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
+import org.apache.http.client.methods.*;
+import org.apache.http.impl.client.*;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,10 +13,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-/**
- * Fetches **all** fixed-bug issues for a project, transparently paging the
- * JIRA Search REST API (default page size = 50).
- */
+/** Fetches *all* “Fixed” bug issues for a JIRA project (paged). */
 public class JiraClient {
     private static final Logger log = LoggerFactory.getLogger(JiraClient.class);
     private static final int PAGE_SIZE = 100;
@@ -26,53 +21,52 @@ public class JiraClient {
     private String searchBase;
     private String authHeader;
 
-    /* --------------------------------------------------- init -------- */
+    /* ------------------------------------------------ initialisation -- */
 
     public void initialize(String projectKey) throws JiraClientException {
-        Properties p = new Properties();
+        Properties props = new Properties();
         try (InputStream in = getClass().getResourceAsStream("/application.properties")) {
-            if (in == null) throw new JiraClientException("application.properties missing");
-            p.load(in);
-        } catch (IOException e) {
-            throw new JiraClientException("Error loading JIRA config", e);
+            if (in == null)
+                throw new JiraClientException("application.properties missing in class-path");
+            props.load(in);
+        } catch (IOException io) {
+            throw new JiraClientException("Cannot load JIRA properties", io);
         }
 
-        String base  = p.getProperty("jira.url" ).trim().replaceAll("/+$", "");
-        String pat   = p.getProperty("jira.pat" ).trim();
-        String jqlT  = p.getProperty("jira.query").trim();
-        if (base.isEmpty() || pat.isEmpty() || jqlT.isEmpty())
-            throw new JiraClientException("jira.url / jira.pat / jira.query must be set");
+        String baseUrl = stripTrailingSlashes(props.getProperty("jira.url", "").trim());
+        String pat     = props.getProperty("jira.pat",   "").trim();
+        String jqlTpl  = props.getProperty("jira.query", "").trim();
+        if (baseUrl.isEmpty() || pat.isEmpty() || jqlTpl.isEmpty())
+            throw new JiraClientException("jira.url / jira.pat / jira.query must all be set");
 
-        String jql = URLEncoder.encode(jqlT.replace("{projectKey}", projectKey),
+        String jql = URLEncoder.encode(jqlTpl.replace("{projectKey}", projectKey),
                 StandardCharsets.UTF_8);
-        this.searchBase = base + "/rest/api/2/search?jql=" + jql;
+        this.searchBase = baseUrl + "/rest/api/2/search?jql=" + jql;
         this.authHeader = "Bearer " + pat;
 
         log.debug("JIRA search base = {}", searchBase);
     }
 
-    /* ----------------------------------------------- public API ------ */
+    /* ----------------------------------------------------- public API -- */
 
     public List<String> fetchBugKeys() throws JiraClientException {
-        var keys = new HashSet<String>();
+        Set<String> keys = new HashSet<>();
         int startAt = 0;
 
         try (CloseableHttpClient http = HttpClients.createDefault()) {
             while (true) {
                 String url = searchBase +
-                        "&startAt="  + startAt +
+                        "&startAt="    + startAt +
                         "&maxResults=" + PAGE_SIZE;
-                JsonNode root = execute(http, url);
+                JsonNode root = doRequest(http, url);
 
-                int total     = root.path("total").asInt(0);
                 JsonNode issues = root.path("issues");
-                issues.forEach(n -> {
-                    String k = n.path("key").asText(null);
-                    if (k != null) keys.add(k);
-                });
+                issues.forEach(n -> Optional.ofNullable(n.path("key").asText(null))
+                        .ifPresent(keys::add));
 
                 startAt += PAGE_SIZE;
-                if (startAt >= total || issues.isEmpty()) break;
+                if (startAt >= root.path("total").asInt() || issues.isEmpty())
+                    break;
             }
         } catch (IOException io) {
             throw new JiraClientException("I/O error talking to JIRA", io);
@@ -82,13 +76,16 @@ public class JiraClient {
         return new ArrayList<>(keys);
     }
 
+    /** True if *any* key in the commit message also appears among JIRA bug keys. */
     public boolean isMethodBuggy(List<String> commitKeys, List<String> bugKeys) {
         return commitKeys.stream().anyMatch(bugKeys::contains);
     }
 
-    /* ----------------------------------------------- helpers --------- */
+    /* ----------------------------------------------------- internals -- */
 
-    private JsonNode execute(CloseableHttpClient http, String url) throws IOException, JiraClientException {
+    private JsonNode doRequest(CloseableHttpClient http, String url)
+            throws IOException, JiraClientException {
+
         HttpGet get = new HttpGet(url);
         get.setHeader("Authorization", authHeader);
         get.setHeader("Accept", "application/json");
@@ -100,5 +97,12 @@ public class JiraClient {
             String body = EntityUtils.toString(resp.getEntity(), StandardCharsets.UTF_8);
             return new ObjectMapper().readTree(body);
         }
+    }
+
+    /** O(n) removal of trailing ‘/’—no regex, no back-tracking vulnerabilities. */
+    private static String stripTrailingSlashes(String s) {
+        int end = s.length();
+        while (end > 0 && s.charAt(end - 1) == '/') end--;
+        return s.substring(0, end);
     }
 }

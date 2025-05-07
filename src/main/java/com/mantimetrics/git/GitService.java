@@ -11,6 +11,7 @@ import java.io.*;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.Matcher;
@@ -39,6 +40,7 @@ public class GitService {
     private final Semaphore ratePermits = new Semaphore(MAX_PERMITS, true);
     /** Keeps track of all temporary folders created */
     private final List<Path> tempDirs = new CopyOnWriteArrayList<>();
+    private static final String PRIV_DIR_NAME = ".mantimetrics-tmp";
 
     // ---------- constants --------------------------------------------------
     private static final Logger  log          = LoggerFactory.getLogger(GitService.class);
@@ -86,7 +88,9 @@ public class GitService {
             if (!resp.isSuccessful()) {
                 throw new IOException("Error downloading ZIP: HTTP " + resp.code());
             }
-            Path tempRoot = Files.createTempDirectory("mantimetrics-" + repo + "-" + ref + "-");
+            Path tempRoot = Files.createTempDirectory(
+                    privateSandbox(),
+                    "mantimetrics-"+repo+"-"+ref+"-");
             tempDirs.add(tempRoot);
             assert resp.body() != null;
             try (InputStream in = resp.body().byteStream();
@@ -260,6 +264,24 @@ public class GitService {
         }
         // 3) Fallback: exponential (3 s, 6 s, 12 s, …)
         return (long) (3_000L * Math.pow(2, attempt - 1.0));
+    }
+
+    /** Return a process-private directory (700 / rwx------) under the user-home. */
+    private static Path privateSandbox() throws IOException {
+        Path home = Paths.get(System.getProperty("user.home"));      // never world-writable :contentReference[oaicite:0]{index=0}
+        Path box  = home.resolve(PRIV_DIR_NAME);
+        // create once with 0700; Posix not available on Windows so ignore silently
+        if (Files.notExists(box)) {
+            try {
+                Files.createDirectory(
+                        box,
+                        PosixFilePermissions.asFileAttribute(
+                                PosixFilePermissions.fromString("rwx------")));
+            } catch (UnsupportedOperationException e) {
+                Files.createDirectory(box);          // fallback (Windows ACLs)
+            }
+        }
+        return box;
     }
 
 
