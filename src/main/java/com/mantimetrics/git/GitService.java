@@ -270,7 +270,7 @@ public class GitService {
 
     /** Return a process-private directory (700 / rwx------) under the user-home. */
     private static Path privateSandbox() throws IOException {
-        Path home = Paths.get(System.getProperty("user.home"));      // never world-writable :contentReference[oaicite:0]{index=0}
+        Path home = Paths.get(System.getProperty("user.home"));
         Path box  = home.resolve(PRIV_DIR_NAME);
         // create once with 0700; Posix not available on Windows so ignore silently
         if (Files.notExists(box)) {
