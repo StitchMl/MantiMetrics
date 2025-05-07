@@ -26,17 +26,17 @@ public final class GitService {
     private static final Logger  LOG   = LoggerFactory.getLogger(GitService.class);
     private static final String  API   = "https://api.github.com";
     private static final String  ZIP   = "https://codeload.github.com";
-    private static final String  TMP   = ".mantimetrics-tmp";
-    private static final int     MAX_R = 5;              // retry
+    private static final String dirSuffix = ".mantimetrics-tmp";
+    private static final int     MAX_R = 5;
     private static final Pattern JIRA  =
-            Pattern.compile("\\b(?>[A-Z][A-Z0-9]++-\\d++)\\b");  // safe / no back-tracking
+            Pattern.compile("\\b(?>[A-Z][A-Z0-9]++-\\d++)\\b");
 
     /* ────────── status ────────── */
     private final OkHttpClient http;
     private final ObjectMapper json = new ObjectMapper();
     private final String token;
 
-    private final Semaphore permits = new Semaphore(5_000, true); // 5k req/h
+    private final Semaphore permits = new Semaphore(5_000, true);
     private final Map<String,String>                    defBranch = new ConcurrentHashMap<>();
     private final Map<String,Map<String,List<String>>>  projCache = new ConcurrentHashMap<>();
     private final List<Path> tmp = new CopyOnWriteArrayList<>();
@@ -178,7 +178,7 @@ public final class GitService {
     }
 
     private static Path privateBox() throws IOException{
-        Path home=Paths.get(System.getProperty("user.home")); Path box=home.resolve(TMP);
+        Path home=Paths.get(System.getProperty("user.home")); Path box=home.resolve(dirSuffix);
         if(Files.notExists(box)){
             if(FileSystems.getDefault().supportedFileAttributeViews().contains("posix")){
                 Files.createDirectory(box, PosixFilePermissions.asFileAttribute(
