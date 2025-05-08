@@ -42,8 +42,8 @@ public final class CodeParser {
         final Path root;
         try {
             root = git.downloadAndUnzipRepo(owner, repo, tag, "release-" + tag);
-        } catch (IOException | InterruptedException io) {
-            throw new CodeParserException("Download/Unzip failed for "+repo+'@'+tag, io);
+        } catch (IOException | InterruptedException e) {
+            throw new CodeParserException("I/O downloading " + owner + '/' + repo, e);
         }
 
         List<MethodData> result = new ArrayList<>();
@@ -105,9 +105,15 @@ public final class CodeParser {
             /* 3. cleaning the temporary dir */
             try (Stream<Path> w = Files.walk(root)) {
                 w.sorted(Comparator.reverseOrder()).forEach(p -> {
-                    try { Files.deleteIfExists(p); } catch (IOException ignored) {}
+                    try {
+                        Files.deleteIfExists(p);
+                    } catch (IOException e) {
+                        LOG.warn("Failed to delete {}", p, e);
+                    }
                 });
-            } catch (IOException ignored) {}
+            } catch (IOException e) {
+                LOG.warn("Failed to delete {}", root, e);
+            }
             LOG.trace("Deleted temp dir {}", root);
         }
 
