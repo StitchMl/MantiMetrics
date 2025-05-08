@@ -266,17 +266,12 @@ public final class GitService {
                      ze != null;
                      ze = safeNextEntry(zis)) {
 
-                    validateEntry(++entries);
+                    validateEntry(++entries);          // già presente
                     Path target = safeTarget(root, ze.getName());
-
                     long written = ze.isDirectory()
                             ? dirEnsure(target)
                             : fileExtract(zis, target);
-
-                    totalBytes = checkQuotas(totalBytes,
-                            written,
-                            ze.getCompressedSize());
-
+                    totalBytes = checkQuotas(totalBytes, written, ze.getCompressedSize());
                     zis.closeEntry();
                 }
             }
@@ -287,42 +282,52 @@ public final class GitService {
     /**
      * Returns the next "safe" entry from the {@link ZipInputStream},
      * or {@code null} if there are no others.
-     *
-     * <p>Filters entries with dangerous name (Zip-Slip, absolute path,
-     * NUL characters, etc.) and with negative compressed size,
-     * continuing to search until it finds a valid entry.</p>.
+     * <p>
+     * Discards - closing them immediately - entries with:
+     * - empty name, too long, absolute, traversal (".."), NUL, ":"
+     * - negative compressed size (corrupted archive index).
      */
     private static ZipEntry safeNextEntry(ZipInputStream zis) throws IOException {
-        ZipEntry ze;
+        ZipEntry current = zis.getNextEntry();
 
-        // true loop: it iterates until it finds a valid entry or finishes the file
-        while ((ze = zis.getNextEntry()) != null) {
+        while (current != null) {
 
-            /* ---- name validation ---- */
-            // getName() is never null, so the test on null is superfluous
-            String name = ze.getName();
-            if (name.isBlank()
-                    || name.length() > 4_096
-                    || name.startsWith("/")
-                    || name.startsWith("\\")
-                    || name.contains("..")
-                    || name.indexOf('\0') >= 0
-                    || name.contains(":")) {
-                // discards the invalid entry and continues with the cycle
-                zis.closeEntry();
-                continue;
+            boolean invalidName = isInvalidName(current);
+
+        /* -------- validation of tablet size --------
+           (-1 means 'unknown', any value <-1 is corrupt)      */
+            boolean invalidSize = current.getCompressedSize() < -1;
+
+            if (!invalidName && !invalidSize) {
+                // entry OK → exits the loop without return inside the while
+                break;
             }
 
-            /* ---- compressed dimension validation ---- */
-            long cSize = ze.getCompressedSize();
-            if (cSize < -1) {
-                zis.closeEntry();
-                throw new IOException("ZIP: compressedSize negative for " + name);
-            }
-
-            return ze;
+            // entry KO → you discard it and move on to the next one
+            zis.closeEntry();
+            current = zis.getNextEntry();
         }
-        return null;
+
+        return current;
+    }
+
+    private static boolean isInvalidName(ZipEntry current) {
+        final String name = current.getName();
+
+        /* -------- name validation */
+        // exaggerated names
+        // absolute path (Unix)
+        // absolute path (Win)
+        // traversal
+        // byte NUL
+        // "C:...", "http:...", etc.
+        return name.isBlank()                ||
+                name.length()   > 4_096       ||
+                name.startsWith("/")          ||
+                name.startsWith("\\")         ||
+                name.contains("..")           ||
+                name.indexOf('\0') >= 0       ||
+                name.contains(":");
     }
 
     /** Validates the number of entries in the ZIP file. */
