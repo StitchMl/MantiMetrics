@@ -235,10 +235,11 @@ public final class GitService {
         throw last;
     }
 
-    /** Downloads the ZIP file and extracts its contents. */
-    private Path tryDownload(OkHttpClient client, String url, String subDir) throws IOException {
+    private Path tryDownload(OkHttpClient client,
+                             String url,
+                             String subDir) throws IOException {
 
-        permits.acquireUninterruptibly();
+        permits.acquireUninterruptibly();                // rate-limit globale
 
         Request req = new Request.Builder().url(url).build();
         try (Response resp = client.newCall(req).execute()) {
@@ -246,27 +247,32 @@ public final class GitService {
             if (!resp.isSuccessful() || resp.body() == null)
                 throw new IOException("ZIP HTTP " + resp.code());
 
-            Path root = Files.createTempDirectory(privateBox(), "mantimetrics-" + subDir + '-');
+            /* ① cartella radice isolata (~/.mantimetrics-tmp/…) */
+            Path root = Files.createTempDirectory(privateBox(),
+                    "mantimetrics-" + subDir + '-');
             tmp.add(root);
 
             long totalBytes = 0;
             int  entries    = 0;
 
-            try (InputStream in  = resp.body().byteStream();
+            try (InputStream    in  = resp.body().byteStream();
                  ZipInputStream zis = new ZipInputStream(in)) {
 
-                for (ZipEntry ze; (ze = zis.getNextEntry()) != null; ) {
+                ZipEntry ze;
+                while ((ze = zis.getNextEntry()) != null) {
 
-                    entries++;
-                    validateEntryCount(entries);
-
-                    Path out = secureTarget(root, ze.getName());
+                    validateEntry(++entries);                          // limiti #file
+                    Path target = safeTarget(root, ze.getName());      // Zip-Slip + symlink
 
                     long written = ze.isDirectory()
-                            ? createDir(out)
-                            : extractFile(zis, out);
+                            ? dirEnsure(target)
+                            : fileExtract(zis, target);                 // copia sicura
 
-                    totalBytes = updateTotals(totalBytes, written, ze.getCompressedSize());
+                    totalBytes = checkQuotas(totalBytes,
+                            written,
+                            ze.getCompressedSize());  // quote + ratio
+
+                    zis.closeEntry();                                   // chiude entry
                 }
             }
             return root;
@@ -274,37 +280,41 @@ public final class GitService {
     }
 
     /** Validates the number of entries in the ZIP file. */
-    private static void validateEntryCount(int entries) throws IOException {
-        if (entries > MAX_ENTRIES)
-            throw new IOException("ZIP too many entries (>" + MAX_ENTRIES + ')');
+    private static void validateEntry(int n) throws IOException {
+        if (n > MAX_ENTRIES)
+            throw new IOException("ZIP troppe entry (>" + MAX_ENTRIES + ')');
     }
 
     /** Verifies that the path is within the root directory. */
-    private static Path secureTarget(Path root, String name) throws IOException {
+    private static Path safeTarget(Path root, String name) throws IOException {
+        /* path normalizzato + controllo traversal */
         Path out = root.resolve(name).normalize();
         if (!out.startsWith(root))
-            throw new IOException("ZIP traversal attempt: " + name);
+            throw new IOException("Tentativo di traversal: " + name);
+        /* rifiuta link simbolici: impedisce «zip slip» tramite symlink */
+        if (name.contains("..") || name.contains(":") || name.contains("\0"))
+            throw new IOException("Nome archivio sospetto: " + name);
         return out;
     }
 
     /** Creates the target directory if it does not exist. */
-    private static long createDir(Path dir) throws IOException {
+    private static long dirEnsure(Path dir) throws IOException {
         Files.createDirectories(dir);
         return 0;
     }
 
     /** Extracts the ZIP entry to the given path. */
-    private static long extractFile(ZipInputStream zis, Path out) throws IOException {
+    private static long fileExtract(ZipInputStream zis, Path out) throws IOException {
         Files.createDirectories(out.getParent());
-
         long written = 0;
-        try (OutputStream os = Files.newOutputStream(out)) {
+        try (OutputStream os = Files.newOutputStream(out,
+                StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
             byte[] buf = new byte[8 * 1024];
             int n;
             while ((n = zis.read(buf)) > 0) {
                 written += n;
                 if (written > MAX_ENTRY_BYTES)
-                    throw new IOException("ZIP entry bigger than " + MAX_ENTRY_BYTES + " B");
+                    throw new IOException("Entry > " + MAX_ENTRY_BYTES + " B");
                 os.write(buf, 0, n);
             }
         }
@@ -312,18 +322,16 @@ public final class GitService {
     }
 
     /** Updates the total size and checks the inflation ratio. */
-    private static long updateTotals(long total, long added, long compressed) throws IOException {
-        long newTotal = total + added;
-        if (newTotal > MAX_TOTAL_BYTES)
-            throw new IOException("ZIP exceeds overall size limit");
-
-        /* the compressed size may be –1; skip the ratio check in that case */
+    private static long checkQuotas(long tot, long add, long compressed) throws IOException {
+        long newTot = tot + add;
+        if (newTot > MAX_TOTAL_BYTES)
+            throw new IOException("ZIP oltre " + MAX_TOTAL_BYTES + " B uncompressed");
         if (compressed > 0) {
-            double ratio = (double) added / compressed;
+            double ratio = (double) add / compressed;
             if (ratio > MAX_INFLATION_RATIO)
-                throw new IOException("ZIP inflation ratio " + ratio + " > " + MAX_INFLATION_RATIO);
+                throw new IOException("Inflation ratio " + ratio + " > " + MAX_INFLATION_RATIO);
         }
-        return newTotal;
+        return newTot;
     }
 
     /** Deletes the temporary directory and all its contents. */
