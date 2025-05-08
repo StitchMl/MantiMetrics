@@ -24,9 +24,9 @@ public class JiraClient {
     /** Initialize the JIRA client with the given project key. */
     public void initialize(String projectKey) throws JiraClientException {
         Properties props = new Properties();
-        try (InputStream in = getClass().getResourceAsStream("/application.properties")) {
+        try (InputStream in = getClass().getResourceAsStream("/jira.properties")) {
             if (in == null)
-                throw new JiraClientException("application.properties missing in class-path");
+                throw new JiraClientException("jira.properties missing in class-path");
             props.load(in);
         } catch (IOException io) {
             throw new JiraClientException("Cannot load JIRA properties", io);
