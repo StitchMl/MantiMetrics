@@ -101,38 +101,56 @@ public final class GitService {
     }
 
     /**
-     * Scroll through the entire branch history (100 × 100-page layout) - or
-     * stops after <code>maxCommits</code> to contain the requests.
+     * Walks (up to MAX_COMMITS) commits on the given branch and builds a
+     * file → JIRA-keys map using only the REST API (zero git-clone).
      */
-    private Map<String,List<String>> buildFileMapViaCommits(
-            String o,String r,String branch)
-            throws IOException,InterruptedException {
+    private Map<String, List<String>> buildFileMapViaCommits(
+            String owner, String repo, String branch)
+            throws IOException, InterruptedException {
 
-        Map<String,List<String>> map = new HashMap<>();
+        final int MAX_COMMITS = 5_000;
+        Map<String, List<String>> map = new HashMap<>();
         int fetched = 0;
-        for (int page = 1; fetched < 5000; page++) {
 
-            JsonNode commits = get(API+REPOS+o+'/'+r+"/commits?sha="+
-                    URLEncoder.encode(branch, StandardCharsets.UTF_8)+
-                    "&per_page=100&page="+page);
+        for (int page = 1; fetched < MAX_COMMITS; page++) {
 
-            if (!commits.isArray() || commits.isEmpty()) break;
+            JsonNode pageCommits = get(API + REPOS + owner + '/' + repo +
+                    "/commits?sha=" + URLEncoder.encode(branch, StandardCharsets.UTF_8) +
+                    "&per_page=100&page=" + page);
 
-            for (JsonNode c : commits) {
+            if (!pageCommits.isArray() || pageCommits.isEmpty()) break;
+
+            for (JsonNode commit : pageCommits) {
                 fetched++;
-                List<String> keys = extractKeys(c.path("commit").path("message").asText());
-                if (keys.isEmpty()) continue;
-
-                JsonNode files = get(c.path("url").asText()).path("files");
-                for (JsonNode f : files) {
-                    String name = f.path("filename").asText();
-                    if (name.endsWith(".java"))
-                        map.computeIfAbsent(name,k->new ArrayList<>()).addAll(keys);
-                }
-                if (fetched >= 5000) break;
+                processCommit(commit, map);
+                if (fetched >= MAX_COMMITS) break;
             }
         }
         return map;
+    }
+
+    /** Extracts JIRA keys from the commit message and, if present, records
+     *  them against every *.java* file changed in that commit. */
+    private void processCommit(JsonNode commit, Map<String, List<String>> map)
+            throws IOException, InterruptedException {
+
+        List<String> keys = extractKeys(commit.path("commit").path("message").asText());
+        if (keys.isEmpty()) return;
+
+        JsonNode files = get(commit.path("url").asText()).path("files");
+        addKeysForFiles(files, keys, map);
+    }
+
+    /** Adds the same list of keys to every Java file contained in *files*. */
+    private static void addKeysForFiles(JsonNode files,
+                                        List<String> keys,
+                                        Map<String, List<String>> map) {
+
+        for (JsonNode f : files) {
+            String name = f.path("filename").asText("");
+            if (name.endsWith(".java"))
+                map.computeIfAbsent(name, str -> new ArrayList<>()).addAll(keys);
+        }
     }
 
     private JsonNode get(String url) throws IOException,InterruptedException {
