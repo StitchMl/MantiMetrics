@@ -1,8 +1,6 @@
 package com.mantimetrics.csv;
 
 import com.mantimetrics.model.MethodData;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
@@ -10,7 +8,6 @@ import java.nio.file.*;
 import java.util.List;
 
 public final class CSVWriter {
-    private static final Logger LOG = LoggerFactory.getLogger(CSVWriter.class);
 
     private static final String HEADER = String.join(",",
             "Project","Path","Method","ReleaseId","VersionId","CommitId",
@@ -47,17 +44,12 @@ public final class CSVWriter {
     public void append(BufferedWriter w, List<MethodData> rows) throws CsvWriteException {
         try {
             for (MethodData m : rows) {
-                w.write(escape(m.toCsvLine()));
+                w.write(m.toCsvLine());
                 w.write('\n');
             }
             w.flush();
         } catch (Exception e) {
             throw new CsvWriteException("CSV write failed", e);
         }
-    }
-
-    private static String escape(String s) {
-        return s.indexOf('"')>=0||s.indexOf(',')>=0||s.indexOf('\n')>=0
-                ? '"' + s.replace("\"", "\"\"") + '"' : s;
     }
 }
