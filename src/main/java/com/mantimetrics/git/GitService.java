@@ -6,10 +6,7 @@ import okhttp3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.UncheckedIOException;
+import java.io.*;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -47,6 +44,9 @@ public final class GitService {
     private static final long  MAX_ENTRY_BYTES  = 50L * 1024 * 1024;
     private static final long  MAX_TOTAL_BYTES  = 2L  * 1024 * 1024 * 1024;
     private static final double MAX_INFLATION_RATIO = 200.0;
+    private static final double THRESHOLD_RATIO = 10;
+    private static final int THRESHOLD_ENTRIES = 10000;
+    private static final int THRESHOLD_SIZE = 1000000000;
 
     /** Creates a new GitService with the given personal access token. */
     public GitService(String pat) {
@@ -294,12 +294,48 @@ public final class GitService {
      */
     private static ZipEntry safeNextEntry(ZipInputStream zis) throws IOException {
         ZipEntry ze;
+        int totalEntryArchive = 0;
+        int totalSizeArchive = 0;
 
         // true loop: it iterates until it finds a valid entry or finishes the file
-        while ((ze = zis.getNextEntry()) != null) {
+        while (zis.available() != 0) {
+
+            ze = zis.getNextEntry();
+            InputStream in = new BufferedInputStream(zis);
+            OutputStream out = new BufferedOutputStream(new FileOutputStream("./output_onlyForTesting.txt"));
+
+            totalEntryArchive ++;
+
+            int nBytes;
+            byte[] buffer = new byte[2048];
+            int totalSizeEntry = 0;
+
+            while((nBytes = in.read(buffer)) > 0) {
+                out.write(buffer, 0, nBytes);
+                totalSizeEntry += nBytes;
+                totalSizeArchive += nBytes;
+
+                assert ze != null;
+                double compressionRatio = (double) totalSizeEntry / ze.getCompressedSize();
+                if(compressionRatio > THRESHOLD_RATIO) {
+                    // the ratio between compressed and uncompressed data is highly suspicious, looks like a Zip Bomb Attack
+                    break;
+                }
+            }
+
+            if(totalSizeArchive > THRESHOLD_SIZE) {
+                // the uncompressed data size is too much for the application resource capacity
+                break;
+            }
+
+            if(totalEntryArchive > THRESHOLD_ENTRIES) {
+                // too many entries in this archive can lead to inodes exhaustion of the system
+                break;
+            }
 
             /* ---- name validation ---- */
             // getName() is never null, so the test on null is superfluous
+            assert ze != null;
             String name = ze.getName();
             if (name.isBlank()
                     || name.length() > 4_096
