@@ -54,7 +54,9 @@ public final class GitService {
             try {
                 return get(API+REPOS+owner+'/'+repo)
                         .path("default_branch").asText("master");
-            } catch (Exception e) { throw new UncheckedIOException(new IOException(e)); }
+            } catch (IOException | InterruptedException e) {
+                throw new UncheckedIOException(new IOException(e));
+            }
         });
     }
 
@@ -79,7 +81,9 @@ public final class GitService {
                     Map<String,List<String>> m = buildFileMapViaCommits(o,r,branch);
                     LOG.info("Built file→JIRA map for {}: {} java files", cacheKey, m.size());
                     return Collections.unmodifiableMap(m);
-                } catch (Exception e) { throw new UncheckedIOException(new IOException(e)); }
+                } catch (IOException | InterruptedException e) {
+                    throw new UncheckedIOException(new IOException(e));
+                }
             });
         } catch (UncheckedIOException ex) {
             throw new FileKeyMappingException("Map build failed for "+cacheKey, ex.getCause());
@@ -142,6 +146,7 @@ public final class GitService {
         throw new IOException("Retries exhausted for "+url);
     }
 
+    /** Exponential backoff for rate-limit errors. */
     private static long backoff(Response resp,int attempt){
         if (resp != null) {
             String reset=resp.header("X-RateLimit-Reset");
@@ -150,8 +155,14 @@ public final class GitService {
         }
         return (long)(3_000*Math.pow(2, attempt));
     }
+
+    /** Extracts JIRA keys from the commit message. */
     private static List<String> extractKeys(String msg){
-        List<String> l=new ArrayList<>(); Matcher m=JIRA.matcher(msg); while(m.find()) l.add(m.group()); return l;
+        List<String> l=new ArrayList<>();
+        Matcher m=JIRA.matcher(msg);
+        while(m.find())
+            l.add(m.group());
+        return l;
     }
 
     /** download + unzip con timeout esteso e retry su SocketTimeout. */
