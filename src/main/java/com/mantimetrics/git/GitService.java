@@ -15,14 +15,15 @@ import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.regex.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import java.net.SocketTimeoutException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /** Git + GitHub REST utility – *commit-history* implementation */
 public final class GitService {
-
-    /* ────────── costanti ────────── */
     private static final Logger  LOG   = LoggerFactory.getLogger(GitService.class);
     private static final String  API   = "https://api.github.com";
     private static final String  ZIP   = "https://codeload.github.com";
@@ -32,7 +33,6 @@ public final class GitService {
     private static final Pattern JIRA  =
             Pattern.compile("\\b(?>[A-Z][A-Z0-9]++-\\d++)\\b");
 
-    /* ────────── status ────────── */
     private final OkHttpClient http;
     private final ObjectMapper json = new ObjectMapper();
     private final String token;
@@ -43,13 +43,12 @@ public final class GitService {
     private final List<Path> tmp = new CopyOnWriteArrayList<>();
 
     public GitService(String pat) {
-        token = pat;
-        http  = new OkHttpClient.Builder()
+        this.token = pat;
+        this.http  = new OkHttpClient.Builder()
                 .connectTimeout(java.time.Duration.ofSeconds(30))
                 .build();
     }
 
-    /* ═════════ GET DEFAULT BRANCH ═════════ */
     public String getDefaultBranch(String owner,String repo) {
         return defBranch.computeIfAbsent(owner+'/'+repo, k -> {
             try {
@@ -59,7 +58,6 @@ public final class GitService {
         });
     }
 
-    /* ═════════ LIST TAGS ═════════ */
     public List<String> listTags(String o,String r) throws IOException, InterruptedException {
         List<String> tags = new ArrayList<>();
         for (int p=1;;p++) {
@@ -71,7 +69,6 @@ public final class GitService {
         return tags;
     }
 
-    /* ═════════ FILE → JIRA MAP (commit-history) ═════════ */
     public Map<String,List<String>> getFileToIssueKeysMap(String o,String r,String branch)
             throws FileKeyMappingException {
 
@@ -124,7 +121,6 @@ public final class GitService {
         return map;
     }
 
-    /* ═════════ Helpers HTTP & regex ═════════ */
     private JsonNode get(String url) throws IOException,InterruptedException {
         for (int a=0;a<MAX_R;a++) {
             Request req = new Request.Builder().url(url)
@@ -146,31 +142,78 @@ public final class GitService {
         throw new IOException("Retries exhausted for "+url);
     }
 
-    private static long backoff(Response r,int a){
-        String reset=r.header("X-RateLimit-Reset");
-        if(reset!=null) return Math.max(Long.parseLong(reset)*1_000-System.currentTimeMillis(),5_000);
-        return (long)(3_000*Math.pow(2,a));
+    private static long backoff(Response resp,int attempt){
+        if (resp != null) {
+            String reset=resp.header("X-RateLimit-Reset");
+            if(reset!=null)
+                return Math.max(Long.parseLong(reset)*1_000-System.currentTimeMillis(),5_000);
+        }
+        return (long)(3_000*Math.pow(2, attempt));
     }
     private static List<String> extractKeys(String msg){
         List<String> l=new ArrayList<>(); Matcher m=JIRA.matcher(msg); while(m.find()) l.add(m.group()); return l;
     }
 
-    /* ═════════ ZIP download (unchanged, but remains 4-arg overload used by CodeParser) ═════════ */
-    public Path downloadAndUnzipRepo(String o,String r,String ref,String subDir) throws IOException{
-        String url = ZIP + '/'+o+'/'+r+"/zip/"+URLEncoder.encode(ref,StandardCharsets.UTF_8);
+    /** download + unzip con timeout esteso e retry su SocketTimeout. */
+    public Path downloadAndUnzipRepo(String owner,
+                                     String repo,
+                                     String ref,
+                                     String subDir) throws IOException, InterruptedException {
+
+        final String url = ZIP +'/'+owner+'/'+repo+"/zip/"
+                + URLEncoder.encode(ref, StandardCharsets.UTF_8);
+
+        // ad hoc client with very high readTimeout (10 minutes) and
+        // writeTimeout disabled: does not affect other uses of http.
+        OkHttpClient longHttp = http.newBuilder()
+                .readTimeout(java.time.Duration.ofMinutes(10))
+                .writeTimeout(java.time.Duration.ZERO)
+                .build();
+
+        IOException last = null;
+        for (int a = 0; a < MAX_R; a++) {
+            try {
+                return tryDownload(longHttp, url, subDir);
+            } catch (SocketTimeoutException ste) {
+                last = ste;
+                long wait = backoff(null, a);
+                LOG.warn("Timeout downloading {}, retry {}/{} in {} s",
+                        ref, a+1, MAX_R, wait/1_000);
+                Thread.sleep(wait);
+            }
+        }
+        throw last;
+    }
+
+    private Path tryDownload(OkHttpClient client,
+                             String url,
+                             String subDir) throws IOException {
+
         permits.acquireUninterruptibly();
-        Request req=new Request.Builder().url(url).build();
+        Request req = new Request.Builder().url(url).build();
 
-        try(Response resp=http.newCall(req).execute()){
-            if(!resp.isSuccessful()||resp.body()==null) throw new IOException("ZIP HTTP "+resp.code());
-            Path root=Files.createTempDirectory(privateBox(),"mantimetrics-"+subDir+'-'); tmp.add(root);
+        try (Response resp = client.newCall(req).execute()) {
+            if (!resp.isSuccessful() || resp.body()==null)
+                throw new IOException("ZIP HTTP "+resp.code());
 
-            try(InputStream in=resp.body().byteStream(); ZipInputStream zis=new ZipInputStream(in)){
-                for(ZipEntry e; (e=zis.getNextEntry())!=null;){
-                    Path out=root.resolve(e.getName()).normalize();
-                    if(!out.startsWith(root)) throw new IOException("ZIP traversal: "+e.getName());
-                    if(e.isDirectory()) Files.createDirectories(out);
-                    else {Files.createDirectories(out.getParent()); Files.copy(zis,out,StandardCopyOption.REPLACE_EXISTING);}
+            Path root = Files.createTempDirectory(privateBox(),
+                    "mantimetrics-"+subDir+'-');
+            tmp.add(root);
+
+            try (InputStream in = resp.body().byteStream();
+                 ZipInputStream zis = new ZipInputStream(in)) {
+
+                for (ZipEntry e; (e = zis.getNextEntry()) != null; ) {
+                    Path out = root.resolve(e.getName()).normalize();
+                    if (!out.startsWith(root))
+                        throw new IOException("ZIP traversal: "+e.getName());
+
+                    if (e.isDirectory()) {
+                        Files.createDirectories(out);
+                    } else {
+                        Files.createDirectories(out.getParent());
+                        Files.copy(zis, out, StandardCopyOption.REPLACE_EXISTING);
+                    }
                     zis.closeEntry();
                 }
             }
@@ -178,15 +221,19 @@ public final class GitService {
         }
     }
 
-    private static Path privateBox() throws IOException{
-        Path home=Paths.get(System.getProperty("user.home")); Path box=home.resolve(DIR_SUFF);
-        if(Files.notExists(box)){
-            if(FileSystems.getDefault().supportedFileAttributeViews().contains("posix")){
-                Files.createDirectory(box, PosixFilePermissions.asFileAttribute(
-                        PosixFilePermissions.fromString("rwx------")));
-            }else Files.createDirectory(box);
+    private static Path privateBox() throws IOException {
+        Path box = Paths.get(System.getProperty("user.home")).resolve(DIR_SUFF);
+        if (Files.notExists(box)) {
+            if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
+                Files.createDirectory(box,
+                        PosixFilePermissions.asFileAttribute(
+                                PosixFilePermissions.fromString("rwx------")));
+            } else {
+                Files.createDirectory(box);
+            }
         }
         return box;
     }
-    public List<Path> getTmpDirs(){ return List.copyOf(tmp); }
+
+    public List<Path> getTmp() { return List.copyOf(tmp); }
 }

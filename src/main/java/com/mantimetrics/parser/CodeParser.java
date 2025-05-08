@@ -19,87 +19,98 @@ public final class CodeParser {
     private static final Logger LOG = LoggerFactory.getLogger(CodeParser.class);
     private final GitService git;
 
-    public CodeParser(GitService git) { this.git = git; }
+    /** a single instance of parser, reusable and thread-safe */
+    private static final JavaParser PARSER = new JavaParser();
+
+    public CodeParser(GitService git) {
+        this.git = git;
+    }
 
     /**
-     * @param fileToKeys mappa immutabile file → JIRA-keys
+     * @param fileToKeys map *immutable* file → JIRA keys calculated upstream
      */
     public List<MethodData> parseAndComputeOnline(
             String owner,
             String repo,
             String tag,
             MetricsCalculator calc,
-            Map<String,List<String>> fileToKeys)
-            throws CodeParserException {
+            Map<String,List<String>> fileToKeys) throws CodeParserException {
 
         LOG.trace("Analysing {}/{}@{}", owner, repo, tag);
 
-        /* 1. unzip release */
-        Path root;
+        /* 1. download and unpack the tag */
+        final Path root;
         try {
             root = git.downloadAndUnzipRepo(owner, repo, tag, "release-" + tag);
-        } catch (IOException io) {
+        } catch (IOException | InterruptedException io) {
             throw new CodeParserException("Download/Unzip failed for "+repo+'@'+tag, io);
         }
 
-        List<MethodData> out = new ArrayList<>();
+        List<MethodData> result = new ArrayList<>();
 
-        /* 2. walk all .java files */
+        /* 2. visit all .java (a walk is lazy, uses little memory) */
         try (Stream<Path> files = Files.walk(root)) {
 
             files.filter(p -> p.toString().endsWith(".java"))
                     .forEach(path -> {
-                     /* ---- path normalisation ----
-                        ALWAYS removes the first segment (ZIP root folder)   */
-                        Path relPath = root.relativize(path);
-                        if (relPath.getNameCount() > 1)
-                            relPath = relPath.subpath(1, relPath.getNameCount());
 
-                        String rel = relPath.toString().replace('\\', '/');
+                        /* normalizes the relative path */
+                        Path rel = root.relativize(path);
+                        // if the first segment is <repo>-<tag>/ we skip it
+                        if (rel.getNameCount() > 1 &&
+                                rel.getName(0).toString().startsWith(repo + "-"))
+                            rel = rel.subpath(1, rel.getNameCount());
 
-                        /* any JIRA keys already calculated */
-                        List<String> issueKeys = fileToKeys.getOrDefault(rel, List.of());
+                        String relUnix = rel.toString().replace('\\', '/');
+
+                        List<String> issueKeys = fileToKeys.getOrDefault(relUnix, List.of());
+
+                        /* files > 8 MB → skip to avoid OOME / very slow parsing */
+                        try {
+                            if (Files.size(path) > 8 * 1024 * 1024) {
+                                LOG.warn("Skipping VERY large file {}", relUnix);
+                                return;
+                            }
+                        } catch (IOException sizeEx) {
+                            LOG.warn("IOException sizeEx - Skipping {} – {}", relUnix, sizeEx.getMessage());
+                        }
 
                         /* parsing & metrics */
                         try {
-                            var cuOpt = new JavaParser().parse(Files.readString(path)).getResult();
+                            var cuOpt = PARSER.parse(Files.readString(path)).getResult();
                             if (cuOpt.isEmpty()) return;
 
                             cuOpt.get().findAll(MethodDeclaration.class)
-                                    .forEach(m -> m.getRange().ifPresent(r -> {
-
-                                        var metrics = calc.computeAll(m);
-
-                                        out.add(new MethodData.Builder()
-                                                .projectName(repo)
-                                                .path("/" + rel + '/')
-                                                .methodSignature(
-                                                        m.getDeclarationAsString(true,true,true))
-                                                .releaseId(tag)
-                                                .versionId(tag)
-                                                .commitId(tag)
-                                                .metrics(metrics)
-                                                .commitHashes(issueKeys)
-                                                .buggy(false)
-                                                .build());
-                                    }));
+                                    .forEach(m -> m.getRange().ifPresent(r -> result.add(
+                                            new MethodData.Builder()
+                                                    .projectName(repo)
+                                                    .path("/" + relUnix + '/')
+                                                    .methodSignature(
+                                                            m.getDeclarationAsString(true, true, true))
+                                                    .releaseId(tag)
+                                                    .versionId(tag)
+                                                    .commitId(tag)
+                                                    .metrics(calc.computeAll(m))
+                                                    .commitHashes(issueKeys)
+                                                    .buggy(false)
+                                                    .build())));
                         } catch (IOException | ParseProblemException ex) {
-                            LOG.warn("Skipping {} – {}", rel, ex.getMessage());
+                            LOG.warn("Skipping {} – {}", relUnix, ex.getMessage());
                         }
                     });
 
         } catch (IOException io) {
             throw new CodeParserException("I/O walking " + root, io);
         } finally {
-            /* 3. cleanup temp dir */
+            /* 3. cleaning the temporary dir */
             try (Stream<Path> w = Files.walk(root)) {
-                w.sorted(Comparator.reverseOrder())
-                        .forEach(p -> { try { Files.deleteIfExists(p); }
-                        catch (IOException ignored) {} });
+                w.sorted(Comparator.reverseOrder()).forEach(p -> {
+                    try { Files.deleteIfExists(p); } catch (IOException ignored) {}
+                });
             } catch (IOException ignored) {}
             LOG.trace("Deleted temp dir {}", root);
         }
 
-        return out;
+        return result;
     }
 }
