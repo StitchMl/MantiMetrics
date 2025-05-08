@@ -54,6 +54,7 @@ public class MantiMetrics {
 
             Map<String,List<String>> file2Keys;
             try {
+                log.info("Mapping {} JIRA keys to files", bugKeys.size());
                 file2Keys = git.getFileToIssueKeysMap(owner, repo, branch);
             } catch (FileKeyMappingException ex) {
                 log.error("Skipping {} – {}", repo, ex.getMessage());
@@ -63,7 +64,7 @@ public class MantiMetrics {
             /* open CSV once, in appending */
             Path csvPath = Paths.get("output", repo + "_dataset.csv");
             try (BufferedWriter w = csvOut.open(csvPath)) {
-
+                log.info("Writing CSV to {}", csvPath);
                 for (String tag : chosen) {
                     try {
                         List<MethodData> methods = parser
@@ -87,6 +88,7 @@ public class MantiMetrics {
             }
         }
         cleanup(git);
+        log.info("Done! All temporary files cleaned up.");
     }
 
     /* ---------- temp cleanup ---------- */
