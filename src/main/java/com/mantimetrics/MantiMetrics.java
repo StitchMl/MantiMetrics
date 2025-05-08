@@ -97,10 +97,12 @@ public class MantiMetrics {
             w.sorted(Comparator.reverseOrder()).forEach(p -> {
                 try {
                     Files.deleteIfExists(p);
-                } catch (Exception ignore) {
-                    log.warn("Cannot delete {}", p);
+                } catch (Exception e) {
+                    log.warn("[INT] Cannot delete {}: {}", p, e.getMessage());
                 }
             });
-        } catch (Exception ignore) {}
+        } catch (Exception e) {
+            log.warn("[EXT] Cannot delete {}: {}", d, e.getMessage());
+        }
     }
 }
