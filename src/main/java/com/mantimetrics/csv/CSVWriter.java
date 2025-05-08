@@ -21,15 +21,38 @@ public final class CSVWriter {
             "MaxNestingDepth","isLongMethod","isGodClass","isFeatureEnvy",
             "isDuplicatedCode","Buggy");
 
-    public void write(Path file, List<MethodData> rows) throws CsvWriteException {
-        try (BufferedWriter w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
-            w.write(HEADER); w.write('\n');
-            for (MethodData m : rows) {
-                w.write(escape(m.toCsvLine())); w.write('\n');
+    /** opens the file in appending; if it does not exist, it first writes the header */
+    public BufferedWriter open(Path file) throws CsvWriteException {
+        try {
+            Files.createDirectories(file.getParent());
+
+            boolean writeHeader = Files.notExists(file);
+            BufferedWriter w = Files.newBufferedWriter(
+                    file,
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.APPEND);
+
+            if (writeHeader) {
+                w.write(HEADER);
+                w.write('\n');
             }
-            LOG.info("CSV [{}] written – {} rows", file.getFileName(), rows.size());
+            return w;
         } catch (Exception e) {
-            throw new CsvWriteException("Failed to write " + file, e);
+            throw new CsvWriteException("Cannot open " + file, e);
+        }
+    }
+
+    /** writes (already in appending) the received list of rows */
+    public void append(BufferedWriter w, List<MethodData> rows) throws CsvWriteException {
+        try {
+            for (MethodData m : rows) {
+                w.write(escape(m.toCsvLine()));
+                w.write('\n');
+            }
+            w.flush();
+        } catch (Exception e) {
+            throw new CsvWriteException("CSV write failed", e);
         }
     }
 

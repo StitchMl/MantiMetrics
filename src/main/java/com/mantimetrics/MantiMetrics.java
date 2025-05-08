@@ -13,6 +13,7 @@ import com.mantimetrics.release.ReleaseSelector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedWriter;
 import java.nio.file.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -23,78 +24,71 @@ public class MantiMetrics {
 
     public static void main(String[] args) throws Exception {
 
-        /* ---------- loading configs ---------- */
+        /* ---------- configs ---------- */
         ProjectConfig[] configs = ProjectConfigLoader.load();
 
-        Properties props = new Properties();
+        Properties p = new Properties();
         try (var in = MantiMetrics.class.getResourceAsStream("/github.properties")) {
-            props.load(Objects.requireNonNull(in, "github.properties missing"));
+            p.load(Objects.requireNonNull(in, "github.properties missing"));
         }
-        String pat = props.getProperty("github.pat").trim();
+        GitService        git    = new GitService(p.getProperty("github.pat").trim());
+        CodeParser        parser = new CodeParser(git);
+        MetricsCalculator calc   = new MetricsCalculator();
+        ReleaseSelector   sel    = new ReleaseSelector();
+        JiraClient        jira   = new JiraClient();
+        CSVWriter         csvOut = new CSVWriter();
 
-        /* ---------- services ---------- */
-        GitService git   = new GitService(pat);
-        CodeParser parser = new CodeParser(git);
-        MetricsCalculator calc = new MetricsCalculator();
-        ReleaseSelector selector = new ReleaseSelector();
-        JiraClient jira = new JiraClient();
-        CSVWriter csv   = new CSVWriter();
-
+        /* ---------- projects ---------- */
         for (ProjectConfig cfg : configs) {
             String owner = cfg.getOwner();
-            String repo = cfg.getName().toLowerCase();
+            String repo  = cfg.getName().toLowerCase();
 
-            List<String> tags = git.listTags(owner, repo);
-            List<String> chosen = selector.selectFirstPercent(tags, cfg.getPercentage());
-            String defBranch = git.getDefaultBranch(owner, repo);
-            log.info("{}/{} – selected {} / {} tags", repo, defBranch, chosen.size(), tags.size());
+            List<String> tags    = git.listTags(owner, repo);
+            List<String> chosen  = sel.selectFirstPercent(tags, cfg.getPercentage());
+            String branch        = git.getDefaultBranch(owner, repo);
+            log.info("{}/{} – processing {} tags", repo, branch, chosen.size());
 
             jira.initialize(cfg.getJiraProjectKey());
             List<String> bugKeys = jira.fetchBugKeys();
 
-            /* one single map built on the tip of default_branch */
-            String defaultBranch = git.getDefaultBranch(owner, repo);
-            Map<String, List<String>> fileToKeys;
+            Map<String,List<String>> file2Keys;
             try {
-                fileToKeys = git.getFileToIssueKeysMap(owner, repo, defaultBranch);
-            } catch (FileKeyMappingException e) {
-                log.error("Skipping {} – {}", repo, e.getMessage());
+                file2Keys = git.getFileToIssueKeysMap(owner, repo, branch);
+            } catch (FileKeyMappingException ex) {
+                log.error("Skipping {} – {}", repo, ex.getMessage());
                 continue;
             }
 
-            List<MethodData> all = new ArrayList<>();
-            for (String tag : chosen) {
-                List<MethodData> ms = parser
-                        .parseAndComputeOnline(owner, repo, tag, calc, fileToKeys)
-                        .stream()
-                        .map(m -> m.toBuilder()
-                                .buggy(jira.isMethodBuggy(m.getCommitHashes(), bugKeys))
-                                .build())
-                        .collect(Collectors.toList());
-                log.info("{}@{} → {} methods ({} buggy)",
-                        repo, tag, ms.size(),
-                        ms.stream().filter(MethodData::isBuggy).count());
-                all.addAll(ms);
+            /* open CSV once, in appending */
+            Path csvPath = Paths.get("output", repo + "_dataset.csv");
+            try (BufferedWriter w = csvOut.open(csvPath)) {
+
+                for (String tag : chosen) {
+                    List<MethodData> methods = parser
+                            .parseAndComputeOnline(owner, repo, tag, calc, file2Keys)
+                            .stream()
+                            .map(m -> m.toBuilder()
+                                    .buggy(jira.isMethodBuggy(m.getCommitHashes(), bugKeys))
+                                    .build())
+                            .collect(Collectors.toList());
+
+                    csvOut.append(w, methods);
+
+                    long buggy = methods.stream().filter(MethodData::isBuggy).count();
+                    log.info("{}@{} → {} methods ({} buggy) [saved incrementally]",
+                            repo, tag, methods.size(), buggy);
+                }
             }
-
-            Path out = Paths.get("output", repo + "_dataset.csv");
-            Files.createDirectories(out.getParent());
-            csv.write(out, all);
         }
-
-        cleanupTempDirs(git);
+        cleanup(git);
     }
 
-    private static void cleanupTempDirs(GitService g) {
-        for (Path d : g.getTmpDirs()) try (Stream<Path> w = Files.walk(d)) {
+    /* ---------- temp cleanup ---------- */
+    private static void cleanup(GitService git) {
+        for (Path d : git.getTmpDirs()) try (Stream<Path> w = Files.walk(d)) {
             w.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try {
-                    Files.deleteIfExists(p);
-                } catch (Exception e) {
-                    log.warn("Failed to delete {}: {}", p, e.getMessage());
-                }
+                try { Files.deleteIfExists(p); } catch (Exception ignore) {}
             });
-            log.info("Deleted {}", d);
-        } catch (Exception e) { log.warn("Cleanup failed: {}", e.getMessage()); }
+        } catch (Exception ignore) {}
     }
 }

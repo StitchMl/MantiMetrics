@@ -27,6 +27,7 @@ public final class GitService {
     private static final String  API   = "https://api.github.com";
     private static final String  ZIP   = "https://codeload.github.com";
     private static final String DIR_SUFF = ".mantimetrics-tmp";
+    private static final String  REPOS     = "/repos/";
     private static final int     MAX_R = 5;
     private static final Pattern JIRA  =
             Pattern.compile("\\b(?>[A-Z][A-Z0-9]++-\\d++)\\b");
@@ -52,17 +53,17 @@ public final class GitService {
     public String getDefaultBranch(String owner,String repo) {
         return defBranch.computeIfAbsent(owner+'/'+repo, k -> {
             try {
-                return get(API+"/repos/"+owner+'/'+repo)
+                return get(API+REPOS+owner+'/'+repo)
                         .path("default_branch").asText("master");
             } catch (Exception e) { throw new UncheckedIOException(new IOException(e)); }
         });
     }
 
     /* ═════════ LIST TAGS ═════════ */
-    public List<String> listTags(String o,String r) throws Exception {
+    public List<String> listTags(String o,String r) throws IOException, InterruptedException {
         List<String> tags = new ArrayList<>();
         for (int p=1;;p++) {
-            JsonNode arr = get(API+"/repos/"+o+'/'+r+"/tags?per_page=100&page="+p);
+            JsonNode arr = get(API+REPOS+o+'/'+r+"/tags?per_page=100&page="+p);
             if (!arr.isArray() || arr.isEmpty()) break;
             arr.forEach(n -> Optional.ofNullable(n.path("name").asText(null)).ifPresent(tags::add));
         }
@@ -100,7 +101,7 @@ public final class GitService {
         int fetched = 0;
         for (int page = 1; fetched < 5000; page++) {
 
-            JsonNode commits = get(API+"/repos/"+o+'/'+r+"/commits?sha="+
+            JsonNode commits = get(API+REPOS+o+'/'+r+"/commits?sha="+
                     URLEncoder.encode(branch, StandardCharsets.UTF_8)+
                     "&per_page=100&page="+page);
 

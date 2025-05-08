@@ -80,7 +80,7 @@ public final class CodeParser {
                                                 .commitId(tag)
                                                 .metrics(metrics)
                                                 .commitHashes(issueKeys)
-                                                .buggy(false)            // verrà aggiornato a valle
+                                                .buggy(false)
                                                 .build());
                                     }));
                         } catch (IOException | ParseProblemException ex) {
