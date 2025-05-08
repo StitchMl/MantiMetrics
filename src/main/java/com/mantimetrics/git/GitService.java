@@ -54,8 +54,13 @@ public final class GitService {
             try {
                 return get(API+REPOS+owner+'/'+repo)
                         .path("default_branch").asText("master");
-            } catch (IOException | InterruptedException e) {
-                throw new UncheckedIOException(new IOException(e));
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw new UncheckedIOException(
+                        new IOException("Interrupted while building JIRA map", ie));
+
+            } catch (IOException ioe) {
+                throw new UncheckedIOException(ioe);
             }
         });
     }
@@ -81,8 +86,13 @@ public final class GitService {
                     Map<String,List<String>> m = buildFileMapViaCommits(o,r,branch);
                     LOG.info("Built file→JIRA map for {}: {} java files", cacheKey, m.size());
                     return Collections.unmodifiableMap(m);
-                } catch (IOException | InterruptedException e) {
-                    throw new UncheckedIOException(new IOException(e));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new UncheckedIOException(
+                            new IOException("Interrupted while building JIRA map", ie));
+
+                } catch (IOException ioe) {
+                    throw new UncheckedIOException(ioe);
                 }
             });
         } catch (UncheckedIOException ex) {

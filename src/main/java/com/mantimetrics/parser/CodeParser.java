@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.stream.Stream;
@@ -42,8 +43,12 @@ public final class CodeParser {
         final Path root;
         try {
             root = git.downloadAndUnzipRepo(owner, repo, tag, "release-" + tag);
-        } catch (IOException | InterruptedException e) {
-            throw new CodeParserException("I/O downloading " + owner + '/' + repo, e);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new UncheckedIOException(
+                    new IOException("Interrupted building map", ie));
+        } catch (IOException ioe) {
+            throw new UncheckedIOException(ioe);
         }
 
         List<MethodData> result = new ArrayList<>();
