@@ -10,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.stream.Stream;
@@ -22,106 +21,123 @@ public final class CodeParser {
 
     /** a single instance of parser, reusable and thread-safe */
     private static final JavaParser PARSER = new JavaParser();
+    private static final long MAX_FILE_BYTES = 8L * 1024 * 1024;
 
     public CodeParser(GitService git) {
         this.git = git;
     }
 
     /**
-     * @param fileToKeys map *immutable* file → JIRA keys calculated upstream
+     * @param fileToKeys immutable map file → JIRA keys, prepared upstream
      */
     public List<MethodData> parseAndComputeOnline(
             String owner,
             String repo,
             String tag,
             MetricsCalculator calc,
-            Map<String,List<String>> fileToKeys) throws CodeParserException {
+            Map<String, List<String>> fileToKeys) throws CodeParserException {
 
         LOG.trace("Analysing {}/{}@{}", owner, repo, tag);
 
-        /* 1. download and unpack the tag */
+        /* 1 ─ download & unpack */
         final Path root;
         try {
             root = git.downloadAndUnzipRepo(owner, repo, tag, "release-" + tag);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            throw new UncheckedIOException(
-                    new IOException("Interrupted building map", ie));
+            throw new CodeParserException("Interrupted while downloading " + tag, ie);
         } catch (IOException ioe) {
-            throw new UncheckedIOException(ioe);
+            throw new CodeParserException("Download/Unzip failed for " + repo + '@' + tag, ioe);
         }
 
-        List<MethodData> result = new ArrayList<>();
+        List<MethodData> out = new ArrayList<>();
 
-        /* 2. visit all .java (a walk is lazy, uses little memory) */
+        /* 2 ─ lazy walk of .java files */
         try (Stream<Path> files = Files.walk(root)) {
-
             files.filter(p -> p.toString().endsWith(".java"))
-                    .forEach(path -> {
+                    .forEach(p -> {
+                        Optional<String> relOpt = shouldSkip(root, p, repo);
+                        if (relOpt.isEmpty()) return;
 
-                        /* normalizes the relative path */
-                        Path rel = root.relativize(path);
-                        // if the first segment is <repo>-<tag>/ we skip it
-                        if (rel.getNameCount() > 1 &&
-                                rel.getName(0).toString().startsWith(repo + "-"))
-                            rel = rel.subpath(1, rel.getNameCount());
+                        String relUnix = relOpt.get();
+                        List<String> jiraKeys = fileToKeys.getOrDefault(relUnix, List.of());
 
-                        String relUnix = rel.toString().replace('\\', '/');
-
-                        List<String> issueKeys = fileToKeys.getOrDefault(relUnix, List.of());
-
-                        /* files > 8 MB → skip to avoid OOME / very slow parsing */
-                        try {
-                            if (Files.size(path) > 8 * 1024 * 1024) {
-                                LOG.warn("Skipping VERY large file {}", relUnix);
-                                return;
-                            }
-                        } catch (IOException sizeEx) {
-                            LOG.warn("IOException sizeEx - Skipping {} – {}", relUnix, sizeEx.getMessage());
-                        }
-
-                        /* parsing & metrics */
-                        try {
-                            var cuOpt = PARSER.parse(Files.readString(path)).getResult();
-                            if (cuOpt.isEmpty()) return;
-
-                            cuOpt.get().findAll(MethodDeclaration.class)
-                                    .forEach(m -> m.getRange().ifPresent(r -> result.add(
-                                            new MethodData.Builder()
-                                                    .projectName(repo)
-                                                    .path("/" + relUnix + '/')
-                                                    .methodSignature(
-                                                            m.getDeclarationAsString(true, true, true))
-                                                    .releaseId(tag)
-                                                    .versionId(tag)
-                                                    .commitId(tag)
-                                                    .metrics(calc.computeAll(m))
-                                                    .commitHashes(issueKeys)
-                                                    .buggy(false)
-                                                    .build())));
-                        } catch (IOException | ParseProblemException ex) {
-                            LOG.warn("Skipping {} – {}", relUnix, ex.getMessage());
-                        }
+                        collectMethods(p, relUnix, repo, tag, jiraKeys, calc, out);
                     });
 
         } catch (IOException io) {
             throw new CodeParserException("I/O walking " + root, io);
         } finally {
-            /* 3. cleaning the temporary dir */
-            try (Stream<Path> w = Files.walk(root)) {
-                w.sorted(Comparator.reverseOrder()).forEach(p -> {
-                    try {
-                        Files.deleteIfExists(p);
-                    } catch (IOException e) {
-                        LOG.warn("Failed to delete {}", p, e);
-                    }
-                });
-            } catch (IOException e) {
-                LOG.warn("Failed to delete {}", root, e);
+            deleteRecursively(root);
+        }
+        return out;
+    }
+
+    /** Returns the normalized unix-style path, or empty() if the file must be skipped. */
+    private static Optional<String> shouldSkip(Path root, Path path, String repo) {
+        try {
+            if (Files.size(path) > MAX_FILE_BYTES) {
+                LOG.warn("Skipping VERY large file {}", path);
+                return Optional.empty();
             }
-            LOG.trace("Deleted temp dir {}", root);
+        } catch (IOException ex) {
+            LOG.warn("Cannot stat {}, skipping – {}", path, ex.getMessage());
+            return Optional.empty();
         }
 
-        return result;
+        Path rel = root.relativize(path);
+        if (rel.getNameCount() > 1 && rel.getName(0).toString().startsWith(repo + "-"))
+            rel = rel.subpath(1, rel.getNameCount());
+
+        return Optional.of(rel.toString().replace('\\', '/'));
+    }
+
+    /** Parses the file, computes metrics, adds MethodData objects to *sink*. */
+    private static void collectMethods(Path file,
+                                       String relUnix,
+                                       String repo,
+                                       String tag,
+                                       List<String> jiraKeys,
+                                       MetricsCalculator calc,
+                                       List<MethodData> sink) {
+        try {
+            PARSER.parse(Files.readString(file))
+                    .getResult()
+                    .ifPresent(cu -> cu.findAll(MethodDeclaration.class)
+                            .forEach(m -> m.getRange().ifPresent(r ->
+                                    sink.add(new MethodData.Builder()
+                                            .projectName(repo)
+                                            .path('/' + relUnix + '/')
+                                            .methodSignature(m.getDeclarationAsString(true, true, true))
+                                            .releaseId(tag)
+                                            .versionId(tag)
+                                            .commitId(tag)
+                                            .metrics(calc.computeAll(m))
+                                            .commitHashes(jiraKeys)
+                                            .buggy(false)
+                                            .build()))));
+        } catch (ParseProblemException ex) {
+            LOG.warn("Failed to parse {}: {}", file, ex.getMessage());
+        } catch (IOException ex) {
+            LOG.warn("Failed to read {}: {}", file, ex.getMessage());
+        } catch (RuntimeException ex) {
+            LOG.warn("Failed to process {}: {}", file, ex.getMessage());
+        }
+    }
+
+    /** Best-effort recursive delete (no exceptions propagated). */
+    private static void deleteRecursively(Path dir) {
+        try (Stream<Path> s = Files.walk(dir)) {
+            s.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignore) {
+                    LOG.warn("[INT] Failed to delete {}", p);
+                }
+            });
+            LOG.trace("Deleted temp dir {}", dir);
+        } catch (IOException ignore) {
+            LOG.warn("[EXT] Failed to delete {}", dir);
+        }
     }
 }
