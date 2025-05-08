@@ -95,7 +95,11 @@ public class MantiMetrics {
     private static void cleanup(GitService git) {
         for (Path d : git.getTmp()) try (Stream<Path> w = Files.walk(d)) {
             w.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try { Files.deleteIfExists(p); } catch (Exception ignore) {}
+                try {
+                    Files.deleteIfExists(p);
+                } catch (Exception ignore) {
+                    log.warn("Cannot delete {}", p);
+                }
             });
         } catch (Exception ignore) {}
     }
