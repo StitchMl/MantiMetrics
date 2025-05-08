@@ -235,7 +235,7 @@ public final class GitService {
         throw last;
     }
 
-    /** Downloads the ZIP file and extracts its contents. */
+    /** Secure-download + extract a ZIP under ~/.mantimetrics-tmp and return the root dir. */
     private Path tryDownload(OkHttpClient client, String url, String subDir) throws IOException {
 
         permits.acquireUninterruptibly();
@@ -249,34 +249,68 @@ public final class GitService {
             Path root = Files.createTempDirectory(privateBox(), "mantimetrics-" + subDir + '-');
             tmp.add(root);
 
-            long totalBytes = 0;
-            int  entries    = 0;
+            long totalUncompressed = 0;
+            int  entryCount        = 0;
 
-            try (InputStream in  = resp.body().byteStream();
-                 ZipInputStream zis = new ZipInputStream(in)) {
+            try (InputStream raw = resp.body().byteStream();
+                 ZipInputStream zis = new ZipInputStream(raw)) {
 
-                for (ZipEntry ze; (ze = zis.getNextEntry()) != null; ) {
+                ZipEntry ze;
+                while ((ze = zis.getNextEntry()) != null) {
 
-                    entries++;
-                    validateEntryCount(entries);
+                    /* ── global quotas BEFORE any extraction ───────────────────*/
+                    if (++entryCount > MAX_ENTRIES)
+                        throw new IOException("ZIP too many entries (>" + MAX_ENTRIES + ')');
+                    if (totalUncompressed >= MAX_TOTAL_BYTES)
+                        throw new IOException("ZIP exceeds overall size limit");
 
                     Path out = secureTarget(root, ze.getName());
 
-                    long written = ze.isDirectory()
-                            ? createDir(out)
-                            : extractFile(zis, out);
+                    /* ── directory ─────────────────────────────────────────────*/
+                    if (ze.isDirectory()) {
+                        Files.createDirectories(out);
+                        zis.closeEntry();
+                        continue;
+                    }
 
-                    totalBytes = updateTotals(totalBytes, written, ze.getCompressedSize());
+                    /* ── file ─────────────────────────────────────────────────*/
+                    Files.createDirectories(out.getParent());
+
+                    long written = copyBounded(zis, out);
+
+                    /* ── per-entry + cumulative checks after extract ───────── */
+                    if (written > MAX_ENTRY_BYTES)
+                        throw new IOException("ZIP entry too large: " + ze.getName());
+
+                    long compressed = ze.getCompressedSize();
+                    if (compressed > 0) {
+                        double ratio = (double) written / compressed;
+                        if (ratio > MAX_INFLATION_RATIO)
+                            throw new IOException("ZIP inflation ratio " + ratio +
+                                    " > " + MAX_INFLATION_RATIO);
+                    }
+                    totalUncompressed += written;
+                    zis.closeEntry();
                 }
             }
             return root;
         }
     }
 
-    /** Validates the number of entries in the ZIP file. */
-    private static void validateEntryCount(int entries) throws IOException {
-        if (entries > MAX_ENTRIES)
-            throw new IOException("ZIP too many entries (>" + MAX_ENTRIES + ')');
+    /** Copies the ZIP entry to the target path, checking the size. */
+    private static long copyBounded(ZipInputStream zis, Path target) throws IOException {
+        try (OutputStream os = Files.newOutputStream(target)) {
+            byte[] buf = new byte[8 * 1024];
+            long written = 0;
+            int n;
+            while ((n = zis.read(buf)) > 0) {
+                written += n;
+                if (written > MAX_ENTRY_BYTES)
+                    throw new IOException("ZIP entry exceeds " + MAX_ENTRY_BYTES + " bytes");
+                os.write(buf, 0, n);
+            }
+            return written;
+        }
     }
 
     /** Verifies that the path is within the root directory. */
@@ -285,45 +319,6 @@ public final class GitService {
         if (!out.startsWith(root))
             throw new IOException("ZIP traversal attempt: " + name);
         return out;
-    }
-
-    /** Creates the target directory if it does not exist. */
-    private static long createDir(Path dir) throws IOException {
-        Files.createDirectories(dir);
-        return 0;
-    }
-
-    /** Extracts the ZIP entry to the given path. */
-    private static long extractFile(ZipInputStream zis, Path out) throws IOException {
-        Files.createDirectories(out.getParent());
-
-        long written = 0;
-        try (OutputStream os = Files.newOutputStream(out)) {
-            byte[] buf = new byte[8 * 1024];
-            int n;
-            while ((n = zis.read(buf)) > 0) {
-                written += n;
-                if (written > MAX_ENTRY_BYTES)
-                    throw new IOException("ZIP entry bigger than " + MAX_ENTRY_BYTES + " B");
-                os.write(buf, 0, n);
-            }
-        }
-        return written;
-    }
-
-    /** Updates the total size and checks the inflation ratio. */
-    private static long updateTotals(long total, long added, long compressed) throws IOException {
-        long newTotal = total + added;
-        if (newTotal > MAX_TOTAL_BYTES)
-            throw new IOException("ZIP exceeds overall size limit");
-
-        /* the compressed size may be –1; skip the ratio check in that case */
-        if (compressed > 0) {
-            double ratio = (double) added / compressed;
-            if (ratio > MAX_INFLATION_RATIO)
-                throw new IOException("ZIP inflation ratio " + ratio + " > " + MAX_INFLATION_RATIO);
-        }
-        return newTotal;
     }
 
     /** Deletes the temporary directory and all its contents. */
