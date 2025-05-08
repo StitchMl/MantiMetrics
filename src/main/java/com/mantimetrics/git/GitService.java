@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -41,6 +42,10 @@ public final class GitService {
     private final Map<String,String>                    defBranch = new ConcurrentHashMap<>();
     private final Map<String,Map<String,List<String>>>  projCache = new ConcurrentHashMap<>();
     private final List<Path> tmp = new CopyOnWriteArrayList<>();
+
+    private static final int   MAX_ENTRIES      = 20_000;
+    private static final long  MAX_ENTRY_BYTES  = 50L * 1024 * 1024;
+    private static final long  MAX_TOTAL_BYTES  = 2L  * 1024 * 1024 * 1024;
 
     public GitService(String pat) {
         this.token = pat;
@@ -224,35 +229,80 @@ public final class GitService {
         throw last;
     }
 
+    /**
+     * Downloads a ZIP from {@code url}, extracts it under an *isolated*
+     * temp-directory (~/.mantimetrics-tmp) and returns the directory path.
+     *
+     * <p>Hardens against the usual archive-based attacks:</p>
+     * <ul>
+     *   <li><strong>Zip-Slip / directory traversal</strong> – every entry is
+     *       normalized and verified to stay inside {@code root}.</li>
+     *   <li><strong>Decompression bombs</strong> – aborts if the total
+     *       uncompressed size exceeds {@value #MAX_TOTAL_BYTES} bytes **or**
+     *       if an individual entry is larger than
+     *       {@value #MAX_ENTRY_BYTES} bytes.</li>
+     *   <li><strong>Too many entries</strong> – stops after
+     *       {@value #MAX_ENTRIES} files.</li>
+     * </ul>
+     */
     private Path tryDownload(OkHttpClient client,
                              String url,
                              String subDir) throws IOException {
 
         permits.acquireUninterruptibly();
-        Request req = new Request.Builder().url(url).build();
 
+        Request req = new Request.Builder().url(url).build();
         try (Response resp = client.newCall(req).execute()) {
-            if (!resp.isSuccessful() || resp.body()==null)
-                throw new IOException("ZIP HTTP "+resp.code());
+
+            if (!resp.isSuccessful() || resp.body() == null)
+                throw new IOException("ZIP HTTP " + resp.code());
 
             Path root = Files.createTempDirectory(privateBox(),
-                    "mantimetrics-"+subDir+'-');
+                    "mantimetrics-" + subDir + '-');
             tmp.add(root);
 
-            try (InputStream in = resp.body().byteStream();
+            /* --- secure-extract with quotas --------------------------------- */
+            long  totalBytes  = 0;
+            int   entries     = 0;
+
+            try (InputStream in  = resp.body().byteStream();
                  ZipInputStream zis = new ZipInputStream(in)) {
 
-                for (ZipEntry e; (e = zis.getNextEntry()) != null; ) {
+                ZipEntry e;
+                while ((e = zis.getNextEntry()) != null) {
+
+                    /* ❷ hard quotas */
+                    if (++entries > MAX_ENTRIES)
+                        throw new IOException("ZIP too many entries (> " + MAX_ENTRIES + ')');
+                    if (e.getSize()   > MAX_ENTRY_BYTES)
+                        throw new IOException("ZIP entry too large: " + e.getName());
+                    if (totalBytes + e.getSize() > MAX_TOTAL_BYTES)
+                        throw new IOException("ZIP exceeds overall size limit");
+
                     Path out = root.resolve(e.getName()).normalize();
+
+                    /* ❸ Zip-Slip stop-gap */
                     if (!out.startsWith(root))
-                        throw new IOException("ZIP traversal: "+e.getName());
+                        throw new IOException("ZIP traversal attempt: " + e.getName());
 
                     if (e.isDirectory()) {
                         Files.createDirectories(out);
                     } else {
                         Files.createDirectories(out.getParent());
-                        Files.copy(zis, out, StandardCopyOption.REPLACE_EXISTING);
+                        /* copy with a bounded buffer to avoid allocation spikes */
+                        try (OutputStream os = Files.newOutputStream(out)) {
+                            byte[] buf = new byte[8 * 1024];
+                            int n;
+                            long written = 0;
+                            while ((n = zis.read(buf)) > 0) {
+                                written += n;
+                                if (written > MAX_ENTRY_BYTES)
+                                    throw new IOException("ZIP entry too large while extracting");
+                                os.write(buf, 0, n);
+                            }
+                        }
                     }
+                    totalBytes += Math.max(0, e.getSize());
                     zis.closeEntry();
                 }
             }
