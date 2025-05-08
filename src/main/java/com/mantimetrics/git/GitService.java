@@ -328,18 +328,10 @@ public final class GitService {
             assert ze != null;
             String name = ze.getName();
 
-            if(totalSizeArchive > THRESHOLD_SIZE || totalEntryArchive > THRESHOLD_ENTRIES) {
+            if((totalSizeArchive > THRESHOLD_SIZE || totalEntryArchive > THRESHOLD_ENTRIES) && nameValidation(name)) {
                 // the uncompressed data size is too much for the application resource capacity,
                 // or too many entries in this archive can lead to inodes exhaustion of the system
-                break;
-            } else if (name.isBlank()
-                    || name.length() > 4_096
-                    || name.startsWith("/")
-                    || name.startsWith("\\")
-                    || name.contains("..")
-                    || name.indexOf('\0') >= 0
-                    || name.contains(":")) {
-                // discards the invalid entry and continues with the cycle
+                // and discards the invalid entry and continues with the cycle
                 zis.closeEntry();
                 continue;
             }
@@ -354,6 +346,16 @@ public final class GitService {
             return ze;
         }
         return null;
+    }
+
+    private static boolean nameValidation(String name){
+        return (name.isBlank()
+                || name.length() > 4_096
+                || name.startsWith("/")
+                || name.startsWith("\\")
+                || name.contains("..")
+                || name.indexOf('\0') >= 0
+                || name.contains(":"));
     }
 
     /** Validates the number of entries in the ZIP file. */
