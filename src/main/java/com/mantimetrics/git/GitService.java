@@ -285,36 +285,41 @@ public final class GitService {
     }
 
     /**
-     * Restituisce la prossima entry "ragionevole" del file ZIP.
-     *  – scarta (e logga) voci sospette invece di estrarre l’intero archivio;
-     *  – blocca nomi vuoti, troppo lunghi, assoluti, con “.”, drive-letter, NUL, …;
-     *  – rifiuta entry con size dichiarata negativa o > MAX_ENTRY_BYTES.
-     * <p>
-     * Se non rimangono voci lecite, restituisce {@code null}.
+     * Returns the next "safe" entry from the {@link ZipInputStream},
+     * or {@code null} if there are no others.
+     *
+     * <p>Filters entries with dangerous name (Zip-Slip, absolute path,
+     * NUL characters, etc.) and with negative compressed size,
+     * continuing to search until it finds a valid entry.</p>.
      */
     private static ZipEntry safeNextEntry(ZipInputStream zis) throws IOException {
         ZipEntry ze;
 
+        // true loop: it iterates until it finds a valid entry or finishes the file
         while ((ze = zis.getNextEntry()) != null) {
 
-            /* ----------- name validations -------------------------------- */
-            String name = Optional.of(ze.getName()).orElse("");
-            boolean badName =
-                    name.isBlank()                || name.length() > 4_096   ||
-                            name.startsWith("/")           || name.startsWith("\\")   ||
-                            name.contains("..")            || name.contains(":")      ||
-                            name.indexOf('\0') >= 0;
-
-            /* ----------- validations on declared dimensions ---------------- */
-            long declared = ze.getSize();
-            boolean badSize = declared > MAX_ENTRY_BYTES || declared < -1;
-
-            if (badName || badSize) {
-                LOG.warn("Skipping suspicious ZIP entry '{}'", name);
+            /* ---- name validation ---- */
+            // getName() is never null, so the test on null is superfluous
+            String name = ze.getName();
+            if (name.isBlank()
+                    || name.length() > 4_096
+                    || name.startsWith("/")
+                    || name.startsWith("\\")
+                    || name.contains("..")
+                    || name.indexOf('\0') >= 0
+                    || name.contains(":")) {
+                // discards the invalid entry and continues with the cycle
                 zis.closeEntry();
                 continue;
             }
-            /* entry OK → returned to caller */
+
+            /* ---- compressed dimension validation ---- */
+            long cSize = ze.getCompressedSize();
+            if (cSize < -1) {
+                zis.closeEntry();
+                throw new IOException("ZIP: compressedSize negative for " + name);
+            }
+
             return ze;
         }
         return null;
