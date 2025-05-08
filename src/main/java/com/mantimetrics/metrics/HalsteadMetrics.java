@@ -14,6 +14,9 @@ public class HalsteadMetrics {
     private final double difficulty;
     private final double effort;
 
+    /**
+     * Private Builder to force the use of the Builder.
+     */
     private HalsteadMetrics(Builder b) {
         this.n1         = b.n1;
         this.n2         = b.n2;
@@ -37,6 +40,9 @@ public class HalsteadMetrics {
     public double getDifficulty()       { return difficulty; }
     public double getEffort()           { return effort; }
 
+    /**
+     * Builder for HalsteadMetrics.
+     */
     public static class Builder {
         private int n1;
         private int n2;

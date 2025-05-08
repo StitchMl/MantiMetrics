@@ -9,6 +9,7 @@ import java.util.List;
 
 public final class CSVWriter {
 
+    /** exception thrown when CSV write fails */
     private static final String HEADER = String.join(",",
             "Project","Path","Method","ReleaseId","VersionId","CommitId",
             "LOC","StmtCount","Cyclomatic","Cognitive",

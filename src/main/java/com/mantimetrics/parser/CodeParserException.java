@@ -5,10 +5,12 @@ package com.mantimetrics.parser;
  * parsing or generics during remote code analysis.
  */
 public class CodeParserException extends Exception {
-    public CodeParserException(String message) {
-        super(message);
-    }
 
+    /**
+     * Constructs a new CodeParserException with the specified detail message.
+     *
+     * @param message the detail message
+     */
     public CodeParserException(String message, Throwable cause) {
         super(message, cause);
     }

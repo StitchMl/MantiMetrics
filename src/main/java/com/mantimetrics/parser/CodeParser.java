@@ -23,6 +23,9 @@ public final class CodeParser {
     private static final JavaParser PARSER = new JavaParser();
     private static final long MAX_FILE_BYTES = 8L * 1024 * 1024;
 
+    /**
+     * @param git GitService instance to download and unzip the repository
+     */
     public CodeParser(GitService git) {
         this.git = git;
     }

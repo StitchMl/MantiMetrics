@@ -42,26 +42,22 @@ public class ProjectConfig {
         this.localPath = "repos/" + name.toLowerCase();
     }
 
+    // getters...
     public String getOwner() {
         return owner;
     }
-
     public String getName() {
         return name;
     }
-
     public Integer getPercentage() {
         return percentage == null ? 100 : percentage;
     }
-
     public String getRepoUrl() {
         return repoUrl;
     }
-
     public String getJiraProjectKey() {
         return jiraProjectKey;
     }
-
     public String getLocalPath() {
         return localPath;
     }

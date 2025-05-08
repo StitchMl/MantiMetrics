@@ -12,6 +12,12 @@ import static java.lang.Math.log;
 
 public class MetricsCalculator {
 
+    /**
+     * Computes a set of metrics for a given method.
+     *
+     * @param m the method declaration to analyze
+     * @return a MethodMetrics object containing the computed metrics
+     */
     public MethodMetrics computeAll(MethodDeclaration m) {
         MethodMetrics mm = new MethodMetrics();
 
@@ -54,6 +60,12 @@ public class MetricsCalculator {
         return mm;
     }
 
+    /**
+     * Computes the cyclomatic complexity of a method.
+     *
+     * @param m the method declaration to analyze
+     * @return the cyclomatic complexity of the method
+     */
     private int computeCyclomatic(MethodDeclaration m) {
         int decisions = m.findAll(IfStmt.class).size()
                 + m.findAll(ForStmt.class).size()
@@ -64,6 +76,12 @@ public class MetricsCalculator {
         return decisions + 1;
     }
 
+    /**
+     * Computes the cognitive complexity of a method.
+     *
+     * @param m the method declaration to analyze
+     * @return the cognitive complexity of the method
+     */
     private int computeCognitive(MethodDeclaration m) {
         // Proxy: counts nested control blocks
         return m.findAll(Node.class).stream()
@@ -75,6 +93,12 @@ public class MetricsCalculator {
                 .sum();
     }
 
+    /**
+     * Computes Halstead metrics for a method.
+     *
+     * @param m the method declaration to analyze
+     * @return a HalsteadMetrics object containing the computed metrics
+     */
     private HalsteadMetrics computeHalstead(MethodDeclaration m) {
         Set<String> distinctOps = new HashSet<>();
         Set<String> distinctOpr = new HashSet<>();
@@ -126,6 +150,13 @@ public class MetricsCalculator {
                 .build();
     }
 
+    /**
+     * Computes the maximum nesting depth of a method.
+     *
+     * @param node the method declaration to analyze
+     * @param currentDepth the current nesting depth
+     * @return the maximum nesting depth of the method
+     */
     private int computeMaxNestingDepth(Node node, int currentDepth) {
         int max = currentDepth;
         for (Node child : node.getChildNodes()) {

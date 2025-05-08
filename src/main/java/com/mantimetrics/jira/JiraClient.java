@@ -21,8 +21,7 @@ public class JiraClient {
     private String searchBase;
     private String authHeader;
 
-    /* ------------------------------------------------ initialisation -- */
-
+    /** Initialize the JIRA client with the given project key. */
     public void initialize(String projectKey) throws JiraClientException {
         Properties props = new Properties();
         try (InputStream in = getClass().getResourceAsStream("/application.properties")) {
@@ -47,8 +46,7 @@ public class JiraClient {
         log.debug("JIRA search base = {}", searchBase);
     }
 
-    /* ----------------------------------------------------- public API -- */
-
+    /** Fetch all bug keys for the given project. */
     public List<String> fetchBugKeys() throws JiraClientException {
         Set<String> keys = new HashSet<>();
         int startAt = 0;
@@ -81,8 +79,7 @@ public class JiraClient {
         return commitKeys.stream().anyMatch(bugKeys::contains);
     }
 
-    /* ----------------------------------------------------- internals -- */
-
+    /** True if *any* key in the commit message also appears among JIRA bug keys. */
     private JsonNode doRequest(CloseableHttpClient http, String url)
             throws IOException, JiraClientException {
 

@@ -23,6 +23,12 @@ import java.util.stream.Stream;
 public class MantiMetrics {
     private static final Logger log = LoggerFactory.getLogger(MantiMetrics.class);
 
+    /**
+     * Main method to run the MantiMetrics application.
+     *
+     * @param args command line arguments (not used)
+     * @throws Exception if an error occurs during execution
+     */
     public static void main(String[] args) throws Exception {
 
         /* ---------- configs ---------- */

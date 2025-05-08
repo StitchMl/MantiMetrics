@@ -16,7 +16,9 @@ public final class ProjectConfigLoader {
     private static final Logger logger = LoggerFactory.getLogger(ProjectConfigLoader.class);
     private static final String CONFIG_PATH = "/projects-config.json";
 
-    // Nasconde il costruttore pubblico implicito
+    /**
+     * Private constructor to prevent instantiation.
+     */
     private ProjectConfigLoader() {
         throw new AssertionError("Do not instantiate ProjectConfigLoader");
     }

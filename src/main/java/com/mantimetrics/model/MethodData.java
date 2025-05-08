@@ -14,6 +14,10 @@ public class MethodData {
     private final List<String> commitHashes;
     private final boolean buggy;
 
+    /**
+     * Constructor for MethodData.
+     * @param b Builder object containing all the required fields.
+     */
     private MethodData(Builder b) {
         this.projectName     = b.projectName.toUpperCase();
         this.path            = b.path;
@@ -30,6 +34,15 @@ public class MethodData {
     public List<String> getCommitHashes() { return commitHashes; }
     public boolean isBuggy()              { return buggy; }
 
+    /**
+     * Returns a CSV line with the following fields:
+     * projectName, path, methodSignature, releaseId, versionId, commitId,
+     * loc, stmtCount, cyclomatic, cognitive, distinctOperators,
+     * distinctOperands, totalOperators, totalOperands, vocabulary,
+     * length, volume, difficulty, effort, maxNestingDepth,
+     * longMethod (1/0), godClass (1/0), featureEnvy (1/0),
+     * duplicatedCode (1/0), buggy (yes/no)
+     */
     public String toCsvLine() {
         String feats = String.join(",",
                 String.valueOf(metrics.getLoc()),
@@ -64,6 +77,7 @@ public class MethodData {
         );
     }
 
+    /** Returns a CSV header line with the same fields as toCsvLine() */
     public Builder toBuilder() {
         return new Builder()
                 .projectName(this.projectName)

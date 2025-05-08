@@ -47,6 +47,7 @@ public final class GitService {
     private static final long  MAX_ENTRY_BYTES  = 50L * 1024 * 1024;
     private static final long  MAX_TOTAL_BYTES  = 2L  * 1024 * 1024 * 1024;
 
+    /** Creates a new GitService with the given personal access token. */
     public GitService(String pat) {
         this.token = pat;
         this.http  = new OkHttpClient.Builder()
@@ -54,6 +55,7 @@ public final class GitService {
                 .build();
     }
 
+    /** Returns the default branch of the given repository. */
     public String getDefaultBranch(String owner,String repo) {
         return defBranch.computeIfAbsent(owner+'/'+repo, k -> {
             try {
@@ -70,6 +72,7 @@ public final class GitService {
         });
     }
 
+    /** Lists all tags of the given repository. */
     public List<String> listTags(String o,String r) throws IOException, InterruptedException {
         List<String> tags = new ArrayList<>();
         for (int p=1;;p++) {
@@ -81,6 +84,7 @@ public final class GitService {
         return tags;
     }
 
+    /** Builds a file → JIRA-keys map using the commit history of the given branch. */
     public Map<String,List<String>> getFileToIssueKeysMap(String o,String r,String branch)
             throws FileKeyMappingException {
 
@@ -158,6 +162,7 @@ public final class GitService {
         }
     }
 
+    /** Performs a GET request on the given URL, retrying on rate-limit errors. */
     private JsonNode get(String url) throws IOException,InterruptedException {
         for (int a=0;a<MAX_R;a++) {
             Request req = new Request.Builder().url(url)
@@ -230,24 +235,10 @@ public final class GitService {
     }
 
     /**
-     * Downloads a ZIP from {@code url}, extracts it under an *isolated*
-     * temp-directory (~/.mantimetrics-tmp) and returns the directory path.
-     *
-     * <p>Hardens against the usual archive-based attacks:</p>
-     * <ul>
-     *   <li><strong>Zip-Slip / directory traversal</strong> – every entry is
-     *       normalized and verified to stay inside {@code root}.</li>
-     *   <li><strong>Decompression bombs</strong> – aborts if the total
-     *       uncompressed size exceeds {@value #MAX_TOTAL_BYTES} bytes **or**
-     *       if an individual entry is larger than
-     *       {@value #MAX_ENTRY_BYTES} bytes.</li>
-     *   <li><strong>Too many entries</strong> – stops after
-     *       {@value #MAX_ENTRIES} files.</li>
-     * </ul>
+     * Securely downloads a ZIP and extracts it under ~/.mantimetrics-tmp.
+     * Returns the temp-root path.
      */
-    private Path tryDownload(OkHttpClient client,
-                             String url,
-                             String subDir) throws IOException {
+    private Path tryDownload(OkHttpClient client, String url, String subDir) throws IOException {
 
         permits.acquireUninterruptibly();
 
@@ -261,48 +252,24 @@ public final class GitService {
                     "mantimetrics-" + subDir + '-');
             tmp.add(root);
 
-            /* --- secure-extract with quotas --------------------------------- */
-            long  totalBytes  = 0;
-            int   entries     = 0;
+            long totalBytes = 0;
+            int  entries    = 0;
 
-            try (InputStream in  = resp.body().byteStream();
+            try (InputStream in = resp.body().byteStream();
                  ZipInputStream zis = new ZipInputStream(in)) {
 
-                ZipEntry e;
-                while ((e = zis.getNextEntry()) != null) {
+                for (ZipEntry ze; (ze = zis.getNextEntry()) != null; ) {
 
-                    /* ❷ hard quotas */
-                    if (++entries > MAX_ENTRIES)
-                        throw new IOException("ZIP too many entries (> " + MAX_ENTRIES + ')');
-                    if (e.getSize()   > MAX_ENTRY_BYTES)
-                        throw new IOException("ZIP entry too large: " + e.getName());
-                    if (totalBytes + e.getSize() > MAX_TOTAL_BYTES)
-                        throw new IOException("ZIP exceeds overall size limit");
+                    validateEntry(++entries, totalBytes, ze);
+                    Path out = verifyPath(root, ze.getName());
 
-                    Path out = root.resolve(e.getName()).normalize();
-
-                    /* ❸ Zip-Slip stop-gap */
-                    if (!out.startsWith(root))
-                        throw new IOException("ZIP traversal attempt: " + e.getName());
-
-                    if (e.isDirectory()) {
+                    if (ze.isDirectory()) {
                         Files.createDirectories(out);
                     } else {
-                        Files.createDirectories(out.getParent());
-                        /* copy with a bounded buffer to avoid allocation spikes */
-                        try (OutputStream os = Files.newOutputStream(out)) {
-                            byte[] buf = new byte[8 * 1024];
-                            int n;
-                            long written = 0;
-                            while ((n = zis.read(buf)) > 0) {
-                                written += n;
-                                if (written > MAX_ENTRY_BYTES)
-                                    throw new IOException("ZIP entry too large while extracting");
-                                os.write(buf, 0, n);
-                            }
-                        }
+                        extractFile(zis, out, ze.getSize());
                     }
-                    totalBytes += Math.max(0, e.getSize());
+
+                    totalBytes += Math.max(0, ze.getSize());
                     zis.closeEntry();
                 }
             }
@@ -310,6 +277,46 @@ public final class GitService {
         }
     }
 
+    /** Validates the ZIP entry count and size. */
+    private static void validateEntry(int entries, long total, ZipEntry ze) throws IOException {
+        if (entries > MAX_ENTRIES)
+            throw new IOException("ZIP too many entries (> " + MAX_ENTRIES + ')');
+        if (ze.getSize() > MAX_ENTRY_BYTES)
+            throw new IOException("ZIP entry too large: " + ze.getName());
+        if (total + ze.getSize() > MAX_TOTAL_BYTES)
+            throw new IOException("ZIP exceeds overall size limit");
+    }
+
+    /** Verifies that the path is within the root directory. */
+    private static Path verifyPath(Path root, String name) throws IOException {
+        Path out = root.resolve(name).normalize();
+        if (!out.startsWith(root))
+            throw new IOException("ZIP traversal attempt: " + name);
+        return out;
+    }
+
+    /** Extracts the ZIP entry to the given path. */
+    private static void extractFile(ZipInputStream zis, Path out, long declaredSize)
+            throws IOException {
+
+        Files.createDirectories(out.getParent());
+        try (OutputStream os = Files.newOutputStream(out)) {
+            byte[] buf = new byte[8 * 1024];
+            long   written = 0;
+            int    n;
+            while ((n = zis.read(buf)) > 0) {
+                written += n;
+                if (written > MAX_ENTRY_BYTES)
+                    throw new IOException("ZIP entry too large while extracting");
+                os.write(buf, 0, n);
+            }
+            /* an extra paranoia – header might have lied */
+            if (declaredSize >= 0 && written != declaredSize)
+                throw new IOException("ZIP size mismatch for " + out.getFileName());
+        }
+    }
+
+    /** Deletes the temporary directory and all its contents. */
     private static Path privateBox() throws IOException {
         Path box = Paths.get(System.getProperty("user.home")).resolve(DIR_SUFF);
         if (Files.notExists(box)) {
@@ -324,5 +331,6 @@ public final class GitService {
         return box;
     }
 
+    /** Deletes the temporary directory and all its contents. */
     public List<Path> getTmp() { return List.copyOf(tmp); }
 }

@@ -70,7 +70,7 @@ public class ReleaseSelector {
                 return Integer.compare(va, vb);
             }
         }
-        // se sono esattamente uguali numericamente, fallback a confronto stringa
+        // if they are exactly equal numerically, fallback to string comparison
         return a.compareTo(b);
     }
 }
