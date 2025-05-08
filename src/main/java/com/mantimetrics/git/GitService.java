@@ -285,20 +285,39 @@ public final class GitService {
     }
 
     /**
-     * It ensures that the name of the ZIP entry is not abnormal.
+     * Restituisce la prossima entry "ragionevole" del file ZIP.
+     *  – scarta (e logga) voci sospette invece di estrarre l’intero archivio;
+     *  – blocca nomi vuoti, troppo lunghi, assoluti, con “.”, drive-letter, NUL, …;
+     *  – rifiuta entry con size dichiarata negativa o > MAX_ENTRY_BYTES.
+     * <p>
+     * Se non rimangono voci lecite, restituisce {@code null}.
      */
     private static ZipEntry safeNextEntry(ZipInputStream zis) throws IOException {
-    /* Reads the next entry and immediately checks its name length.
-       This way we block any early any attacks with names > 4 k B
-       (which can blow up the allocation in some parsers).          */
-        ZipEntry ze = zis.getNextEntry();
-        if (ze == null) return null;
+        ZipEntry ze;
 
-        String name = ze.getName();
-        if (name.isBlank() || name.length() > 4_096)
-            throw new IOException("Nome entry ZIP anomalo / troppo lungo");
+        while ((ze = zis.getNextEntry()) != null) {
 
-        return ze;
+            /* ----------- name validations -------------------------------- */
+            String name = Optional.of(ze.getName()).orElse("");
+            boolean badName =
+                    name.isBlank()                || name.length() > 4_096   ||
+                            name.startsWith("/")           || name.startsWith("\\")   ||
+                            name.contains("..")            || name.contains(":")      ||
+                            name.indexOf('\0') >= 0;
+
+            /* ----------- validations on declared dimensions ---------------- */
+            long declared = ze.getSize();
+            boolean badSize = declared > MAX_ENTRY_BYTES || declared < -1;
+
+            if (badName || badSize) {
+                LOG.warn("Skipping suspicious ZIP entry '{}'", name);
+                zis.closeEntry();
+                continue;
+            }
+            /* entry OK → returned to caller */
+            return ze;
+        }
+        return null;
     }
 
     /** Validates the number of entries in the ZIP file. */
@@ -309,11 +328,11 @@ public final class GitService {
 
     /** Verifies that the path is within the root directory. */
     private static Path safeTarget(Path root, String name) throws IOException {
-        /* path normalizzato + controllo traversal */
+        /* normalized path + traversal control */
         Path out = root.resolve(name).normalize();
         if (!out.startsWith(root))
             throw new IOException("Tentativo di traversal: " + name);
-        /* rifiuta link simbolici: impedisce «zip slip» tramite symlink */
+        /* reject symbolic links: prevents 'zip slip' via symlinks */
         if (name.contains("..") || name.contains(":") || name.contains("\0"))
             throw new IOException("Nome archivio sospetto: " + name);
         return out;
