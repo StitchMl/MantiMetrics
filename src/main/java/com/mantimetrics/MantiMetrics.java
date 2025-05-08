@@ -9,6 +9,7 @@ import com.mantimetrics.jira.JiraClient;
 import com.mantimetrics.metrics.MetricsCalculator;
 import com.mantimetrics.model.MethodData;
 import com.mantimetrics.parser.CodeParser;
+import com.mantimetrics.parser.CodeParserException;
 import com.mantimetrics.release.ReleaseSelector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,6 +65,7 @@ public class MantiMetrics {
  try (BufferedWriter w = csvOut.open(csvPath)) {
 
  for (String tag : chosen) {
+ try {
  List<MethodData> methods = parser
  .parseAndComputeOnline(owner, repo, tag, calc, file2Keys)
  .stream()
@@ -75,8 +77,12 @@ public class MantiMetrics {
  csvOut.append(w, methods);
 
  long buggy = methods.stream().filter(MethodData::isBuggy).count();
- log.info("{}@{} → {} methods ({} buggy) [saved incrementally]",
- repo, tag, methods.size(), buggy);
+ log.info("{}@{} → {} methods ({} buggy) [saved]", repo, tag,
+ methods.size(), buggy);
+
+ } catch (CodeParserException cpe) { // <── NOVITÀ
+ log.error("❌ {}@{} skipped – {}", repo, tag, cpe.getMessage());
+ }
  }
  }
  }
@@ -85,7 +91,7 @@ public class MantiMetrics {
 
  /* ---------- temp cleanup ---------- */
  private static void cleanup(GitService git) {
- for (Path d : git.getTmpDirs()) try (Stream<Path> w = Files.walk(d)) {
+ for (Path d : git.getTmp()) try (Stream<Path> w = Files.walk(d)) {
  w.sorted(Comparator.reverseOrder()).forEach(p -> {
  try { Files.deleteIfExists(p); } catch (Exception ignore) {}
  });
