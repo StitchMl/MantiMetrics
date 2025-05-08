@@ -46,6 +46,7 @@ public final class GitService {
     private static final int   MAX_ENTRIES      = 20_000;
     private static final long  MAX_ENTRY_BYTES  = 50L * 1024 * 1024;
     private static final long  MAX_TOTAL_BYTES  = 2L  * 1024 * 1024 * 1024;
+    private static final double MAX_INFLATION_RATIO = 200.0;
 
     /** Creates a new GitService with the given personal access token. */
     public GitService(String pat) {
@@ -234,10 +235,7 @@ public final class GitService {
         throw last;
     }
 
-    /**
-     * Securely downloads a ZIP and extracts it under ~/.mantimetrics-tmp.
-     * Returns the temp-root path.
-     */
+    /** Downloads the ZIP file and extracts its contents. */
     private Path tryDownload(OkHttpClient client, String url, String subDir) throws IOException {
 
         permits.acquireUninterruptibly();
@@ -248,72 +246,84 @@ public final class GitService {
             if (!resp.isSuccessful() || resp.body() == null)
                 throw new IOException("ZIP HTTP " + resp.code());
 
-            Path root = Files.createTempDirectory(privateBox(),
-                    "mantimetrics-" + subDir + '-');
+            Path root = Files.createTempDirectory(privateBox(), "mantimetrics-" + subDir + '-');
             tmp.add(root);
 
             long totalBytes = 0;
             int  entries    = 0;
 
-            try (InputStream in = resp.body().byteStream();
+            try (InputStream in  = resp.body().byteStream();
                  ZipInputStream zis = new ZipInputStream(in)) {
 
                 for (ZipEntry ze; (ze = zis.getNextEntry()) != null; ) {
 
-                    validateEntry(++entries, totalBytes, ze);
-                    Path out = verifyPath(root, ze.getName());
+                    entries++;
+                    validateEntryCount(entries);
 
-                    if (ze.isDirectory()) {
-                        Files.createDirectories(out);
-                    } else {
-                        extractFile(zis, out, ze.getSize());
-                    }
+                    Path out = secureTarget(root, ze.getName());
 
-                    totalBytes += Math.max(0, ze.getSize());
-                    zis.closeEntry();
+                    long written = ze.isDirectory()
+                            ? createDir(out)
+                            : extractFile(zis, out);
+
+                    totalBytes = updateTotals(totalBytes, written, ze.getCompressedSize());
                 }
             }
             return root;
         }
     }
 
-    /** Validates the ZIP entry count and size. */
-    private static void validateEntry(int entries, long total, ZipEntry ze) throws IOException {
+    /** Validates the number of entries in the ZIP file. */
+    private static void validateEntryCount(int entries) throws IOException {
         if (entries > MAX_ENTRIES)
-            throw new IOException("ZIP too many entries (> " + MAX_ENTRIES + ')');
-        if (ze.getSize() > MAX_ENTRY_BYTES)
-            throw new IOException("ZIP entry too large: " + ze.getName());
-        if (total + ze.getSize() > MAX_TOTAL_BYTES)
-            throw new IOException("ZIP exceeds overall size limit");
+            throw new IOException("ZIP too many entries (>" + MAX_ENTRIES + ')');
     }
 
     /** Verifies that the path is within the root directory. */
-    private static Path verifyPath(Path root, String name) throws IOException {
+    private static Path secureTarget(Path root, String name) throws IOException {
         Path out = root.resolve(name).normalize();
         if (!out.startsWith(root))
             throw new IOException("ZIP traversal attempt: " + name);
         return out;
     }
 
-    /** Extracts the ZIP entry to the given path. */
-    private static void extractFile(ZipInputStream zis, Path out, long declaredSize)
-            throws IOException {
+    /** Creates the target directory if it does not exist. */
+    private static long createDir(Path dir) throws IOException {
+        Files.createDirectories(dir);
+        return 0;
+    }
 
+    /** Extracts the ZIP entry to the given path. */
+    private static long extractFile(ZipInputStream zis, Path out) throws IOException {
         Files.createDirectories(out.getParent());
+
+        long written = 0;
         try (OutputStream os = Files.newOutputStream(out)) {
             byte[] buf = new byte[8 * 1024];
-            long   written = 0;
-            int    n;
+            int n;
             while ((n = zis.read(buf)) > 0) {
                 written += n;
                 if (written > MAX_ENTRY_BYTES)
-                    throw new IOException("ZIP entry too large while extracting");
+                    throw new IOException("ZIP entry bigger than " + MAX_ENTRY_BYTES + " B");
                 os.write(buf, 0, n);
             }
-            /* an extra paranoia – header might have lied */
-            if (declaredSize >= 0 && written != declaredSize)
-                throw new IOException("ZIP size mismatch for " + out.getFileName());
         }
+        return written;
+    }
+
+    /** Updates the total size and checks the inflation ratio. */
+    private static long updateTotals(long total, long added, long compressed) throws IOException {
+        long newTotal = total + added;
+        if (newTotal > MAX_TOTAL_BYTES)
+            throw new IOException("ZIP exceeds overall size limit");
+
+        /* the compressed size may be –1; skip the ratio check in that case */
+        if (compressed > 0) {
+            double ratio = (double) added / compressed;
+            if (ratio > MAX_INFLATION_RATIO)
+                throw new IOException("ZIP inflation ratio " + ratio + " > " + MAX_INFLATION_RATIO);
+        }
+        return newTotal;
     }
 
     /** Deletes the temporary directory and all its contents. */
