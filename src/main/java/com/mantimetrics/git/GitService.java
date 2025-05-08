@@ -235,11 +235,15 @@ public final class GitService {
         throw last;
     }
 
+    /**
+     * It securely downloads a ZIP archive and expands it under ~/.mantimetrics-tmp.
+     * – Previous Zip-Slip, symlink, decompression-bomb, too many entries ...
+     */
     private Path tryDownload(OkHttpClient client,
                              String url,
                              String subDir) throws IOException {
 
-        permits.acquireUninterruptibly();                // rate-limit globale
+        permits.acquireUninterruptibly();
 
         Request req = new Request.Builder().url(url).build();
         try (Response resp = client.newCall(req).execute()) {
@@ -247,7 +251,7 @@ public final class GitService {
             if (!resp.isSuccessful() || resp.body() == null)
                 throw new IOException("ZIP HTTP " + resp.code());
 
-            /* ① cartella radice isolata (~/.mantimetrics-tmp/…) */
+            /* root sandbox isolata */
             Path root = Files.createTempDirectory(privateBox(),
                     "mantimetrics-" + subDir + '-');
             tmp.add(root);
@@ -258,25 +262,43 @@ public final class GitService {
             try (InputStream    in  = resp.body().byteStream();
                  ZipInputStream zis = new ZipInputStream(in)) {
 
-                ZipEntry ze;
-                while ((ze = zis.getNextEntry()) != null) {
+                for (ZipEntry ze = safeNextEntry(zis);
+                     ze != null;
+                     ze = safeNextEntry(zis)) {
 
-                    validateEntry(++entries);                          // limiti #file
-                    Path target = safeTarget(root, ze.getName());      // Zip-Slip + symlink
+                    validateEntry(++entries);
+                    Path target = safeTarget(root, ze.getName());
 
                     long written = ze.isDirectory()
                             ? dirEnsure(target)
-                            : fileExtract(zis, target);                 // copia sicura
+                            : fileExtract(zis, target);
 
                     totalBytes = checkQuotas(totalBytes,
                             written,
-                            ze.getCompressedSize());  // quote + ratio
+                            ze.getCompressedSize());
 
-                    zis.closeEntry();                                   // chiude entry
+                    zis.closeEntry();
                 }
             }
             return root;
         }
+    }
+
+    /**
+     * It ensures that the name of the ZIP entry is not abnormal.
+     */
+    private static ZipEntry safeNextEntry(ZipInputStream zis) throws IOException {
+    /* Reads the next entry and immediately checks its name length.
+       This way we block any early any attacks with names > 4 k B
+       (which can blow up the allocation in some parsers).          */
+        ZipEntry ze = zis.getNextEntry();
+        if (ze == null) return null;
+
+        String name = ze.getName();
+        if (name.isBlank() || name.length() > 4_096)
+            throw new IOException("Nome entry ZIP anomalo / troppo lungo");
+
+        return ze;
     }
 
     /** Validates the number of entries in the ZIP file. */
