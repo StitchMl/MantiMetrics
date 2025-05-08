@@ -323,21 +323,16 @@ public final class GitService {
                 }
             }
 
-            if(totalSizeArchive > THRESHOLD_SIZE) {
-                // the uncompressed data size is too much for the application resource capacity
-                break;
-            }
-
-            if(totalEntryArchive > THRESHOLD_ENTRIES) {
-                // too many entries in this archive can lead to inodes exhaustion of the system
-                break;
-            }
-
             /* ---- name validation ---- */
             // getName() is never null, so the test on null is superfluous
             assert ze != null;
             String name = ze.getName();
-            if (name.isBlank()
+
+            if(totalSizeArchive > THRESHOLD_SIZE || totalEntryArchive > THRESHOLD_ENTRIES) {
+                // the uncompressed data size is too much for the application resource capacity,
+                // or too many entries in this archive can lead to inodes exhaustion of the system
+                break;
+            } else if (name.isBlank()
                     || name.length() > 4_096
                     || name.startsWith("/")
                     || name.startsWith("\\")
