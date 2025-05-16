@@ -25,17 +25,18 @@ public final class CSVWriter {
             Files.createDirectories(file.getParent());
 
             boolean writeHeader = Files.notExists(file);
-            BufferedWriter w = Files.newBufferedWriter(
+            try (BufferedWriter w = Files.newBufferedWriter(
                     file,
                     StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE,
-                    StandardOpenOption.APPEND);
+                    StandardOpenOption.APPEND)) {
 
-            if (writeHeader) {
-                w.write(HEADER);
-                w.write('\n');
+                if (writeHeader) {
+                    w.write(HEADER);
+                    w.write('\n');
+                }
+                return w;
             }
-            return w;
         } catch (Exception e) {
             throw new CsvWriteException("Cannot open " + file, e);
         }

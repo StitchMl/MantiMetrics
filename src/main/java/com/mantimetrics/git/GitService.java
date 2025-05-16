@@ -220,7 +220,7 @@ public final class GitService {
                 .writeTimeout(java.time.Duration.ZERO)
                 .build();
 
-        IOException last = null;
+        IOException last = new SocketTimeoutException("Timeout downloading " + ref);
         for (int a = 0; a < MAX_R; a++) {
             try {
                 return tryDownload(longHttp, url, subDir);
@@ -302,48 +302,49 @@ public final class GitService {
 
             ze = zis.getNextEntry();
             InputStream in = new BufferedInputStream(zis);
-            OutputStream out = new BufferedOutputStream(new FileOutputStream("./output_onlyForTesting.txt"));
+            try (OutputStream out = new BufferedOutputStream(new FileOutputStream("./output_onlyForTesting.txt"))) {
 
-            totalEntryArchive ++;
+                totalEntryArchive++;
 
-            int nBytes;
-            byte[] buffer = new byte[2048];
-            int totalSizeEntry = 0;
+                int nBytes;
+                byte[] buffer = new byte[2048];
+                int totalSizeEntry = 0;
 
-            while((nBytes = in.read(buffer)) > 0) {
-                out.write(buffer, 0, nBytes);
-                totalSizeEntry += nBytes;
-                totalSizeArchive += nBytes;
+                while ((nBytes = in.read(buffer)) > 0) {
+                    out.write(buffer, 0, nBytes);
+                    totalSizeEntry += nBytes;
+                    totalSizeArchive += nBytes;
 
-                assert ze != null;
-                double compressionRatio = (double) totalSizeEntry / ze.getCompressedSize();
-                if(compressionRatio > THRESHOLD_RATIO) {
-                    // the ratio between compressed and uncompressed data is highly suspicious, looks like a Zip Bomb Attack
-                    break;
+                    assert ze != null;
+                    double compressionRatio = (double) totalSizeEntry / ze.getCompressedSize();
+                    if (compressionRatio > THRESHOLD_RATIO) {
+                        // the ratio between compressed and uncompressed data is highly suspicious, looks like a Zip Bomb Attack
+                        break;
+                    }
                 }
+
+                /* ---- name validation ---- */
+                // getName() is never null, so the test on null is superfluous
+                assert ze != null;
+                String name = ze.getName();
+
+                if ((totalSizeArchive > THRESHOLD_SIZE || totalEntryArchive > THRESHOLD_ENTRIES) && nameValidation(name)) {
+                    // the uncompressed data size is too much for the application resource capacity,
+                    // or too many entries in this archive can lead to inodes exhaustion of the system
+                    // and discards the invalid entry and continues with the cycle
+                    zis.closeEntry();
+                    continue;
+                }
+
+                /* ---- compressed dimension validation ---- */
+                long cSize = ze.getCompressedSize();
+                if (cSize < -1) {
+                    zis.closeEntry();
+                    throw new IOException("ZIP: compressedSize negative for " + name);
+                }
+
+                return ze;
             }
-
-            /* ---- name validation ---- */
-            // getName() is never null, so the test on null is superfluous
-            assert ze != null;
-            String name = ze.getName();
-
-            if((totalSizeArchive > THRESHOLD_SIZE || totalEntryArchive > THRESHOLD_ENTRIES) && nameValidation(name)) {
-                // the uncompressed data size is too much for the application resource capacity,
-                // or too many entries in this archive can lead to inodes exhaustion of the system
-                // and discards the invalid entry and continues with the cycle
-                zis.closeEntry();
-                continue;
-            }
-
-            /* ---- compressed dimension validation ---- */
-            long cSize = ze.getCompressedSize();
-            if (cSize < -1) {
-                zis.closeEntry();
-                throw new IOException("ZIP: compressedSize negative for " + name);
-            }
-
-            return ze;
         }
         return null;
     }

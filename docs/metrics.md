@@ -22,7 +22,7 @@ Number of individual executable instructions (`Statements`) in the method.
 ### 2.1 Cyclomatic Complexity
 Number of linearly independent paths in the method, calculated as **decision points + 1**.
 > **Formula (simple):**  
-> \(\text{CC} = \#{text{if, for, while, do, switch entries, conditional expressions} + 1\)  
+> \(CC = \#(if, for, while, do, switch entries, conditional expressions) + 1\
 > **Meaning:** measures the complexity of the control flow; high values imply more tests needed.  
 
 ### 2.2 Cognitive Complexity

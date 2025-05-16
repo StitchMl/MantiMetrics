@@ -13,9 +13,7 @@ public class ProjectConfig {
     private final String owner;
     private final String name;
     private final Integer percentage;
-    private final String repoUrl;
     private final String jiraProjectKey;
-    private final String localPath;
 
     /**
      * Jackson uses this constructor to create instances from JSON.
@@ -23,7 +21,6 @@ public class ProjectConfig {
      * @param owner project owner
      * @param name project name
      * @param percentage percentage of release
-     * @param repoUrl URL of the Git repo
      * @param jiraProjectKey project key in JIRA
      */
     @JsonCreator
@@ -31,15 +28,12 @@ public class ProjectConfig {
             @JsonProperty("owner") String owner,
             @JsonProperty("name") String name,
             @JsonProperty("percentage") Integer percentage,
-            @JsonProperty("repoUrl") String repoUrl,
             @JsonProperty("jiraKey") String jiraProjectKey
     ) {
         this.owner = owner;
         this.name = name;
         this.percentage = percentage;
-        this.repoUrl = repoUrl;
         this.jiraProjectKey = jiraProjectKey;
-        this.localPath = "repos/" + name.toLowerCase();
     }
 
     // getters...
@@ -52,13 +46,7 @@ public class ProjectConfig {
     public Integer getPercentage() {
         return percentage == null ? 100 : percentage;
     }
-    public String getRepoUrl() {
-        return repoUrl;
-    }
     public String getJiraProjectKey() {
         return jiraProjectKey;
-    }
-    public String getLocalPath() {
-        return localPath;
     }
 }

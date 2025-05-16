@@ -28,6 +28,29 @@
             <AppenderRef ref="Console"/>
         </Logger>
 
+        <!-- 2) NEW loggers to be silenced -->
+        <Logger name="com.github.javaparser.ast.resolution.AsmSymbolResolver" level="off" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="net.sourceforge.pmd.lang.rule.xpath.internal.SaxonXPathRuleQuery" level="off" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="net.sourceforge.pmd.lang.java.ast.JavaLanguageProcessor" level="off" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="net.sourceforge.pmd.reporting.SimpleMessageReporter" level="off" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="net.sourceforge.pmd.PmdAnalysis" level="off" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="net.sourceforge.pmd.rules.RuleSetLoader" level="off" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="net.sourceforge.pmd.util.internal.file.FileCollector" level="off" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
         <!-- default logger -->
         <Root level="trace">
             <AppenderRef ref="Console"/>

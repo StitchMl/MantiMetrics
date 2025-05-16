@@ -17,9 +17,10 @@
     <!-- Core library overrides -->
     <commons.codec.version>1.15</commons.codec.version>             <!-- latest Commons‑Codec 1.x release -->
     <commons.io.version>2.19.0</commons.io.version>                  <!-- latest Commons‑IO 2.x release -->
-    <guava.version>32.1.2-jre</guava.version>                        <!-- Guava 32.1.2‑jre released Aug 2023 -->
+    <guava.version>32.1.2-jre</guava.version>                        <!-- Guava 32.1.2‑jre released Aug 2023 -->
     <okio.version>3.11.0</okio.version>                              <!-- Okio recommends 3.11.0 over 3.4.0 -->
-    <log4j2.version>2.20.0</log4j2.version>                          <!-- Log4j 2.20.0 is the latest stable -->
+    <log4j2.version>2.20.0</log4j2.version>                          <!-- Log4j 2.20.0 is the latest stable -->
+
     <!-- Versioni sicure per override -->
     <groovy.version>2.4.21</groovy.version>
     <plexus.utils.version>3.0.24</plexus.utils.version>
@@ -95,6 +96,8 @@
       <artifactId>log4j-slf4j-impl</artifactId>
       <version>${log4j2.version}</version>
     </dependency>
+
+    <!-- Log4j2 API -->
     <dependency>
       <groupId>org.fusesource.jansi</groupId>
       <artifactId>jansi</artifactId>
@@ -182,6 +185,41 @@
         </exclusion>
       </exclusions>
     </dependency>
+
+    <!-- PMD core -->
+    <dependency>
+      <groupId>net.sourceforge.pmd</groupId>
+      <artifactId>pmd-core</artifactId>
+      <version>7.10.0</version>
+    </dependency>
+
+    <!-- PMD Java engine -->
+    <dependency>
+      <groupId>net.sourceforge.pmd</groupId>
+      <artifactId>pmd-java</artifactId>
+      <version>7.0.0</version>
+      <exclusions>
+        <exclusion>              <!-- deactivates the internal logger -->
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-simple</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!-- SonarQube Scanner -->
+    <dependency>
+      <groupId>org.sonarsource.scanner.cli</groupId>
+      <artifactId>sonar-scanner-cli</artifactId>
+      <version>5.0.1.3006</version>   <!-- latest LTS scanner -->
+      <scope>runtime</scope>          <!-- we only fork it -->
+    </dependency>
+
+    <dependency>
+      <!-- SpotBugs still maintains edu.umd.cs.findbugs packages -->
+      <groupId>com.github.spotbugs</groupId>
+      <artifactId>spotbugs</artifactId>
+      <version>4.8.3</version>   <!-- latest 4.x stable at the moment -->
+    </dependency>
   </dependencies>
 
   <build>
@@ -193,6 +231,23 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <version>4.7.3.5</version>
+        <configuration>
+          <!-- example of useful configurations -->
+          <effort>Max</effort>
+          <threshold>Low</threshold>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check</goal>   <!-- launches analysis on verifying -->
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
