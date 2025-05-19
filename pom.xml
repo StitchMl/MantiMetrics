@@ -21,7 +21,7 @@
     <okio.version>3.11.0</okio.version>                              <!-- Okio recommends 3.11.0 over 3.4.0 -->
     <log4j2.version>2.20.0</log4j2.version>                          <!-- Log4j 2.20.0 is the latest stable -->
 
-    <!-- Versioni sicure per override -->
+    <!-- Safe versions for override -->
     <groovy.version>2.4.21</groovy.version>
     <plexus.utils.version>3.0.24</plexus.utils.version>
     <maven.core.version>3.8.8</maven.core.version>
@@ -41,14 +41,14 @@
       </exclusions>
     </dependency>
 
-    <!-- Forza Plexus‑Utils ≥ 3.0.16 -->
+    <!-- Force Plexus-Utils ≥ 3.0.16 -->
     <dependency>
       <groupId>org.codehaus.plexus</groupId>
       <artifactId>plexus-utils</artifactId>
       <version>${plexus.utils.version}</version>
     </dependency>
 
-    <!-- Forza Maven‑Core 3.8.8 -->
+    <!-- Force Maven-Core 3.8.8 -->
     <dependency>
       <groupId>org.apache.maven</groupId>
       <artifactId>maven-core</artifactId>
@@ -166,14 +166,14 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- OkHttp3 per chiamate HTTP a GitHub API -->
+    <!-- OkHttp3 for HTTP calls to GitHub API -->
     <dependency>
       <groupId>com.squareup.okhttp3</groupId>
       <artifactId>okhttp</artifactId>
       <version>4.11.0</version>
     </dependency>
 
-    <!-- Se qualche plugin porta maven-core:2.0.9, escludilo -->
+    <!-- If any plugin carries maven-core:2.0.9, exclude it -->
     <dependency>
       <groupId>org.apache.maven.plugins</groupId>
       <artifactId>maven-clean-plugin</artifactId>
@@ -214,37 +214,63 @@
       <scope>runtime</scope>          <!-- we only fork it -->
     </dependency>
 
+    <!-- SonarQube Java plugin -->
     <dependency>
-      <!-- SpotBugs still maintains edu.umd.cs.findbugs packages -->
       <groupId>com.github.spotbugs</groupId>
       <artifactId>spotbugs</artifactId>
-      <version>4.8.3</version>   <!-- latest 4.x stable at the moment -->
+      <version>4.9.3</version>
+    </dependency>
+
+    <!-- SpotBugs annotations -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-xml</artifactId>
+      <version>2.16.1</version>
+    </dependency>
+
+    <!-- SpotBugs annotations -->
+    <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-lang3</artifactId>
+        <version>3.17.0</version>
     </dependency>
   </dependencies>
 
   <build>
     <plugins>
+
+      <!-- Maven Compiler Plugin -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
       </plugin>
+
+        <!-- Maven Surefire Plugin -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
       </plugin>
+
+        <!-- Maven Assembly Plugin -->
       <plugin>
         <groupId>com.github.spotbugs</groupId>
         <artifactId>spotbugs-maven-plugin</artifactId>
-        <version>4.7.3.5</version>
+        <version>4.9.3.0</version>
         <configuration>
-          <!-- example of useful configurations -->
-          <effort>Max</effort>
+          <!-- Produces the report in XML format -->
+          <xmlOutput>true</xmlOutput>
+          <!-- XML output directory -->
+          <xmlOutputDirectory>${project.build.directory}/spotbugs</xmlOutputDirectory>
+          <!-- Lower threshold to include low-priority bugs -->
           <threshold>Low</threshold>
+          <!-- Maximum analysis effort -->
+          <effort>Max</effort>
         </configuration>
         <executions>
           <execution>
             <goals>
-              <goal>check</goal>   <!-- launches analysis on verifying -->
+              <!-- goal generating report -->
+              <goal>spotbugs</goal>
             </goals>
           </execution>
         </executions>

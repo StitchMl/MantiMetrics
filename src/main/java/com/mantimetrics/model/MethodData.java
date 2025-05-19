@@ -1,80 +1,107 @@
 package com.mantimetrics.model;
 
 import com.mantimetrics.metrics.MethodMetrics;
+
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
+import java.util.StringJoiner;
 
 public class MethodData {
     private final String projectName;
     private final String path;
     private final String methodSignature;
     private final String releaseId;
-    private final String versionId;
-    private final String commitId;
     private final MethodMetrics metrics;
     private final List<String> commitHashes;
     private final boolean buggy;
+    private final int codeSmells;
 
     /**
      * Constructor for MethodData.
      * @param b Builder object containing all the required fields.
      */
     private MethodData(Builder b) {
-        this.projectName     = b.projectName.toUpperCase();
+        this.projectName     = b.projectName;
         this.path            = b.path;
         this.methodSignature = b.methodSignature;
         this.releaseId       = b.releaseId;
-        this.versionId       = b.versionId;
-        this.commitId        = b.commitId;
         this.metrics         = b.metrics;
         this.commitHashes    = List.copyOf(b.commitHashes);
         this.buggy           = b.buggy;
+        this.codeSmells      = b.codeSmells;
     }
 
-    // getters...
+    // Getter methods
+    public String getPath()            { return path; }
+    public MethodMetrics getMetrics()  { return metrics; }
     public List<String> getCommitHashes() { return commitHashes; }
-    public boolean isBuggy()              { return buggy; }
+    public boolean isBuggy()           { return buggy; }
+    public int getCodeSmells()   { return codeSmells; }
 
     /**
-     * Returns a CSV line with the following fields:
-     * projectName, path, methodSignature, releaseId, versionId, commitId,
-     * loc, stmtCount, cyclomatic, cognitive, distinctOperators,
-     * distinctOperands, totalOperators, totalOperands, vocabulary,
-     * length, volume, difficulty, effort, maxNestingDepth,
-     * longMethod (1/0), godClass (1/0), featureEnvy (1/0),
-     * duplicatedCode (1/0), buggy (yes/no)
+     * Builds a CSV line with appropriate quoting and escaping.
      */
     public String toCsvLine() {
-        String feats = String.join(",",
-                String.valueOf(metrics.getLoc()),
-                String.valueOf(metrics.getStmtCount()),
-                String.valueOf(metrics.getCyclomatic()),
-                String.valueOf(metrics.getCognitive()),
-                String.valueOf(metrics.getDistinctOperators()),
-                String.valueOf(metrics.getDistinctOperands()),
-                String.valueOf(metrics.getTotalOperators()),
-                String.valueOf(metrics.getTotalOperands()),
-                String.valueOf(metrics.getVocabulary()),
-                String.valueOf(metrics.getLength()),
-                String.valueOf(metrics.getVolume()),
-                String.valueOf(metrics.getDifficulty()),
-                String.valueOf(metrics.getEffort()),
-                String.valueOf(metrics.getMaxNestingDepth()),
-                metrics.isLongMethod()     ? "1":"0",
-                metrics.isGodClass()       ? "1":"0",
-                metrics.isFeatureEnvy()    ? "1":"0",
-                metrics.isDuplicatedCode() ? "1":"0"
-        );
+        StringJoiner sj = new StringJoiner(",");
+        sj.add(projectName)
+                .add(path)
+                // escape embedded quotes per RFC4180
+                .add('"' + methodSignature.replace("\"", "\"\"") + '"')
+                .add(releaseId);
 
-        return String.join(",",
-                projectName,
-                path,
-                "\"" + methodSignature.replace("\"","\"\"") + "\"",
+        // metrics fields
+        sj.add(String.valueOf(metrics.getLoc()))
+                .add(String.valueOf(metrics.getStmtCount()))
+                .add(String.valueOf(metrics.getCyclomatic()))
+                .add(String.valueOf(metrics.getCognitive()))
+                .add(String.valueOf(metrics.getDistinctOperators()))
+                .add(String.valueOf(metrics.getDistinctOperands()))
+                .add(String.valueOf(metrics.getTotalOperators()))
+                .add(String.valueOf(metrics.getTotalOperands()))
+                .add(String.valueOf(metrics.getVocabulary()))
+                .add(String.valueOf(metrics.getLength()))
+                .add(String.valueOf(metrics.getVolume()))
+                .add(String.valueOf(metrics.getDifficulty()))
+                .add(String.valueOf(metrics.getEffort()))
+                .add(String.valueOf(metrics.getMaxNestingDepth()))
+                .add(metrics.isLongMethod()     ? "1" : "0")
+                .add(metrics.isGodClass()       ? "1" : "0")
+                .add(metrics.isFeatureEnvy()    ? "1" : "0")
+                .add(metrics.isDuplicatedCode() ? "1" : "0")
+                .add(buggy ? "yes" : "no");
+        return sj.toString();
+    }
+
+    /**
+     * Standard equals() following the contract: reflexive, symmetric, transitive,
+     * consistent, and null-safe. Must override hashCode() accordingly.
+     */
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof MethodData)) return false;
+        MethodData that = (MethodData) o;
+        return buggy == that.buggy &&
+                projectName.equals(that.projectName) &&
+                path.equals(that.path) &&
+                methodSignature.equals(that.methodSignature) &&
+                releaseId.equals(that.releaseId) &&
+                metrics.equals(that.metrics) &&
+                commitHashes.equals(that.commitHashes);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(projectName, path, methodSignature,
                 releaseId,
-                versionId,
-                commitId,
-                feats,
-                buggy ? "yes" : "no"
-        );
+                metrics, commitHashes, buggy);
+    }
+
+    @Override
+    public String toString() {
+        return "MethodData[" + projectName + "/" + path +
+                "@" + releaseId + ", signature=" + methodSignature + "]";
     }
 
     /** Returns a CSV header line with the same fields as toCsvLine() */
@@ -84,58 +111,57 @@ public class MethodData {
                 .path(this.path)
                 .methodSignature(this.methodSignature)
                 .releaseId(this.releaseId)
-                .versionId(this.versionId)
-                .commitId(this.commitId)
                 .metrics(this.metrics)
                 .commitHashes(this.commitHashes)
                 .buggy(this.buggy);
     }
 
+    /**
+     * Builder for MethodData. Enforces required fields and immutability.
+     */
     public static class Builder {
         private String projectName;
         private String path;
         private String methodSignature;
         private String releaseId;
-        private String versionId;
-        private String commitId;
         private MethodMetrics metrics;
-        private List<String> commitHashes;
+        private List<String> commitHashes = Collections.emptyList();
         private boolean buggy;
+        private int codeSmells;
 
         public Builder projectName(String projectName) {
-            this.projectName = projectName; return this;
+            this.projectName = Objects.requireNonNull(projectName, "projectName"); return this;
         }
         public Builder path(String path) {
-            this.path = path; return this;
+            this.path = Objects.requireNonNull(path, "path"); return this;
         }
-        public Builder methodSignature(String sig) {
-            this.methodSignature = sig; return this;
+        public Builder methodSignature(String methodSignature) {
+            this.methodSignature = Objects.requireNonNull(methodSignature, "methodSignature"); return this;
         }
         public Builder releaseId(String releaseId) {
-            this.releaseId = releaseId; return this;
-        }
-        public Builder versionId(String versionId) {
-            this.versionId = versionId; return this;
-        }
-        public Builder commitId(String commitId) {
-            this.commitId = commitId; return this;
+            this.releaseId = Objects.requireNonNull(releaseId, "releaseId"); return this;
         }
         public Builder metrics(MethodMetrics metrics) {
-            this.metrics = metrics; return this;
+            this.metrics = Objects.requireNonNull(metrics, "metrics"); return this;
         }
         public Builder commitHashes(List<String> hashes) {
-            this.commitHashes = List.copyOf(hashes); return this;
+            this.commitHashes = List.copyOf(Objects.requireNonNull(hashes, "commitHashes")); return this;
         }
         public Builder buggy(boolean buggy) {
             this.buggy = buggy; return this;
         }
+        public Builder codeSmells(int cs) {
+            this.codeSmells = cs;
+            return this;
+        }
 
         private void validate() {
-            if (projectName == null || path == null || methodSignature == null
-                    || releaseId == null || versionId == null || commitId == null
-                    || metrics == null || commitHashes == null) {
-                throw new IllegalStateException("Missing required fields in MethodData");
-            }
+            Objects.requireNonNull(projectName,     "projectName missing");
+            Objects.requireNonNull(path,            "path missing");
+            Objects.requireNonNull(methodSignature, "methodSignature missing");
+            Objects.requireNonNull(releaseId,       "releaseId missing");
+            Objects.requireNonNull(metrics,         "metrics missing");
+            Objects.requireNonNull(commitHashes,    "commitHashes missing");
         }
 
         public MethodData build() {

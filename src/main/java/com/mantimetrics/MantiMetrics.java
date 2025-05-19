@@ -10,6 +10,7 @@ import com.mantimetrics.metrics.MetricsCalculator;
 import com.mantimetrics.model.MethodData;
 import com.mantimetrics.parser.CodeParser;
 import com.mantimetrics.parser.CodeParserException;
+import com.mantimetrics.pmd.PmdAnalyzer;
 import com.mantimetrics.release.ReleaseSelector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +45,7 @@ public class MantiMetrics {
         ReleaseSelector   sel    = new ReleaseSelector();
         JiraClient        jira   = new JiraClient();
         CSVWriter         csvOut = new CSVWriter();
+        PmdAnalyzer       pmd    = new PmdAnalyzer(Paths.get("rulesets/java/quickstart.xml"));
 
         /* ---------- projects ---------- */
         for (ProjectConfig cfg : configs) {
@@ -73,11 +75,15 @@ public class MantiMetrics {
                 log.info("Writing CSV to {}", csvPath);
                 for (String tag : chosen) {
                     try {
+                        // 1) Run PMD and SpotBugs
+                        int codeSmells = pmd.analyze(Paths.get("src")).getViolations().size();
+
                         List<MethodData> methods = parser
                                 .parseAndComputeOnline(owner, repo, tag, calc, file2Keys)
                                 .stream()
                                 .map(m -> m.toBuilder()
                                         .buggy(jira.isMethodBuggy(m.getCommitHashes(), bugKeys))
+                                        .codeSmells(codeSmells)
                                         .build())
                                 .collect(Collectors.toList());
 
@@ -87,7 +93,7 @@ public class MantiMetrics {
                         log.info("{}@{} → {} methods ({} buggy) [saved]", repo, tag,
                                 methods.size(), buggy);
 
-                    } catch (CodeParserException cpe) {          // <── NOVITÀ
+                    } catch (CodeParserException cpe) {
                         log.error("❌ {}@{} skipped – {}", repo, tag, cpe.getMessage());
                     }
                 }

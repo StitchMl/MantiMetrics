@@ -1,6 +1,9 @@
 package com.mantimetrics.parser;
 
+import com.github.javaparser.ParserConfiguration;
+import com.github.javaparser.ParseStart;
 import com.github.javaparser.JavaParser;
+import com.github.javaparser.Providers;
 import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.mantimetrics.git.GitService;
@@ -9,18 +12,15 @@ import com.mantimetrics.model.MethodData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.stream.Stream;
 
 public final class CodeParser {
-
     private static final Logger LOG = LoggerFactory.getLogger(CodeParser.class);
     private final GitService git;
-
-    /** a single instance of parser, reusable and thread-safe */
-    private static final JavaParser PARSER = new JavaParser();
     private static final long MAX_FILE_BYTES = 8L * 1024 * 1024;
 
     /**
@@ -39,35 +39,29 @@ public final class CodeParser {
             String tag,
             MetricsCalculator calc,
             Map<String, List<String>> fileToKeys) throws CodeParserException {
-
         LOG.trace("Analysing {}/{}@{}", owner, repo, tag);
 
-        /* 1 ─ download & unpack */
-        final Path root;
+        // 1. Download & unzip
+        Path root;
         try {
             root = git.downloadAndUnzipRepo(owner, repo, tag, "release-" + tag);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            throw new CodeParserException("Interrupted while downloading " + tag, ie);
+            throw new CodeParserException("Interrupted downloading " + tag, ie);
         } catch (IOException ioe) {
             throw new CodeParserException("Download/Unzip failed for " + repo + '@' + tag, ioe);
         }
 
         List<MethodData> out = new ArrayList<>();
-
-        /* 2 ─ lazy walk of .java files */
         try (Stream<Path> files = Files.walk(root)) {
             files.filter(p -> p.toString().endsWith(".java"))
                     .forEach(p -> {
                         Optional<String> relOpt = shouldSkip(root, p, repo);
-                        if (relOpt.isEmpty()) return;
-
-                        String relUnix = relOpt.get();
-                        List<String> jiraKeys = fileToKeys.getOrDefault(relUnix, List.of());
-
-                        collectMethods(p, relUnix, repo, tag, jiraKeys, calc, out);
+                        relOpt.ifPresent(relUnix -> {
+                            List<String> jiraKeys = fileToKeys.getOrDefault(relUnix, List.of());
+                            collectMethods(p, relUnix, repo, tag, jiraKeys, calc, out);
+                        });
                     });
-
         } catch (IOException io) {
             throw new CodeParserException("I/O walking " + root, io);
         } finally {
@@ -87,11 +81,10 @@ public final class CodeParser {
             LOG.warn("Cannot stat {}, skipping – {}", path, ex.getMessage());
             return Optional.empty();
         }
-
         Path rel = root.relativize(path);
-        if (rel.getNameCount() > 1 && rel.getName(0).toString().startsWith(repo + "-"))
+        if (rel.getNameCount() > 1 && rel.getName(0).toString().startsWith(repo + "-")) {
             rel = rel.subpath(1, rel.getNameCount());
-
+        }
         return Optional.of(rel.toString().replace('\\', '/'));
     }
 
@@ -103,8 +96,11 @@ public final class CodeParser {
                                        List<String> jiraKeys,
                                        MetricsCalculator calc,
                                        List<MethodData> sink) {
-        try {
-            PARSER.parse(Files.readString(file))
+        LOG.debug("Parsing file {}", file);
+        ParserConfiguration config = new ParserConfiguration();
+        JavaParser parser = new JavaParser(config);
+        try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(reader))
                     .getResult()
                     .ifPresent(cu -> cu.findAll(MethodDeclaration.class)
                             .forEach(m -> m.getRange().ifPresent(r ->
@@ -113,34 +109,31 @@ public final class CodeParser {
                                             .path('/' + relUnix + '/')
                                             .methodSignature(m.getDeclarationAsString(true, true, true))
                                             .releaseId(tag)
-                                            .versionId(tag)
-                                            .commitId(tag)
                                             .metrics(calc.computeAll(m))
                                             .commitHashes(jiraKeys)
                                             .buggy(false)
                                             .build()))));
-        } catch (ParseProblemException ex) {
-            LOG.warn("Failed to parse {}: {}", file, ex.getMessage());
-        } catch (IOException ex) {
-            LOG.warn("Failed to read {}: {}", file, ex.getMessage());
-        } catch (RuntimeException ex) {
-            LOG.warn("Failed to process {}: {}", file, ex.getMessage());
+        } catch (ParseProblemException ppe) {
+            LOG.warn("Failed to parse {}: {}", file, ppe.getMessage());
+        } catch (IOException ioe) {
+            LOG.warn("Failed to read {}: {}", file, ioe.getMessage());
         }
     }
 
     /** Best-effort recursive delete (no exceptions propagated). */
     private static void deleteRecursively(Path dir) {
         try (Stream<Path> s = Files.walk(dir)) {
-            s.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try {
-                    Files.deleteIfExists(p);
-                } catch (IOException ignore) {
-                    LOG.warn("[INT] Failed to delete {}", p);
-                }
-            });
+            s.sorted(Comparator.reverseOrder())
+                    .forEach(p -> {
+                        try {
+                            Files.deleteIfExists(p);
+                        } catch (IOException e) {
+                            LOG.warn("Failed to delete {}: {}", p, e.getMessage());
+                        }
+                    });
             LOG.trace("Deleted temp dir {}", dir);
         } catch (IOException ignore) {
-            LOG.warn("[EXT] Failed to delete {}", dir);
+            LOG.warn("Failed to delete {}", dir);
         }
     }
 }

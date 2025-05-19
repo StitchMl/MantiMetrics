@@ -10,33 +10,38 @@ import java.util.List;
 public final class CSVWriter {
 
     /** exception thrown when CSV write fails */
-    private static final String HEADER = String.join(",",
-            "Project","Path","Method","ReleaseId","VersionId","CommitId",
+    private static final String[] COLUMNS = {
+            "Project","Path","Method","ReleaseId",
             "LOC","StmtCount","Cyclomatic","Cognitive",
             "DistinctOperators","DistinctOperands",
             "TotalOperators","TotalOperands",
             "Vocabulary","Length","Volume","Difficulty","Effort",
             "MaxNestingDepth","isLongMethod","isGodClass","isFeatureEnvy",
-            "isDuplicatedCode","Buggy");
+            "isDuplicatedCode","CodeSmells","Buggy"
+    };
+
+    private static final String HEADER = String.join(",", COLUMNS);
 
     /** opens the file in appending; if it does not exist, it first writes the header */
     public BufferedWriter open(Path file) throws CsvWriteException {
         try {
             Files.createDirectories(file.getParent());
-
             boolean writeHeader = Files.notExists(file);
-            try (BufferedWriter w = Files.newBufferedWriter(
-                    file,
-                    StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.APPEND)) {
 
-                if (writeHeader) {
-                    w.write(HEADER);
-                    w.write('\n');
+            // 1) Write header (stream closed immediately afterward)
+            if (writeHeader) {
+                try (BufferedWriter headerWriter = Files.newBufferedWriter(
+                        file, StandardCharsets.UTF_8,
+                        StandardOpenOption.CREATE)) {
+                    headerWriter.write(HEADER);
+                    headerWriter.newLine();
                 }
-                return w;
             }
+
+            // 2) Opening writer for the appendix without automatic closure
+            return Files.newBufferedWriter(
+                    file, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (Exception e) {
             throw new CsvWriteException("Cannot open " + file, e);
         }
