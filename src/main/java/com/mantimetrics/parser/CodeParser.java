@@ -16,6 +16,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public final class CodeParser {
@@ -42,32 +43,47 @@ public final class CodeParser {
         LOG.trace("Analysing {}/{}@{}", owner, repo, tag);
 
         // 1. Download & unzip
+        String prefix = tag.toLowerCase().startsWith("release-") ? tag : "release-" + tag;
         Path root;
         try {
-            root = git.downloadAndUnzipRepo(owner, repo, tag, "release-" + tag);
+            root = git.downloadAndUnzipRepo(owner, repo, tag, prefix);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
             throw new CodeParserException("Interrupted downloading " + tag, ie);
         } catch (IOException ioe) {
             throw new CodeParserException("Download/Unzip failed for " + repo + '@' + tag, ioe);
         }
+        LOG.trace("Unzipped to {}", root);
+        LOG.info("Estratti {} file totali in {}", countFiles(root), root);
 
         List<MethodData> out = new ArrayList<>();
         try (Stream<Path> files = Files.walk(root)) {
-            files.filter(p -> p.toString().endsWith(".java"))
-                    .forEach(p -> {
-                        Optional<String> relOpt = shouldSkip(root, p, repo);
-                        relOpt.ifPresent(relUnix -> {
-                            List<String> jiraKeys = fileToKeys.getOrDefault(relUnix, List.of());
-                            collectMethods(p, relUnix, repo, tag, jiraKeys, calc, out);
-                        });
-                    });
+            List<Path> javaFiles = files.filter(p -> p.toString().toLowerCase().endsWith(".java")).collect(Collectors.toList());
+            LOG.trace("Numero di file .java da processare: {}", javaFiles.size());
+            for (Path p : javaFiles) {
+                Optional<String> relOpt = shouldSkip(root, p, repo);
+                if (relOpt.isPresent()) {
+                    String relUnix = relOpt.get();
+                    List<String> jiraKeys = fileToKeys.getOrDefault(relUnix, List.of());
+                    collectMethods(p, relUnix, repo, tag, jiraKeys, calc, out);
+                }
+            }
         } catch (IOException io) {
             throw new CodeParserException("I/O walking " + root, io);
         } finally {
             deleteRecursively(root);
         }
         return out;
+    }
+
+    /** Conta il numero di file .java (o tutti i file se estensione è null) in una directory ricorsivamente. */
+    private static long countFiles(Path dir) {
+        try (Stream<Path> s = Files.walk(dir)) {
+            return s.filter(p -> Files.isRegularFile(p) && p.toString().toLowerCase().endsWith(".java")).count();
+        } catch (IOException e) {
+            LOG.warn("Impossibile contare i file in {}: {}", dir, e.getMessage());
+            return 0;
+        }
     }
 
     /** Returns the normalized unix-style path, or empty() if the file must be skipped. */

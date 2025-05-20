@@ -41,12 +41,8 @@ public final class GitService {
     private final List<Path> tmp = new CopyOnWriteArrayList<>();
 
     private static final int   MAX_ENTRIES      = 20_000;
-    private static final long  MAX_ENTRY_BYTES  = 50L * 1024 * 1024;
     private static final long  MAX_TOTAL_BYTES  = 2L  * 1024 * 1024 * 1024;
     private static final double MAX_INFLATION_RATIO = 200.0;
-    private static final double THRESHOLD_RATIO = 10;
-    private static final int THRESHOLD_ENTRIES = 10000;
-    private static final int THRESHOLD_SIZE = 1000000000;
 
     /** Creates a new GitService with the given personal access token. */
     public GitService(String pat) {
@@ -262,20 +258,20 @@ public final class GitService {
             try (InputStream    in  = resp.body().byteStream();
                  ZipInputStream zis = new ZipInputStream(in)) {
 
-                for (ZipEntry ze = safeNextEntry(zis);
-                     ze != null;
-                     ze = safeNextEntry(zis)) {
+                ZipEntry ze;
+                while ((ze = safeNextEntry(zis)) != null) {
 
                     validateEntry(++entries);
                     Path target = safeTarget(root, ze.getName());
 
-                    long written = ze.isDirectory()
-                            ? dirEnsure(target)
-                            : fileExtract(zis, target);
-
-                    totalBytes = checkQuotas(totalBytes,
-                            written,
-                            ze.getCompressedSize());
+                    if (ze.isDirectory()) {
+                        Files.createDirectories(target);
+                        LOG.debug("Created directory {}", target);
+                    } else {
+                        long written = fileExtract(zis, target);
+                        LOG.debug("Extracted file {} ({} bytes)", target, written);
+                        totalBytes = checkQuotas(totalBytes, written, ze.getCompressedSize());
+                    }
 
                     zis.closeEntry();
                 }
@@ -294,69 +290,60 @@ public final class GitService {
      */
     private static ZipEntry safeNextEntry(ZipInputStream zis) throws IOException {
         ZipEntry ze;
-        int totalEntryArchive = 0;
-        int totalSizeArchive = 0;
 
         // true loop: it iterates until it finds a valid entry or finishes the file
-        while (zis.available() != 0) {
+        while ((ze = zis.getNextEntry()) != null) {
 
-            ze = zis.getNextEntry();
-            InputStream in = new BufferedInputStream(zis);
-            try (OutputStream out = new BufferedOutputStream(new FileOutputStream("./output_onlyForTesting.txt"))) {
+            String name = ze.getName();
+            long cSize = ze.getCompressedSize();
 
-                totalEntryArchive++;
-
-                int nBytes;
-                byte[] buffer = new byte[2048];
-                int totalSizeEntry = 0;
-
-                while ((nBytes = in.read(buffer)) > 0) {
-                    out.write(buffer, 0, nBytes);
-                    totalSizeEntry += nBytes;
-                    totalSizeArchive += nBytes;
-
-                    assert ze != null;
-                    double compressionRatio = (double) totalSizeEntry / ze.getCompressedSize();
-                    if (compressionRatio > THRESHOLD_RATIO) {
-                        // the ratio between compressed and uncompressed data is highly suspicious, looks like a Zip Bomb Attack
-                        break;
-                    }
-                }
-
-                /* ---- name validation ---- */
-                // getName() is never null, so the test on null is superfluous
-                assert ze != null;
-                String name = ze.getName();
-
-                if ((totalSizeArchive > THRESHOLD_SIZE || totalEntryArchive > THRESHOLD_ENTRIES) && nameValidation(name)) {
-                    // the uncompressed data size is too much for the application resource capacity,
-                    // or too many entries in this archive can lead to inodes exhaustion of the system
-                    // and discards the invalid entry and continues with the cycle
-                    zis.closeEntry();
-                    continue;
-                }
-
-                /* ---- compressed dimension validation ---- */
-                long cSize = ze.getCompressedSize();
-                if (cSize < -1) {
-                    zis.closeEntry();
-                    throw new IOException("ZIP: compressedSize negative for " + name);
-                }
-
-                return ze;
+            // filters out suspicious names or negative compressed size
+            if (nameValidation(name)) {
+                LOG.warn("Skipping invalid entry name: {}", name);
+                zis.closeEntry();
+                continue;
             }
+            if (cSize < 0) {
+                zis.closeEntry();
+                throw new IOException("ZIP: compressedSize negative for " + name);
+            }
+
+            return ze;
         }
         return null;
     }
 
-    private static boolean nameValidation(String name){
-        return (name.isBlank()
-                || name.length() > 4_096
-                || name.startsWith("/")
-                || name.startsWith("\\")
-                || name.contains("..")
-                || name.indexOf('\0') >= 0
-                || name.contains(":"));
+    private static boolean nameValidation(String name) {
+        if (name.isBlank()) {
+            LOG.warn("Skipping entry: blank name");
+            return true;
+        }
+        if (name.length() > 4096) {
+            LOG.warn("Skipping entry: name too long ({})", name.length());
+            return true;
+        }
+        if (name.startsWith("/")) {
+            LOG.warn("Skipping entry: starts with '/'");
+            return true;
+        }
+        if (name.startsWith("\\")) {
+            LOG.warn("Skipping entry: starts with '\\'");
+            return true;
+        }
+        if (name.contains("..")) {
+            LOG.warn("Skipping entry: contains '..'");
+            return true;
+        }
+        if (name.indexOf('\0') >= 0) {
+            LOG.warn("Skipping entry: contains NUL character");
+            return true;
+        }
+        // Windows path with a drive letter (e.g. 'C:' or 'D:\')
+        if (name.length() > 1 && Character.isLetter(name.charAt(0)) && name.charAt(1) == ':') {
+            LOG.warn("Skipping entry: Windows drive letter");
+            return true;
+        }
+        return false;
     }
 
     /** Validates the number of entries in the ZIP file. */
@@ -377,25 +364,20 @@ public final class GitService {
         return out;
     }
 
-    /** Creates the target directory if it does not exist. */
-    private static long dirEnsure(Path dir) throws IOException {
-        Files.createDirectories(dir);
-        return 0;
-    }
-
     /** Extracts the ZIP entry to the given path. */
-    private static long fileExtract(ZipInputStream zis, Path out) throws IOException {
-        Files.createDirectories(out.getParent());
+    private long fileExtract(ZipInputStream zis, Path target) throws IOException {
+        // creates parent directories if they are missing
+        Files.createDirectories(target.getParent());
+
         long written = 0;
-        try (OutputStream os = Files.newOutputStream(out,
-                StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
-            byte[] buf = new byte[8 * 1024];
-            int n;
-            while ((n = zis.read(buf)) > 0) {
-                written += n;
-                if (written > MAX_ENTRY_BYTES)
-                    throw new IOException("Entry > " + MAX_ENTRY_BYTES + " B");
-                os.write(buf, 0, n);
+        byte[] buffer = new byte[8 * 1024];
+        int len;
+
+        try (OutputStream os = Files.newOutputStream(target,
+                StandardOpenOption.CREATE_NEW)) {
+            while ((len = zis.read(buffer)) > 0) {
+                os.write(buffer, 0, len);
+                written += len;
             }
         }
         return written;
