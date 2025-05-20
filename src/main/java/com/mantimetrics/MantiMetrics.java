@@ -59,15 +59,16 @@ public class MantiMetrics {
 
             jira.initialize(cfg.getJiraProjectKey());
             List<String> bugKeys = jira.fetchBugKeys();
+            log.info("Found {} bug keys", bugKeys.size());
 
             Map<String,List<String>> file2Keys;
             try {
-                log.info("Mapping {} JIRA keys to files", bugKeys.size());
                 file2Keys = git.getFileToIssueKeysMap(owner, repo, branch);
             } catch (FileKeyMappingException ex) {
                 log.error("Skipping {} – {}", repo, ex.getMessage());
                 continue;
             }
+            log.info("File to issue keys mapping: {} issue keys", file2Keys.size());
 
             /* open CSV once, in appending */
             Path csvPath = Paths.get("output", repo + "_dataset.csv");

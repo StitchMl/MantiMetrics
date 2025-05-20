@@ -26,16 +26,14 @@ public class ReleaseSelector {
     public List<String> selectFirstPercent(List<String> tags, int percent) {
         logger.debug("Selecting first {}% of {} total tags", percent, tags.size());
 
-        if (tags.isEmpty() || percent <= 0) {
-            logger.trace("No tags selected (empty list or non-positive percentage)");
-            return Collections.emptyList();
+        // Validation of the percentage parameter
+        if (percent < 0 || percent > 100) {
+            throw new IllegalArgumentException("percent must be between 0 and 100");
         }
-        if (percent >= 100) {
-            logger.trace("Percentage {}>=100, returning all {} tags", percent, tags.size());
-            // keeping the order semver ascending
-            List<String> all = new ArrayList<>(tags);
-            all.sort(ReleaseSelector::compareSemver);
-            return all;
+
+        if (tags.isEmpty() || percent == 0) {
+            logger.trace("No tags selected (empty list or percent = {})", percent);
+            return Collections.emptyList();
         }
 
         // 1) semantically ascending clone and order
@@ -45,8 +43,11 @@ public class ReleaseSelector {
 
         // 2) calculation of how many to take
         int total = sorted.size();
-        int count = (int) Math.floor(total * percent / 100.0);
-        count = Math.max(count, 1);  // almeno 1 se percent>0
+        int count = (percent == 100)
+                ? total
+                : Math.max(1, (int) Math.floor(total * percent / 100.0));
+
+        logger.debug("Selecting first {}% → {} of {} tags", percent, count, total);
 
         List<String> selected = sorted.subList(0, count);
         logger.trace("Selected first {} out of {} tags", selected.size(), total);

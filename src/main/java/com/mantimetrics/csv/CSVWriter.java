@@ -3,6 +3,7 @@ package com.mantimetrics.csv;
 import com.mantimetrics.model.MethodData;
 
 import java.io.BufferedWriter;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.List;
@@ -27,9 +28,8 @@ public final class CSVWriter {
         try {
             Files.createDirectories(file.getParent());
             boolean writeHeader = Files.notExists(file);
-
-            // 1) Write header (stream closed immediately afterward)
             if (writeHeader) {
+                // Writing headers in a temporary BufferedWriter
                 try (BufferedWriter headerWriter = Files.newBufferedWriter(
                         file, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE)) {
@@ -37,12 +37,11 @@ public final class CSVWriter {
                     headerWriter.newLine();
                 }
             }
-
-            // 2) Opening writer for the appendix without automatic closure
+            // I open the writer to be returned, without closing it immediately
             return Files.newBufferedWriter(
                     file, StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-        } catch (Exception e) {
+        } catch (IOException e) {
             throw new CsvWriteException("Cannot open " + file, e);
         }
     }

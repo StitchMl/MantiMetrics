@@ -33,7 +33,10 @@ public class MethodData {
     }
 
     // Getter methods
+    public String getProjectName()     { return projectName; }
     public String getPath()            { return path; }
+    public String getMethodSignature() { return methodSignature; }
+    public String getReleaseId()       { return releaseId; }
     public MethodMetrics getMetrics()  { return metrics; }
     public List<String> getCommitHashes() { return commitHashes; }
     public boolean isBuggy()           { return buggy; }

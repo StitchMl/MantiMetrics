@@ -27,7 +27,6 @@ public class JiraClient {
     private static final ObjectMapper JSON = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-
     private static final int PAGE_SIZE = 100;
     private final CloseableHttpClient http;
 
@@ -57,18 +56,20 @@ public class JiraClient {
     public void initialize(String projectKey) throws JiraClientException {
         Properties props = new Properties();
         try (InputStream in = getClass().getResourceAsStream(PROPS_PATH)) {
-            if (in == null)
+            if (in == null) {
                 throw new JiraClientException("JIRA configuration file not found: " + PROPS_PATH);
+            }
             props.load(in);
-        } catch (IOException io) {
-            throw new JiraClientException("Error loading JIRA properties", io);
+        } catch (IOException e) {
+            throw new JiraClientException("Error loading JIRA properties", e);
         }
 
         String baseUrl = stripTrailingSlashes(props.getProperty("jira.url", "").trim());
         String pat     = props.getProperty("jira.pat",   "").trim();
         String jqlTpl  = props.getProperty("jira.query", "").trim();
-        if (baseUrl.isEmpty() || pat.isEmpty() || jqlTpl.isEmpty())
+        if (baseUrl.isEmpty() || pat.isEmpty() || jqlTpl.isEmpty()) {
             throw new JiraClientException("jira.url, jira.pat and jira.query must be valorised");
+        }
 
         // Constructing URLs securely with URIBuilder
         try {
@@ -98,13 +99,24 @@ public class JiraClient {
                         .addParameter("maxResults", String.valueOf(PAGE_SIZE))
                         .build();
 
-                var root = doRequest(http, uri);
+                // 1) take the full answer
+                JsonNode resp = doRequest(http, uri);
 
-                root.path("issues")
-                        .forEach(n -> Optional.ofNullable(n.path("key").asText(null))
-                                .ifPresent(keys::add));
+                // 2) retrieves the array of issues
+                JsonNode issues = resp.path("issues");
 
-                int total = root.path("total").asInt();
+                for (JsonNode issue : issues) {
+                    String key = issue.path("key").asText(null);
+                    if (key != null) {
+                        keys.add(key);
+                    }
+                }
+
+                // 3) now total is on the same level as 'issues'
+                int total = resp.path("total").asInt();
+                log.debug("JIRA total: {} startAt: {}", total, startAt);
+
+                // 4) get out if I have already read everything
                 startAt += PAGE_SIZE;
                 if (startAt >= total) break;
             }
@@ -114,7 +126,6 @@ public class JiraClient {
             throw new JiraClientException("Error fetchBugKeys", e);
         }
 
-        log.trace("Fetched {} bug keys from JIRA", keys.size());
         return new ArrayList<>(keys);
     }
 
