@@ -32,7 +32,8 @@ public final class CSVWriter {
                 // Writing headers in a temporary BufferedWriter
                 try (BufferedWriter headerWriter = Files.newBufferedWriter(
                         file, StandardCharsets.UTF_8,
-                        StandardOpenOption.CREATE)) {
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING)) {
                     headerWriter.write(HEADER);
                     headerWriter.newLine();
                 }
@@ -51,7 +52,7 @@ public final class CSVWriter {
         try {
             for (MethodData m : rows) {
                 w.write(m.toCsvLine());
-                w.write('\n');
+                w.newLine();
             }
             w.flush();
         } catch (Exception e) {

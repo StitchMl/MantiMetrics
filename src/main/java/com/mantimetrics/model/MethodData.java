@@ -16,6 +16,9 @@ public class MethodData {
     private final List<String> commitHashes;
     private final boolean buggy;
     private final int codeSmells;
+    private final int touches;
+    private final int prevCodeSmells;
+    private final boolean prevBuggy;
 
     /**
      * Constructor for MethodData.
@@ -30,6 +33,9 @@ public class MethodData {
         this.commitHashes    = List.copyOf(b.commitHashes);
         this.buggy           = b.buggy;
         this.codeSmells      = b.codeSmells;
+        this.touches         = b.touches;
+        this.prevCodeSmells  = b.prevCodeSmells;
+        this.prevBuggy       = b.prevBuggy;
     }
 
     // Getter methods
@@ -41,6 +47,10 @@ public class MethodData {
     public List<String> getCommitHashes() { return commitHashes; }
     public boolean isBuggy()           { return buggy; }
     public int getCodeSmells()   { return codeSmells; }
+    public String getUniqueKey() { return path + "#" + methodSignature;}
+    public int getTouches()         { return touches; }
+    public int getPrevCodeSmells()  { return prevCodeSmells; }
+    public boolean isPrevBuggy()     { return prevBuggy; }
 
     /**
      * Builds a CSV line with appropriate quoting and escaping.
@@ -131,6 +141,9 @@ public class MethodData {
         private List<String> commitHashes = Collections.emptyList();
         private boolean buggy;
         private int codeSmells;
+        private int touches;
+        private int prevCodeSmells;
+        private boolean prevBuggy;
 
         public Builder projectName(String projectName) {
             this.projectName = Objects.requireNonNull(projectName, "projectName"); return this;
@@ -155,6 +168,18 @@ public class MethodData {
         }
         public Builder codeSmells(int cs) {
             this.codeSmells = cs;
+            return this;
+        }
+        public Builder touches(int t) {
+            this.touches = t;
+            return this;
+        }
+        public Builder prevCodeSmells(int cs) {
+            this.prevCodeSmells = cs;
+            return this;
+        }
+        public Builder prevBuggy(boolean b) {
+            this.prevBuggy = b;
             return this;
         }
 

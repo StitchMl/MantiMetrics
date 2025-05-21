@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
@@ -104,6 +105,78 @@ class CommitMapper {
             if (name.endsWith(".java")) {
                 map.computeIfAbsent(name, k -> new ArrayList<>()).addAll(keys);
             }
+        }
+    }
+
+    /**
+     * Returns the list of commits touching the given file in the given
+     * repository, between the two given tags.
+     * If fromTag is null or empty, all commits up to toTag are returned.
+     */
+    public List<String> getCommitsInRange(String owner,
+                                          String repo,
+                                          String filePath,
+                                          String fromTag,
+                                          String toTag)
+            throws IOException, InterruptedException {
+        // if there is no basic tag, take the entire history up to toTag
+        String compareSpec = (fromTag == null || fromTag.isBlank())
+                ? toTag
+                : fromTag + "..." + toTag;
+
+        JsonNode cmp = client.getApi(API + REPOS + owner + '/' + repo +
+                "/compare/" +
+                URLEncoder.encode(compareSpec, StandardCharsets.UTF_8));
+
+        // extract all commits in chronological order
+        List<String> allHashes = new ArrayList<>();
+        if (cmp.has("commits")) {
+            for (JsonNode c : cmp.get("commits")) {
+                allHashes.add(c.path("sha").asText());
+            }
+        }
+
+        // for each commit, check if it touches filePath
+        List<String> touching = new ArrayList<>();
+        for (String sha : allHashes) {
+            JsonNode files = client.getApi(
+                    API + REPOS + owner + '/' + repo +
+                            "/commits/" + sha).path("files");
+            for (JsonNode f : files) {
+                if (filePath.equals(f.path("filename").asText())) {
+                    touching.add(sha);
+                    break;
+                }
+            }
+        }
+        return touching;
+    }
+
+    /**
+     * Returns the date of the given tag.
+     * If the tag is lightweight, it returns the date of the commit.
+     */
+    public Instant getTagDate(String owner, String repo, String tag)
+            throws IOException, InterruptedException {
+        // 1) Retrieve the tag ref.
+        JsonNode ref = client.getApi(API + REPOS + owner + '/' + repo +
+                "/git/ref/tags/" + URLEncoder.encode(tag, StandardCharsets.UTF_8));
+        String objType = ref.path("object").path("type").asText();
+        String sha     = ref.path("object").path("sha").asText();
+
+        if ("tag".equals(objType)) {
+            // annotated tag: retrieve date
+            JsonNode tagObj = client.getApi(API + REPOS + owner + '/' + repo +
+                    "/git/tags/" + sha);
+            String date = tagObj.path("tagger").path("date").asText();
+            return Instant.parse(date);
+        } else {
+            // lightweight: fallback alla data del commit
+            JsonNode commit = client.getApi(API + REPOS + owner + '/' + repo +
+                    "/commits/" + sha);
+            String date = commit.path("commit").path("committer")
+                    .path("date").asText();
+            return Instant.parse(date);
         }
     }
 }
