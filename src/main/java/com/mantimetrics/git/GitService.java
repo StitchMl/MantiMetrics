@@ -12,13 +12,14 @@ import java.util.concurrent.*;
 
 /** Git + GitHub REST utility – *commit-history* implementation */
 public final class GitService {
+    private static final Logger      LOG       = LoggerFactory.getLogger(GitService.class);
+    private static final String      API       = "https://api.github.com";
+    private static final String      REPOS     = "/repos/";
+
     private final GitApiClient       apiClient;
     private final CommitMapper       commitMapper;
     private final ZipDownloader      zipDownloader;
-    private static final String      API       = "https://api.github.com";
-    private static final Logger      LOG       = LoggerFactory.getLogger(GitService.class);
-    private static final String      REPOS     = "/repos/";
-    private final Map<String,String> defBranch = new ConcurrentHashMap<>();
+    private final Map<String,String> defaultBranchCache = new ConcurrentHashMap<>();
 
     public GitService(String token) {
         this.apiClient     = new GitApiClient(token);
@@ -26,60 +27,88 @@ public final class GitService {
         this.zipDownloader = new ZipDownloader(apiClient);
     }
 
-    /** Returns the default branch of the given repository. */
-    public String getDefaultBranch(String owner,String repo) {
-        return defBranch.computeIfAbsent(owner+'/'+repo, k -> {
-            try {
-                return apiClient.getApi(API + REPOS + owner + '/' + repo)
-                        .path("default_branch").asText("master");
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                throw new UncheckedIOException(
-                        new IOException("Interrupted while building JIRA map", ie));
+    /**
+     * Calls the GitHub API and returns the JSON node, handling
+     * IOException and InterruptedException.
+     */
+    private JsonNode callApi(String url) {
+        try {
+            return apiClient.getApi(url);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new UncheckedIOException(new IOException("Interrupted during API call to " + url, ie));
+        } catch (IOException ioe) {
+            throw new UncheckedIOException("I/O error during API call to " + url, ioe);
+        }
+    }
 
-            } catch (IOException ioe) {
-                throw new UncheckedIOException(ioe);
-            }
+    /**
+     * Iterated paging on the results (when the endpoint responds
+     * with JSON arrays).
+     */
+    private List<JsonNode> fetchPaged(String urlTemplate) {
+        List<JsonNode> result = new ArrayList<>();
+        for (int page = 1; ; page++) {
+            String url = String.format(urlTemplate, page);
+            JsonNode array = callApi(url);
+            if (!array.isArray() || array.isEmpty()) break;
+            array.forEach(result::add);
+        }
+        return result;
+    }
+
+    /** Returns the default branch of the given repository. */
+    public String getDefaultBranch(String owner, String repo) {
+        String key = owner + '/' + repo;
+        return defaultBranchCache.computeIfAbsent(key, k -> {
+            String url = API + REPOS + owner + "/" + repo;
+            JsonNode node = callApi(url);
+            String branch = node.path("default_branch").asText(null);
+            LOG.info("Default branch for {}/{} → {}", owner, repo, branch);
+            return branch != null ? branch : "master";
         });
     }
 
     /** Lists all tags of the given repository. */
-    public List<String> listTags(String owner, String repo) throws IOException, InterruptedException {
-        List<String> tags = new ArrayList<>();
-        for (int page = 1; ; page++) {
-            JsonNode arr = apiClient.getApi(API + REPOS + owner
-                    + '/' + repo + "/tags?per_page=100&page=" + page);
-            if (!arr.isArray() || arr.isEmpty()) break;
-            arr.forEach(n -> Optional.ofNullable(n.path("name").asText(null))
-                    .ifPresent(tags::add));
+    public List<String> listTags(String owner, String repo) {
+        String template = API + REPOS + owner + "/" + repo +
+                "/tags?per_page=100&page=%d";
+        List<JsonNode> nodes = fetchPaged(template);
+        List<String> tags = new ArrayList<>(nodes.size());
+        for (JsonNode n : nodes) {
+            Optional.ofNullable(n.path("name").asText(null))
+                    .ifPresent(tags::add);
         }
         LOG.info("Found {} tags for {}/{}", tags.size(), owner, repo);
         return tags;
     }
 
-    /** Builds a file → JIRA-keys map using the commit history of the given branch. */
-    public Map<String,List<String>> getFileToIssueKeysMap(String owner, String repo, String branch)
-            throws FileKeyMappingException {
-        return commitMapper.getFileToIssueKeysMap(owner,repo,branch);
+    /**
+     * Builds a file → JIRA-keys map using the commit history
+     * of the given branch.
+     */
+    public Map<String,List<String>> getFileToIssueKeysMap(
+            String owner, String repo, String branch) throws FileKeyMappingException {
+        return commitMapper.getFileToIssueKeysMap(owner, repo, branch);
     }
 
     /**
      * Returns the list of commit hashes touching filePath
      * between fromTag (excluded) and toTag (included).
      */
-    public List<String> getCommitsInRange(String owner,
-                                          String repo,
-                                          String filePath,
-                                          String fromTag,
-                                          String toTag) throws IOException, InterruptedException {
+    public List<String> getCommitsInRange(
+            String owner, String repo,
+            String filePath,
+            String fromTag, String toTag)
+            throws IOException, InterruptedException {
         return commitMapper.getCommitsInRange(owner, repo, filePath, fromTag, toTag);
     }
 
     /** download + unzip con timeout esteso e retry su SocketTimeout. */
-    public Path downloadAndUnzipRepo(String owner,
-                                     String repo,
-                                     String ref,
-                                     String subDir) throws IOException, InterruptedException {
+    public Path downloadAndUnzipRepo(
+            String owner, String repo,
+            String ref, String subDir)
+            throws IOException, InterruptedException {
         return zipDownloader.downloadAndUnzip(owner, repo, ref, subDir);
     }
 
@@ -91,22 +120,20 @@ public final class GitService {
     /**
      * Chronological comparison of two tags in the same repo.
      */
-    public int compareTagDates(String owner, String repo, String tagA, String tagB) {
+    public int compareTagDates(
+            String owner, String repo,
+            String tagA, String tagB) {
         try {
-            Instant dateA = commitMapper.getTagDate(owner, repo, tagA);
-            Instant dateB = commitMapper.getTagDate(owner, repo, tagB);
-            return dateA.compareTo(dateB);
+            Instant a = commitMapper.getTagDate(owner, repo, tagA);
+            Instant b = commitMapper.getTagDate(owner, repo, tagB);
+            return a.compareTo(b);
         } catch (IOException e) {
-            // trasformiamo in unchecked: in genere non vogliamo far
-            // fallire tutto per un problema di rete su un singolo tag
             throw new UncheckedIOException(
-                    new IOException("Impossibile recuperare le date dei tag", e)
-            );
-        } catch (InterruptedException e){
+                    new IOException("Cannot retrieve tag dates for " + owner + "/" + repo, e));
+        } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new UncheckedIOException(
-                    new IOException("Impossibile recuperare le date dei tag", e)
-            );
+                    new IOException("Interrupted while retrieving tag dates", e));
         }
     }
 }

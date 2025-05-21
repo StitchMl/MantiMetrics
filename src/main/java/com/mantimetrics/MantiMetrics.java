@@ -44,7 +44,7 @@ public class MantiMetrics {
         GitService        git    = new GitService(p.getProperty("github.pat").trim());
         ReleaseSelector   sel    = new ReleaseSelector();
         CSVWriter         csvOut = new CSVWriter();
-        PmdAnalyzer       pmd    = new PmdAnalyzer(Paths.get("rulesets/java/quickstart.xml"));
+        PmdAnalyzer       pmd    = new PmdAnalyzer(Paths.get("category/java/bestpractices.xml/UnusedPrivateField"));
         setParser(new CodeParser(git));
         setCalc(new MetricsCalculator());
         setJira(new JiraClient());
@@ -93,6 +93,7 @@ public class MantiMetrics {
                     try {
                         // a) PMD on the code at the last commit of this release
                         int codeSmells = pmd.analyze(Paths.get("src")).getViolations().size();
+                        log.info("{}@{} – {} code smells", repo, tag, codeSmells);
 
                         // b) parsing + metrics, limiting commits between prevTag and tag
                         List<MethodData> methods = getCollect(owner, repo, tag, file2Keys, prevData, codeSmells, bugKeys);

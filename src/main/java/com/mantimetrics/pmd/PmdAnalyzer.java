@@ -21,8 +21,11 @@ public class PmdAnalyzer {
     public PmdAnalyzer(Path rulesetXml) {
         config = new PMDConfiguration();
         config.setRuleSets(Collections.singletonList(rulesetXml.toString()));
+        // adapted to your Java version
         config.setDefaultLanguageVersion(
-                PMD.getLanguageVersionById("java", "22")); // adatta alla tua versione Java
+                PMD.getLanguageVersionById("java", "22"));
+        // add the whole Java source
+        config.addInputPath(Path.of("src/main/java"));
     }
 
     /**
