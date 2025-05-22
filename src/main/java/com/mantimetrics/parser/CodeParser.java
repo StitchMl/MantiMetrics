@@ -31,6 +31,20 @@ public final class CodeParser {
     }
 
     /**
+     * Download and unpack the release without deleting it.
+     */
+    public Path downloadRelease(String owner, String repo, String tag) throws CodeParserException {
+        try {
+            return git.downloadAndUnzipRepo(owner, repo, tag, "release-" + tag);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new CodeParserException("Interrupted downloading " + tag, ie);
+        } catch (IOException ioe) {
+            throw new CodeParserException("Download/Unzip failed for " + repo + '@' + tag, ioe);
+        }
+    }
+
+    /**
      * @param fileToKeys immutable map file → JIRA keys, prepared upstream
      */
     public List<MethodData> parseAndComputeOnline(
@@ -42,16 +56,24 @@ public final class CodeParser {
         LOG.trace("Analysing {}/{}@{}", owner, repo, tag);
 
         // 1. Download & unzip
-        Path root;
-        try {
-            root = git.downloadAndUnzipRepo(owner, repo, tag, "release-" + tag);
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            throw new CodeParserException("Interrupted downloading " + tag, ie);
-        } catch (IOException ioe) {
-            throw new CodeParserException("Download/Unzip failed for " + repo + '@' + tag, ioe);
-        }
+        Path root = downloadRelease(owner, repo, tag);
 
+        List<MethodData> out = parseFromDirectory(root, repo, tag, calc, fileToKeys);
+
+        deleteRecursively(root);
+
+        return out;
+    }
+
+    /**
+     * Parsing and metrics on an already downloaded root; **does not** delete the folder.
+     */
+    public List<MethodData> parseFromDirectory(
+            Path root,
+            String repo,
+            String tag,
+            MetricsCalculator calc,
+            Map<String, List<String>> fileToKeys) {
         List<MethodData> out = new ArrayList<>();
         try (Stream<Path> files = Files.walk(root)) {
             files.filter(p -> p.toString().endsWith(".java"))
@@ -63,7 +85,7 @@ public final class CodeParser {
                         });
                     });
         } catch (IOException io) {
-            throw new CodeParserException("I/O walking " + root, io);
+            throw new UncheckedIOException("I/O walking " + root, io);
         } finally {
             deleteRecursively(root);
         }
