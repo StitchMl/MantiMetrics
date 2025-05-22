@@ -86,6 +86,16 @@ class ZipDownloader {
 
                 ZipEntry ze;
                 while ((ze = ZipExtractionUtils.safeNextEntry(zis)) != null) {
+                    String name = ze.getName();
+
+                    // ── AUTOMATIC TEST FILTER ───
+                    // If the entry is inside a test folder or is a Test.java/IT.java, I skip it
+                    if (name.matches("(?i).*/src/test/java/.*")
+                            || name.matches("(?i).*/test/.*")
+                            || name.matches(".*(Test|IT)\\.java$")) {
+                        zis.closeEntry();
+                        continue;
+                    }
 
                     ZipExtractionUtils.validateEntry(++entries);
                     Path target = ZipExtractionUtils.safeTarget(root, ze.getName());

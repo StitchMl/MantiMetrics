@@ -77,6 +77,8 @@ public final class CodeParser {
         List<MethodData> out = new ArrayList<>();
         try (Stream<Path> files = Files.walk(root)) {
             files.filter(p -> p.toString().endsWith(".java"))
+                    .filter(p -> !p.toString().matches(".*[\\\\/]test[\\\\/].*"))
+                    .filter(p -> !p.getFileName().toString().endsWith("Test.java"))
                     .forEach(p -> {
                         Optional<String> relOpt = shouldSkip(root, p, repo);
                         relOpt.ifPresent(relUnix -> {

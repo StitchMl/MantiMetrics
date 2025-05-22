@@ -28,8 +28,7 @@ public final class CSVWriter {
     public BufferedWriter open(Path file) throws CsvWriteException {
         try {
             Files.createDirectories(file.getParent());
-            boolean writeHeader = Files.notExists(file);
-            if (writeHeader) {
+            if (Files.exists(file)) {
                 // Writing headers in a temporary BufferedWriter
                 try (BufferedWriter headerWriter = Files.newBufferedWriter(
                         file, StandardCharsets.UTF_8,
