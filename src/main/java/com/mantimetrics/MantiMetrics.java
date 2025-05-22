@@ -13,6 +13,7 @@ import com.mantimetrics.parser.CodeParserException;
 import com.mantimetrics.pmd.PmdAnalyzer;
 import com.mantimetrics.release.ReleaseSelector;
 import net.sourceforge.pmd.reporting.Report;
+import net.sourceforge.pmd.reporting.RuleViolation;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,14 +102,15 @@ public class MantiMetrics {
                         if (report.getViolations().isEmpty())
                             log.warn("No violations found: check ruleset and input paths");
 
-                        int codeSmells = report.getViolations().size();
+                        List<RuleViolation> violations = report.getViolations();
+                        int codeSmells = violations.size();
                         log.info("{}@{} – {} code smells", repo, tag, codeSmells);
 
                         // b) parsing + metrics on the same folder
                         List<MethodData> methods = getCollect(
                                 releaseDir, repo, tag,
                                 file2Keys, prevData,
-                                codeSmells, bugKeys
+                                violations, bugKeys
                         );
 
                         // update prevDate
@@ -144,12 +146,12 @@ public class MantiMetrics {
      * @param tag         the tag name
      * @param file2Keys   a map of file paths to JIRA keys
      * @param prevData    a map of previous method data
-     * @param codeSmells  the number of code smells
+     * @param violations  a list of rule violations
      * @param bugKeys     a list of bug keys
      * @return a list of enriched method data
      */
     @NotNull
-    private static List<MethodData> getCollect(Path releaseDir, String repo, String tag, Map<String, List<String>> file2Keys, Map<String, MethodData> prevData, int codeSmells, List<String> bugKeys) {
+    private static List<MethodData> getCollect(Path releaseDir, String repo, String tag, Map<String, List<String>> file2Keys, Map<String, MethodData> prevData, List<RuleViolation> violations, List<String> bugKeys) {
         // 1) parse from already downloaded directories, do not re-download
         List<MethodData> methods = parser.parseFromDirectory(
                 releaseDir, repo, tag, calc, file2Keys
@@ -163,17 +165,31 @@ public class MantiMetrics {
                         (existing, replacement) -> replacement
                 ));
 
-        // 3) filtering and enrichment with codeSmells, touches, prevData, buggy
+        // 3) group violations by file (file name only)
+        Map<String,List<RuleViolation>> byFile = violations.stream()
+                .collect(Collectors.groupingBy(v ->
+                        Paths.get(v.getFileId().getFileName()).getFileName().toString()
+                ));
+
+        // 4) filtering and enrichment with codeSmells, touches, prevData, buggy
         return uniqueMethods.values().stream()
                 .filter(m -> !m.getCommitHashes().isEmpty())
                 .map(m -> {
+                    String fileName = Paths.get(m.getPath()).getFileName().toString();
+                    List<RuleViolation> vlist = byFile.getOrDefault(fileName, List.of());
+                    long cnt = vlist.stream()
+                            .filter(v -> {
+                                int line = v.getBeginLine();
+                                return line >= m.getStartLine() && line <= m.getEndLine();
+                            })
+                            .count();
                     int touches    = Math.max(0, m.getCommitHashes().size() - 1);
                     MethodData prev = prevData.get(m.getUniqueKey());
                     int prevSmells = prev != null ? prev.getCodeSmells() : 0;
                     boolean prevBuggy = prev != null && prev.isBuggy();
 
                     return m.toBuilder()
-                            .codeSmells(codeSmells)
+                            .codeSmells((int)cnt)
                             .touches(touches)
                             .buggy(jira.isMethodBuggy(m.getCommitHashes(), bugKeys))
                             .prevCodeSmells(prevSmells)

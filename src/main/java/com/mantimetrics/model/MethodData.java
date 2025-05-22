@@ -19,6 +19,8 @@ public class MethodData {
     private final int touches;
     private final int prevCodeSmells;
     private final boolean prevBuggy;
+    private final int startLine;
+    private final int endLine;
 
     /**
      * Constructor for MethodData.
@@ -36,21 +38,25 @@ public class MethodData {
         this.touches         = b.touches;
         this.prevCodeSmells  = b.prevCodeSmells;
         this.prevBuggy       = b.prevBuggy;
+        this.startLine       = b.startLine;
+        this.endLine         = b.endLine;
     }
 
     // Getter methods
-    public String getProjectName()     { return projectName; }
-    public String getPath()            { return path; }
-    public String getMethodSignature() { return methodSignature; }
-    public String getReleaseId()       { return releaseId; }
-    public MethodMetrics getMetrics()  { return metrics; }
+    public String getProjectName()        { return projectName; }
+    public String getPath()               { return path; }
+    public String getMethodSignature()    { return methodSignature; }
+    public String getReleaseId()          { return releaseId; }
+    public MethodMetrics getMetrics()     { return metrics; }
     public List<String> getCommitHashes() { return commitHashes; }
-    public boolean isBuggy()           { return buggy; }
-    public int getCodeSmells()   { return codeSmells; }
-    public String getUniqueKey() { return path + "#" + methodSignature;}
-    public int getTouches()         { return touches; }
-    public int getPrevCodeSmells()  { return prevCodeSmells; }
-    public boolean isPrevBuggy()     { return prevBuggy; }
+    public boolean isBuggy()              { return buggy; }
+    public int getCodeSmells()            { return codeSmells; }
+    public String getUniqueKey()          { return path + "#" + methodSignature;}
+    public int getTouches()               { return touches; }
+    public int getPrevCodeSmells()        { return prevCodeSmells; }
+    public boolean isPrevBuggy()          { return prevBuggy; }
+    public int getStartLine()             { return startLine; }
+    public int getEndLine()               { return endLine; }
 
     /**
      * Builds a CSV line with appropriate quoting and escaping.
@@ -82,6 +88,10 @@ public class MethodData {
                 .add(metrics.isGodClass()       ? "1" : "0")
                 .add(metrics.isFeatureEnvy()    ? "1" : "0")
                 .add(metrics.isDuplicatedCode() ? "1" : "0")
+                .add(String.valueOf(codeSmells))
+                .add(String.valueOf(touches))
+                .add(String.valueOf(prevCodeSmells))
+                .add(prevBuggy ? "yes" : "no")
                 .add(buggy ? "yes" : "no");
         return sj.toString();
     }
@@ -126,7 +136,10 @@ public class MethodData {
                 .releaseId(this.releaseId)
                 .metrics(this.metrics)
                 .commitHashes(this.commitHashes)
-                .buggy(this.buggy);
+                .buggy(this.buggy)
+                .startLine(this.startLine)
+                .endLine(this.endLine)
+                .codeSmells(this.codeSmells);
     }
 
     /**
@@ -144,6 +157,8 @@ public class MethodData {
         private int touches;
         private int prevCodeSmells;
         private boolean prevBuggy;
+        private int startLine;
+        private int endLine;
 
         public Builder projectName(String projectName) {
             this.projectName = Objects.requireNonNull(projectName, "projectName"); return this;
@@ -181,6 +196,12 @@ public class MethodData {
         public Builder prevBuggy(boolean b) {
             this.prevBuggy = b;
             return this;
+        }
+        public Builder startLine(int line) {
+            this.startLine = line; return this;
+        }
+        public Builder endLine(int line) {
+            this.endLine = line; return this;
         }
 
         private void validate() {

@@ -18,7 +18,8 @@ public final class CSVWriter {
             "TotalOperators","TotalOperands",
             "Vocabulary","Length","Volume","Difficulty","Effort",
             "MaxNestingDepth","isLongMethod","isGodClass","isFeatureEnvy",
-            "isDuplicatedCode","CodeSmells","Buggy"
+            "isDuplicatedCode","CodeSmells","Touches","prevCodeSmells",
+            "prevBuggy","Buggy"
     };
 
     private static final String HEADER = String.join(",", COLUMNS);

@@ -133,6 +133,8 @@ public final class CodeParser {
                                             .metrics(calc.computeAll(m))
                                             .commitHashes(jiraKeys)
                                             .buggy(false)
+                                            .startLine(r.begin.line)
+                                            .endLine(r.end.line)
                                             .build()))));
         } catch (ParseProblemException ppe) {
             LOG.warn("Failed to parse {}: {}", file, ppe.getMessage());
