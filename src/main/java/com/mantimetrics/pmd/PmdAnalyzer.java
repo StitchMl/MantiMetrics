@@ -4,6 +4,7 @@ import net.sourceforge.pmd.PmdAnalysis;
 import net.sourceforge.pmd.PMDConfiguration;
 import net.sourceforge.pmd.lang.document.FileCollector;
 import net.sourceforge.pmd.lang.document.TextFile;
+import net.sourceforge.pmd.lang.rule.RulePriority;
 import net.sourceforge.pmd.reporting.Report;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +45,7 @@ public class PmdAnalyzer {
 
         // 2) I copy all rulesets already loaded in 'config'.
         cfg.setRuleSets(new ArrayList<>(config.getRuleSetPaths()));
+        cfg.setMinimumPriority(RulePriority.LOW);
 
         // 3) I set Java 22 (copy from the original config, or reallocate it)
         cfg.setDefaultLanguageVersion(PMD.getLanguageVersionById("java", "22"));

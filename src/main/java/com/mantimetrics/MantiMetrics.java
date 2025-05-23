@@ -113,6 +113,9 @@ public class MantiMetrics {
                                 violations, bugKeys
                         );
 
+                        log.info("release={} violationsTotali={} methodsFinali={}",
+                                tag, violations.size(), methods.size());
+
                         // update prevDate
                         prevData = methods.stream()
                                 .collect(Collectors.toMap(
@@ -174,14 +177,18 @@ public class MantiMetrics {
         // 4) filtering and enrichment with codeSmells, touches, prevData, buggy
         return uniqueMethods.values().stream()
                 .filter(m -> !m.getCommitHashes().isEmpty())
+                .filter(m -> m.getCommitHashes().size() > 1)
+                .filter(m -> {
+                    int touches = Math.max(0, m.getCommitHashes().size() - 1);
+                    return touches > 0;
+                })
                 .map(m -> {
                     String fileName = Paths.get(m.getPath()).getFileName().toString();
                     List<RuleViolation> vlist = byFile.getOrDefault(fileName, List.of());
                     long cnt = vlist.stream()
-                            .filter(v -> {
-                                int line = v.getBeginLine();
-                                return line >= m.getStartLine() && line <= m.getEndLine();
-                            })
+                            .filter(v -> v.getFileId().getFileName().equals(m.getPath())
+                                    &&  v.getBeginLine() >= m.getStartLine()
+                                    &&  v.getBeginLine() <= m.getEndLine())
                             .count();
                     int touches    = Math.max(0, m.getCommitHashes().size() - 1);
                     MethodData prev = prevData.get(m.getUniqueKey());

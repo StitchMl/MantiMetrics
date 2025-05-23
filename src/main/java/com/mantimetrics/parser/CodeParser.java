@@ -74,13 +74,64 @@ public final class CodeParser {
             String tag,
             MetricsCalculator calc,
             Map<String, List<String>> fileToKeys) {
+        // Count all .java before filters
+        long totalFiles;
+        try (Stream<Path> all = Files.walk(root)) {
+            totalFiles = all
+                    .filter(Files::isRegularFile)
+                    .filter(p -> p.toString().endsWith(".java"))
+                    .count();
+        } catch (IOException e) {
+            totalFiles = -1;
+        }
+
         List<MethodData> out = new ArrayList<>();
+
+        // 1) Define the matcher for test directories
+        PathMatcher testDirMatcher = FileSystems.getDefault()
+                .getPathMatcher("glob:**/src/test/java/**");
+
+        // 2) Matcher for test files by name (*Test.java, *IT.java)
+        PathMatcher testClassMatcher = FileSystems.getDefault()
+                .getPathMatcher("glob:**/*{Test,IT}.java");
+
+        // 3) Matcher for output and generation directories
+        PathMatcher ignoreMatcher = FileSystems.getDefault()
+                .getPathMatcher("glob:**/{target,build,generated-sources}/**");
+
+        // 4) Matcher for common directories
+        PathMatcher otherMatcher = FileSystems.getDefault()
+                .getPathMatcher("glob:**/{common,utils,examples}/**");
+
+        // 5) Matcher for infrastructure directories
+        PathMatcher infraMatcher = FileSystems.getDefault()
+                .getPathMatcher("glob:**/{api,internal}/**");
+
+        // 6) Matcher for DTO and model directories
+        PathMatcher dtoIgnore = FileSystems.getDefault()
+                .getPathMatcher("glob:**/{dto,model}/**");
+
+        // 7) Matcher for resources and config directories
+        PathMatcher resourcesIgnore = FileSystems.getDefault()
+                .getPathMatcher("glob:**/{resources,config}/**");
+
+        // 8) Matcher for generated sources
+        PathMatcher genProto = FileSystems.getDefault()
+                .getPathMatcher("glob:**/{gen-src,generated-sources,grpc}/**");
+
         try (Stream<Path> files = Files.walk(root)) {
-            files.filter(p -> p.toString().endsWith(".java"))
-                    .filter(p -> !p.toString().matches(".*[\\\\/]test[\\\\/].*"))
-                    .filter(p -> !p.getFileName().toString().endsWith("Test.java"))
+            files.filter(Files::isRegularFile)
+                    .filter(p -> p.toString().endsWith(".java"))
+                    .filter(p -> !testDirMatcher.matches(p))
+                    .filter(p -> !testClassMatcher.matches(p))
+                    .filter(p -> !ignoreMatcher.matches(p))
+                    .filter(p -> !otherMatcher.matches(p))
+                    .filter(p -> !infraMatcher.matches(p))
+                    .filter(p -> !dtoIgnore.matches(p))
+                    .filter(p -> !resourcesIgnore.matches(p))
+                    .filter(p -> !genProto.matches(p))
                     .forEach(p -> {
-                        Optional<String> relOpt = shouldSkip(root, p, repo);
+                        Optional<String> relOpt = shouldSkip(root, p);
                         relOpt.ifPresent(relUnix -> {
                             List<String> jiraKeys = fileToKeys.getOrDefault(relUnix, List.of());
                             collectMethods(p, relUnix, repo, tag, jiraKeys, calc, out);
@@ -91,11 +142,21 @@ public final class CodeParser {
         } finally {
             deleteRecursively(root);
         }
+
+        long processedFiles = out.stream()
+                .map(MethodData::getPath)
+                .distinct()
+                .count();
+
+        LOG.info("release={} filesTotali={} filesProcessati={}",
+                tag, totalFiles, processedFiles);
+
         return out;
     }
 
     /** Returns the normalized unix-style path, or empty() if the file must be skipped. */
-    private static Optional<String> shouldSkip(Path root, Path path, String repo) {
+    private static Optional<String> shouldSkip(Path root, Path path) {
+        // 1) Skip files too big
         try {
             if (Files.size(path) > MAX_FILE_BYTES) {
                 LOG.warn("Skipping VERY large file {}", path);
@@ -105,11 +166,19 @@ public final class CodeParser {
             LOG.warn("Cannot stat {}, skipping – {}", path, ex.getMessage());
             return Optional.empty();
         }
+
+        // 2) Calculate the relevant route
         Path rel = root.relativize(path);
-        if (rel.getNameCount() > 1 && rel.getName(0).toString().startsWith(repo + "-")) {
-            rel = rel.subpath(1, rel.getNameCount());
+        String relUnix = rel.toString().replace('\\', '/');
+
+        // 3) Always removes the first segment (e.g. "repo-1.0.0/src/..." -> "src/...")
+        int slash = relUnix.indexOf('/');
+        if (slash >= 0) {
+            relUnix = relUnix.substring(slash + 1);
         }
-        return Optional.of(rel.toString().replace('\\', '/'));
+
+        // 4) Returns the normalized path
+        return Optional.of(relUnix);
     }
 
     /** Parses the file, computes metrics, adds MethodData objects to *sink*. */

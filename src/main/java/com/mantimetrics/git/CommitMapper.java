@@ -13,6 +13,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 class CommitMapper {
     private static final Logger  LOG      = LoggerFactory.getLogger(CommitMapper.class);
@@ -103,7 +104,11 @@ class CommitMapper {
         for (JsonNode f : files) {
             String name = f.path("filename").asText("");
             if (name.endsWith(".java")) {
-                map.computeIfAbsent(name, k -> new ArrayList<>()).addAll(keys);
+                // Remove any duplicates but keep the order
+                List<String> unique = keys.stream()
+                        .distinct()
+                        .collect(Collectors.toList());
+                map.put(name, unique);
             }
         }
     }
