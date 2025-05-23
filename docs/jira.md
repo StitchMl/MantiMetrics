@@ -1,6 +1,6 @@
 ## JIRA Integration
 
-This document describes how the **JiraClient** module of MantiMetrics integrates with JIRA to extract and filter resolved 'Bug' tickets, then labelling the methods as defective ('buggy') or not.
+This document describes how the **JiraClient** module of MantiMetrics integrates with JIRA to extract and filter resolved 'Bug' tickets, then labeling the methods as defective ('buggy') or not.
 
 ---
 
