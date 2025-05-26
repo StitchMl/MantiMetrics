@@ -21,9 +21,11 @@ class CommitMapper {
             Pattern.compile("\\b(?>[A-Z][A-Z0-9]++-\\d++)\\b");
     private static final String  API      = "https://api.github.com";
     private static final String  REPOS    = "/repos/";
+    private static final String  COMMIT    = "commit";
     private final GitApiClient   client;
     private static final int     MAX_COMMITS = 5_000;
     private final Map<String,Map<String,List<String>>>  projCache = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, Instant>> tagDatesCache = new ConcurrentHashMap<>();
 
     CommitMapper(GitApiClient client) {
         this.client = client;
@@ -85,7 +87,7 @@ class CommitMapper {
     private void processCommit(JsonNode commit, Map<String, List<String>> map)
             throws IOException, InterruptedException {
 
-        List<String> keys = extractKeys(commit.path("commit").path("message").asText());
+        List<String> keys = extractKeys(commit.path(COMMIT).path("message").asText());
         if (keys.isEmpty()) return;
 
         JsonNode files = client.getApi(commit.path("url").asText()).path("files");
@@ -158,30 +160,62 @@ class CommitMapper {
     }
 
     /**
-     * Returns the date of the given tag.
-     * If the tag is lightweight, it returns the date of the commit.
+     * Returns the date of the tag, preloading if necessary.
      */
     public Instant getTagDate(String owner, String repo, String tag)
-            throws IOException, InterruptedException {
-        // 1) Retrieve the tag ref.
-        JsonNode ref = client.getApi(API + REPOS + owner + '/' + repo +
-                "/git/ref/tags/" + URLEncoder.encode(tag, StandardCharsets.UTF_8));
-        String objType = ref.path("object").path("type").asText();
-        String sha     = ref.path("object").path("sha").asText();
+            throws IOException {
+        String key = owner + "/" + repo;
+        Map<String, Instant> map = tagDatesCache.computeIfAbsent(key, k -> {
+            try {
+                // Makes the map immutable after loading
+                return Collections.unmodifiableMap(loadAllTagDates(owner, repo));
+            } catch (IOException  e) {
+                throw new UncheckedIOException(
+                        new IOException("Unable to load date tags for " + key, e));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new UncheckedIOException(
+                        new IOException("Interrupted while loading date tags for " + key, e));
+            }
+        });
 
-        if ("tag".equals(objType)) {
-            // annotated tag: retrieve date
-            JsonNode tagObj = client.getApi(API + REPOS + owner + '/' + repo +
-                    "/git/tags/" + sha);
-            String date = tagObj.path("tagger").path("date").asText();
-            return Instant.parse(date);
-        } else {
-            // lightweight: fallback alla data del commit
-            JsonNode commit = client.getApi(API + REPOS + owner + '/' + repo +
-                    "/commits/" + sha);
-            String date = commit.path("commit").path("committer")
-                    .path("date").asText();
-            return Instant.parse(date);
+        Instant result = map.get(tag);
+        if (result == null) {
+            throw new IOException("Tag not found: " + tag);
         }
+        return result;
+    }
+
+    /**
+     * It retrieves and maps all tags → dates in the repository in one block.
+     */
+    private Map<String, Instant> loadAllTagDates(String owner, String repo)
+            throws IOException, InterruptedException {
+        Map<String, Instant> dates = new HashMap<>();
+        for (int page = 1; ; page++) {
+            JsonNode tags = client.getApi(
+                    API + REPOS + owner + "/" + repo +
+                            "/tags?per_page=100&page=" + page);
+            if (!tags.isArray() || tags.isEmpty()) break;
+
+            for (JsonNode t : tags) {
+                String name = t.path("name").asText();
+                String sha  = t.path(COMMIT).path("sha").asText();
+
+                // We get the date of the corresponding commit
+                JsonNode commit = client.getApi(
+                        API + REPOS + owner + "/" + repo +
+                                "/commits/" + sha);
+                String dateStr = commit
+                        .path(COMMIT)
+                        .path("committer")
+                        .path("date")
+                        .asText();
+
+                Instant ts = Instant.parse(dateStr);
+                dates.put(name, ts);
+            }
+        }
+        return dates;
     }
 }

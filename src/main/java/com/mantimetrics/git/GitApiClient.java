@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
@@ -21,6 +22,10 @@ class GitApiClient {
         this.token = token;
         this.http = new OkHttpClient.Builder()
                 .connectTimeout(Duration.ofSeconds(30))
+                .readTimeout(Duration.ofSeconds(60))
+                .writeTimeout(Duration.ofSeconds(60))
+                .callTimeout(Duration.ofSeconds(90))
+                .retryOnConnectionFailure(true)
                 .build();
     }
 
@@ -36,13 +41,17 @@ class GitApiClient {
                 if (resp.isSuccessful() && resp.body() != null) {
                     return json.readTree(resp.body().string());
                 }
-                if (resp.code() == 403 || resp.code() == 429) {
+                if (resp.code() == 403 || resp.code() == 429 || resp.code() == 502 || resp.code() == 503 || resp.code() == 504) {
                     long wait = backoff(resp, attempt);
                     LOG.warn("Rate-limit {}, retry {}/{} in {} s – {}", resp.code(), attempt + 1, MAX_R, wait/1_000, path);
                     TimeUnit.MILLISECONDS.sleep(wait);
                     continue;
                 }
                 throw new IOException("HTTP " + resp.code() + " for " + path);
+            } catch (SocketTimeoutException ste) {
+                if (attempt == MAX_R - 1) throw ste;
+                LOG.warn("Socket timeout, retry {}/{}", attempt+1, MAX_R);
+                TimeUnit.SECONDS.sleep(5);
             }
         }
         throw new IOException("Retries exhausted for " + path);

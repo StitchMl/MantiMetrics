@@ -130,10 +130,6 @@ public final class GitService {
         } catch (IOException e) {
             throw new UncheckedIOException(
                     new IOException("Cannot retrieve tag dates for " + owner + "/" + repo, e));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new UncheckedIOException(
-                    new IOException("Interrupted while retrieving tag dates", e));
         }
     }
 }

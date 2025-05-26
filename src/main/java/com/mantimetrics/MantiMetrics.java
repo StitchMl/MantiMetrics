@@ -177,11 +177,8 @@ public class MantiMetrics {
         // 4) filtering and enrichment with codeSmells, touches, prevData, buggy
         return uniqueMethods.values().stream()
                 .filter(m -> !m.getCommitHashes().isEmpty())
-                .filter(m -> m.getCommitHashes().size() > 1)
-                .filter(m -> {
-                    int touches = Math.max(0, m.getCommitHashes().size() - 1);
-                    return touches > 0;
-                })
+                ///.filter(m -> m.getCommitHashes().size() > 1)
+                ///.filter(m -> Math.max(0, m.getCommitHashes().size() - 1) > 0)
                 .map(m -> {
                     String fileName = Paths.get(m.getPath()).getFileName().toString();
                     List<RuleViolation> vlist = byFile.getOrDefault(fileName, List.of());
