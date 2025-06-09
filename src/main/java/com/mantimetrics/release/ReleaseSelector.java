@@ -56,7 +56,7 @@ public class ReleaseSelector {
 
     /**
      * Comparator semantic version: extracts numbers from 'X.Y.Z' (ignores non-numeric prefixes)
-     * and compares them numerically piece by piece.
+     * and compares them numeric piece by piece.
      */
     private static int compareSemver(String a, String b) {
         String cleanA = a.replaceAll("[^0-9.]", "");

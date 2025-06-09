@@ -29,7 +29,7 @@ The **MantiMetrics** project is structured in separate modules, each responsible
       `Project,Path,Method,ReleaseID,VersionId,CommitId,LOC,StmtCount,Cyclomatic,Cognitive,…,isDuplicatedCode,Buggy`
 
 7. **MantiMetrics (Main)**
-    - Orchestrator that loads the configuration from JSON files, initializes the services, cycles through the projects, selected versions, collects the data and finally writes the CSV.
+    - Orchestrator that loads the configuration from JSON files initializes the services, cycles through the projects, selected versions, collects the data and finally writes the CSV.
 
 ---
 

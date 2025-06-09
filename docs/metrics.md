@@ -76,7 +76,7 @@ Method that makes extensive use of another class' data/methods rather than its o
 > **Impact:** violation of the Single Responsibility Principle, suggests method or class extraction.  
 
 ### 5.4 Duplicated Code
-Identical or very similar portions of code are scattered in several places.
+Identical or very similar portions of the code are scattered in several places.
 > **Impact:** increases technical debt, complicates modifications.  
 
 ---
