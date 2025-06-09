@@ -13,7 +13,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 class CommitMapper {
     private static final Logger  LOG      = LoggerFactory.getLogger(CommitMapper.class);
@@ -109,54 +108,10 @@ class CommitMapper {
                 // Remove any duplicates but keep the order
                 List<String> unique = keys.stream()
                         .distinct()
-                        .collect(Collectors.toList());
+                        .toList();
                 map.put(name, unique);
             }
         }
-    }
-
-    /**
-     * Returns the list of commits touching the given file in the given
-     * repository, between the two given tags.
-     * If fromTag is null or empty, all commits up to toTag are returned.
-     */
-    public List<String> getCommitsInRange(String owner,
-                                          String repo,
-                                          String filePath,
-                                          String fromTag,
-                                          String toTag)
-            throws IOException, InterruptedException {
-        // if there is no basic tag, take the entire history up to toTag
-        String compareSpec = (fromTag == null || fromTag.isBlank())
-                ? toTag
-                : fromTag + "..." + toTag;
-
-        JsonNode cmp = client.getApi(API + REPOS + owner + '/' + repo +
-                "/compare/" +
-                URLEncoder.encode(compareSpec, StandardCharsets.UTF_8));
-
-        // extract all commits in chronological order
-        List<String> allHashes = new ArrayList<>();
-        if (cmp.has("commits")) {
-            for (JsonNode c : cmp.get("commits")) {
-                allHashes.add(c.path("sha").asText());
-            }
-        }
-
-        // for each commit, check if it touches filePath
-        List<String> touching = new ArrayList<>();
-        for (String sha : allHashes) {
-            JsonNode files = client.getApi(
-                    API + REPOS + owner + '/' + repo +
-                            "/commits/" + sha).path("files");
-            for (JsonNode f : files) {
-                if (filePath.equals(f.path("filename").asText())) {
-                    touching.add(sha);
-                    break;
-                }
-            }
-        }
-        return touching;
     }
 
     /**

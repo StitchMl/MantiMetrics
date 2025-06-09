@@ -106,9 +106,13 @@ public class MantiMetrics {
                         int codeSmells = violations.size();
                         log.info("{}@{} – {} code smells", repo, tag, codeSmells);
 
+                        Map<String,List<String>> touchMap =
+                                git.buildTouchMap(owner, repo, prevTag, tag);
+                        log.info("{}@{} – {} files touched", repo, tag, touchMap.size());
+
                         // b) parsing + metrics on the same folder
                         List<MethodData> methods = getCollect(
-                                releaseDir, repo, tag,
+                                touchMap, releaseDir, owner + ";" + repo + ";" + tag,
                                 file2Keys, prevData,
                                 violations, bugKeys
                         );
@@ -145,65 +149,111 @@ public class MantiMetrics {
      * code smells, touches, previous data, and bug keys.
      *
      * @param releaseDir  the path to the release directory
-     * @param repo        the repository name
-     * @param tag         the tag name
-     * @param file2Keys   a map of file paths to JIRA keys
+     * @param info       a string containing owner, repo, and tag information
      * @param prevData    a map of previous method data
      * @param violations  a list of rule violations
      * @param bugKeys     a list of bug keys
      * @return a list of enriched method data
      */
     @NotNull
-    private static List<MethodData> getCollect(Path releaseDir, String repo, String tag, Map<String, List<String>> file2Keys, Map<String, MethodData> prevData, List<RuleViolation> violations, List<String> bugKeys) {
-        // 1) parse from already downloaded directories, do not re-download
+    private static List<MethodData> getCollect(
+            Map<String,List<String>> touchMap,
+            Path releaseDir,
+            String info,
+            Map<String, List<String>> file2Keys,
+            Map<String, MethodData> prevData,
+            List<RuleViolation> violations,
+            List<String> bugKeys
+    ){
+
+        String[] parts = info.split(";");
+        String repo  = parts[1];
+        String tag   = parts[2];
+
+        // 1) initial parsing: all MethodData have commitHashes = emptyList()
         List<MethodData> methods = parser.parseFromDirectory(
                 releaseDir, repo, tag, calc, file2Keys
         );
 
-        // 2) duplicate management as before
+        // 2) I delete duplicates according to uniqueKey (I keep the last one)
         Map<String, MethodData> uniqueMethods = methods.stream()
                 .collect(Collectors.toMap(
                         MethodData::getUniqueKey,
                         m -> m,
-                        (existing, replacement) -> replacement
+                        (prev, next) -> next
                 ));
 
-        // 3) group violations by file (file name only)
-        Map<String,List<RuleViolation>> byFile = violations.stream()
+        // 3) grouping PMD violations by file name (e.g. 'MyClass.java')
+        Map<String, List<RuleViolation>> byFileName = violations.stream()
                 .collect(Collectors.groupingBy(v ->
-                        Paths.get(v.getFileId().getFileName()).getFileName().toString()
+                        Paths.get(v.getFileId().getFileName())
+                                .getFileName().toString()
                 ));
 
-        // 4) filtering and enrichment with codeSmells, touches, prevData, buggy
-        return uniqueMethods.values().stream()
-                .filter(m -> !m.getCommitHashes().isEmpty())
-                .filter(m -> m.getCommitHashes().size() > 1)
-                .filter(m -> Math.max(0, m.getCommitHashes().size() - 1) > 0)
-                .map(m -> {
-                    String fileName = Paths.get(m.getPath()).getFileName().toString();
-                    List<RuleViolation> vlist = byFile.getOrDefault(fileName, List.of());
-                    long cnt = vlist.stream()
-                            .filter(v -> {
-                                // WARNING: v.getFileId().getFileName() == "MyClass.java"
-                                int linea = v.getBeginLine();
-                                return linea >= m.getStartLine()
-                                        && linea <= m.getEndLine();
-                            })
-                            .count();
-                    int touches    = Math.max(0, m.getCommitHashes().size() - 1);
-                    MethodData prev = prevData.get(m.getUniqueKey());
-                    int prevSmells = prev != null ? prev.getCodeSmells() : 0;
-                    boolean prevBuggy = prev != null && prev.isBuggy();
+        List<MethodData> result = new ArrayList<>();
 
-                    return m.toBuilder()
-                            .codeSmells((int)cnt)
-                            .touches(touches)
-                            .buggy(jira.isMethodBuggy(m.getCommitHashes(), bugKeys))
-                            .prevCodeSmells(prevSmells)
-                            .prevBuggy(prevBuggy)
-                            .build();
-                })
-                .collect(Collectors.toList());
+        for (MethodData m : uniqueMethods.values()) {
+            // 4.1) retrieve the 'pure name' of the file (e.g. 'MyClass.java')
+            String methodFileName = Paths.get(m.getPath())
+                    .getFileName()
+                    .toString();
+
+            // 4.2) normalise relUnixPath by removing initial/final slash
+            String relUnixPath = m.getPath();
+            if (relUnixPath.startsWith("/")) {
+                relUnixPath = relUnixPath.substring(1);
+            }
+            if (relUnixPath.endsWith("/")) {
+                relUnixPath = relUnixPath.substring(0, relUnixPath.length() - 1);
+            }
+            List<String> jiraKeysForFile = file2Keys.getOrDefault(relUnixPath, List.of());
+
+            // 4.3) I determine prevTag (null if first release)
+            String prevTag = null;
+            if (prevData.containsKey(m.getUniqueKey())) {
+                prevTag = prevData.get(m.getUniqueKey()).getReleaseId();
+            }
+
+            log.debug("Requesting commits for filePath = [{}], fromTag = [{}]",
+                    relUnixPath, prevTag);
+
+            // 4.4) I request the list of commits
+            List<String> actualCommits = touchMap.getOrDefault(relUnixPath, List.of());
+            int touches = actualCommits.size();
+
+
+            // 4.6) codeSmells account within the method
+            List<RuleViolation> vlist = byFileName.getOrDefault(methodFileName, List.of());
+            long cnt = vlist.stream()
+                    .filter(v -> {
+                        int r = v.getBeginLine();
+                        return (r >= m.getStartLine() && r <= m.getEndLine());
+                    })
+                    .count();
+
+            // 4.7) I get prevSmells and prevBuggy from the previous release
+            MethodData prev = prevData.get(m.getUniqueKey());
+            int prevSmells = (prev != null ? prev.getCodeSmells() : 0);
+            boolean prevBuggy = (prev != null && prev.isBuggy());
+
+            // 4.8) I rebuild MethodData with updated commitHashes and touches
+            MethodData finalMethod = m.toBuilder()
+                    .commitHashes(actualCommits)
+                    .codeSmells((int) cnt)
+                    .touches(touches)
+                    .buggy(jira.isMethodBuggy(jiraKeysForFile,
+                            bugKeys))
+                    .prevCodeSmells(prevSmells)
+                    .prevBuggy(prevBuggy)
+                    .build();
+
+            // 4.9) I only add the methods that have actually been touched at least once
+            if (touches > 0) {
+                result.add(finalMethod);
+            }
+        }
+
+        return result;
     }
 
     /**

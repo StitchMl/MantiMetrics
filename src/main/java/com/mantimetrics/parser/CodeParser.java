@@ -45,28 +45,7 @@ public final class CodeParser {
     }
 
     /**
-     * @param fileToKeys immutable map file → JIRA keys, prepared upstream
-     */
-    public List<MethodData> parseAndComputeOnline(
-            String owner,
-            String repo,
-            String tag,
-            MetricsCalculator calc,
-            Map<String, List<String>> fileToKeys) throws CodeParserException {
-        LOG.trace("Analysing {}/{}@{}", owner, repo, tag);
-
-        // 1. Download & unzip
-        Path root = downloadRelease(owner, repo, tag);
-
-        List<MethodData> out = parseFromDirectory(root, repo, tag, calc, fileToKeys);
-
-        deleteRecursively(root);
-
-        return out;
-    }
-
-    /**
-     * Parsing and metrics on an already downloaded root; **does not** delete the folder.
+     * Parsing and metrics on an already downloaded root; **do not** delete the folder.
      */
     public List<MethodData> parseFromDirectory(
             Path root,

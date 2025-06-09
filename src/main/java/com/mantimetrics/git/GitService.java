@@ -1,6 +1,7 @@
 package com.mantimetrics.git;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.eclipse.jgit.revwalk.RevCommit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,10 +17,10 @@ public final class GitService {
     private static final String      API       = "https://api.github.com";
     private static final String      REPOS     = "/repos/";
 
-    private final GitApiClient       apiClient;
-    private final CommitMapper       commitMapper;
-    private final ZipDownloader      zipDownloader;
-    private final Map<String,String> defaultBranchCache = new ConcurrentHashMap<>();
+    private final GitApiClient          apiClient;
+    private final CommitMapper          commitMapper;
+    private final ZipDownloader         zipDownloader;
+    private final Map<String,String>    defaultBranchCache = new ConcurrentHashMap<>();
 
     public GitService(String token) {
         this.apiClient     = new GitApiClient(token);
@@ -92,18 +93,6 @@ public final class GitService {
         return commitMapper.getFileToIssueKeysMap(owner, repo, branch);
     }
 
-    /**
-     * Returns the list of commit hashes touching filePath
-     * between fromTag (excluded) and toTag (included).
-     */
-    public List<String> getCommitsInRange(
-            String owner, String repo,
-            String filePath,
-            String fromTag, String toTag)
-            throws IOException, InterruptedException {
-        return commitMapper.getCommitsInRange(owner, repo, filePath, fromTag, toTag);
-    }
-
     /** download + unzip con timeout esteso e retry su SocketTimeout. */
     public Path downloadAndUnzipRepo(
             String owner, String repo,
@@ -131,5 +120,26 @@ public final class GitService {
             throw new UncheckedIOException(
                     new IOException("Cannot retrieve tag dates for " + owner + "/" + repo, e));
         }
+    }
+
+    /**
+     * Builds a map of files to commit SHAs that modified them
+     * between the two given tags (exclusive prevTag, inclusive tag).
+     * The returned map is file → list of commit SHAs.
+     */
+    public Map<String, List<String>> buildTouchMap(
+            String owner, String repo, String prevTag, String tag) throws IOException, InterruptedException {
+        List<String> shaCode = apiClient.listCommitsBetween(owner, repo, prevTag, tag);
+
+        LocalRepoCache cache = LocalRepoCacheManager.obtain(owner, repo);
+
+        Map<String,List<String>> map = new HashMap<>();
+        for (String sha : shaCode) {
+            RevCommit commit = cache.lookup(sha);
+            for (String file : cache.filesOf(commit)) {
+                map.computeIfAbsent(file, k -> new ArrayList<>()).add(sha);
+            }
+        }
+        return map;
     }
 }
