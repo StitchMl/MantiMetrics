@@ -9,6 +9,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 class GitApiClient {
@@ -17,6 +19,8 @@ class GitApiClient {
  final OkHttpClient http;
  private final ObjectMapper json = new ObjectMapper();
  private final String token;
+ private static final String API = "https://api.github.com";
+ private static final String REPOS = "/repos/";
 
  GitApiClient(String token) {
  this.token = token;
@@ -27,6 +31,38 @@ class GitApiClient {
  .callTimeout(Duration.ofSeconds(90))
  .retryOnConnectionFailure(true)
  .build();
+ }
+
+ /**
+ * Returns the list of commits between two tags, or from the first tag
+ * to the second tag if the first is null or empty.
+ *
+ * @param owner GitHub repository owner
+ * @param repo GitHub repository name
+ * @param baseTag base tag (null or empty for first release)
+ * @param headTag head tag (must not be null or empty)
+ * @return list of commit SHAs
+ */
+ List<String> listCommitsBetween(String owner, String repo,
+ String baseTag, String headTag)
+ throws IOException, InterruptedException {
+ String spec = (baseTag == null || baseTag.isBlank())
+ ? headTag // prima release → chiamo /commits?sha=tag
+ : baseTag + "..." + headTag;
+ String url = (baseTag == null || baseTag.isBlank())
+ ? API + REPOS + owner + "/" + repo +
+ "/commits?sha=" + headTag + "&per_page=100"
+ : API + REPOS + owner + "/" + repo + "/compare/" + spec;
+
+ JsonNode node = getApi(url);
+ List<String> out = new ArrayList<>();
+
+ if (baseTag == null || baseTag.isBlank()) { // prima release
+ node.forEach(c -> out.add(c.path("sha").asText()));
+ } else { // releases successive
+ node.path("commits").forEach(c -> out.add(c.path("sha").asText()));
+ }
+ return out;
  }
 
  /** Performs a GET request on the given URL, retrying on rate-limit errors. */
