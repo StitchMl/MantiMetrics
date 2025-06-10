@@ -1,10 +1,15 @@
 package com.mantimetrics.metrics;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.stmt.*;
 import com.github.javaparser.Range;
+import com.mantimetrics.clone.CloneDetector;
+import com.mantimetrics.clone.SourceCollectionException;
+
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -18,10 +23,10 @@ public class MetricsCalculator {
      * @param m the method declaration to analyze
      * @return a MethodMetrics object containing the computed metrics
      */
-    public MethodMetrics computeAll(MethodDeclaration m) {
+    public MethodMetrics computeAll(MethodDeclaration m) throws SourceCollectionException, IOException {
         MethodMetrics mm = new MethodMetrics();
 
-        // 1. LOC: use Optional<Range> instead of getBegin().get()/getEnd().get()
+        // 1. LOC
         Optional<Range> rangeOpt = m.getRange();
         int loc = rangeOpt.map(r -> r.end.line - r.begin.line + 1).orElse(0);
         mm.setLoc(loc);
@@ -33,10 +38,7 @@ public class MetricsCalculator {
         mm.setCyclomatic(computeCyclomatic(m));
         mm.setCognitive(computeCognitive(m));
 
-        // 4. Cognitive complexity (simple proxy)
-        mm.setCognitive(computeCognitive(m));
-
-        // 5. Halstead metrics via Builder
+        // 4. Halstead
         HalsteadMetrics h = computeHalstead(m);
         mm.setDistinctOperators(h.getDistinctOperators());
         mm.setDistinctOperands(h.getDistinctOperands());
@@ -48,17 +50,19 @@ public class MetricsCalculator {
         mm.setDifficulty(h.getDifficulty());
         mm.setEffort(h.getEffort());
 
-        // 6. Nesting depth
+        // 5. Nesting depth
         mm.setMaxNestingDepth(computeMaxNestingDepth(m, 0));
 
-        // 7. Code smells (simple heuristics)
+        // 6. Code smells
         mm.setLongMethod(loc > 50);
-        mm.setFeatureEnvy(false);     // stub: must be implemented according to field access
-        mm.setGodClass(false);        // not applicable to a single method
-        mm.setDuplicatedCode(false);  // stub: requires cross-method analysis
+        detectFeatureEnvy(m, mm);
+        mm.setGodClass(detectGodClass(m));
+        mm.setDuplicatedCode(detectDuplicatedCode(m));
 
         return mm;
     }
+
+    // --- Metriche di complessità ---
 
     /**
      * Computes the cyclomatic complexity of a method.
@@ -93,6 +97,8 @@ public class MetricsCalculator {
                 .sum();
     }
 
+    // --- Halstead ---
+
     /**
      * Computes Halstead metrics for a method.
      *
@@ -106,23 +112,26 @@ public class MetricsCalculator {
         AtomicInteger totalOpr = new AtomicInteger();
 
         m.walk(node -> {
-            if (node instanceof BinaryExpr) {
-                String op = ((BinaryExpr) node).getOperator().asString();
-                distinctOps.add(op); totalOps.incrementAndGet();
-            } else if (node instanceof UnaryExpr) {
-                String op = ((UnaryExpr) node).getOperator().asString();
-                distinctOps.add(op); totalOps.incrementAndGet();
-            } else if (node instanceof AssignExpr) {
-                String op = ((AssignExpr) node).getOperator().asString();
-                distinctOps.add(op); totalOps.incrementAndGet();
-            } else if (node instanceof MethodCallExpr) {
-                distinctOpr.add(((MethodCallExpr) node).getNameAsString());
+            if (node instanceof BinaryExpr binaryexpr) {
+                String op = binaryexpr.getOperator().asString();
+                distinctOps.add(op);
+                totalOps.incrementAndGet();
+            } else if (node instanceof UnaryExpr unaryexpr) {
+                String op = unaryexpr.getOperator().asString();
+                distinctOps.add(op);
+                totalOps.incrementAndGet();
+            } else if (node instanceof AssignExpr assignexpr) {
+                String op = assignexpr.getOperator().asString();
+                distinctOps.add(op);
+                totalOps.incrementAndGet();
+            } else if (node instanceof MethodCallExpr methodcallexpr) {
+                distinctOpr.add(methodcallexpr.getNameAsString());
                 totalOpr.incrementAndGet();
-            } else if (node instanceof NameExpr) {
-                distinctOpr.add(((NameExpr) node).getNameAsString());
+            } else if (node instanceof NameExpr nameexpr) {
+                distinctOpr.add(nameexpr.getNameAsString());
                 totalOpr.incrementAndGet();
-            } else if (node instanceof LiteralExpr) {
-                distinctOpr.add(node.toString());
+            } else if (node instanceof LiteralExpr literalexpr) {
+                distinctOpr.add(literalexpr.toString());
                 totalOpr.incrementAndGet();
             }
         });
@@ -150,6 +159,8 @@ public class MetricsCalculator {
                 .build();
     }
 
+    // --- Nesting Depth ---
+
     /**
      * Computes the maximum nesting depth of a method.
      *
@@ -171,5 +182,84 @@ public class MetricsCalculator {
             max = Math.max(max, computeMaxNestingDepth(child, depth));
         }
         return max;
+    }
+
+    // --- Feature Envy detection ---
+
+    /**
+     * Detects Feature Envy code smell in a method.
+     * Feature Envy occurs when a method accesses more fields or methods of another class than its own.
+     *
+     * @param m the method declaration to analyze
+     * @param mm the MethodMetrics object to update with the result
+     */
+    private void detectFeatureEnvy(MethodDeclaration m, MethodMetrics mm) {
+        AtomicInteger internal = new AtomicInteger();
+        AtomicInteger external = new AtomicInteger();
+        m.walk(node -> {
+            if (node instanceof FieldAccessExpr fa) {
+                // this.x or super.x → internal, otherwise external
+                String scope = fa.getScope().toString();
+                if ("this".equals(scope) || "super".equals(scope)) internal.getAndIncrement();
+                else external.getAndIncrement();
+            }
+            else if (node instanceof MethodCallExpr mc && mc.getScope().isPresent()) {
+                String scope = mc.getScope().get().toString();
+                if ("this".equals(scope) || "super".equals(scope)) internal.getAndIncrement();
+                else external.getAndIncrement();
+            }
+        });
+        mm.setFeatureEnvy(external.get() > internal.get());
+    }
+
+    // --- God Class Survey ---
+
+    /**
+     * Detects God Class code smell in a method.
+     * A God Class is a class that has too many responsibilities, making it hard to maintain.
+     *
+     * @param m the method declaration to analyze
+     * @return true if the method belongs to a God Class, false otherwise
+     */
+    private boolean detectGodClass(MethodDeclaration m) {
+        // Find the class declaration containing the method
+        Optional<ClassOrInterfaceDeclaration> clsOpt =
+                m.findCompilationUnit()
+                        .flatMap(cu -> cu.findFirst(ClassOrInterfaceDeclaration.class));
+        if (clsOpt.isEmpty()) return false;
+        ClassOrInterfaceDeclaration cls = clsOpt.get();
+
+        // 1) WMC = sum of cyclomatic complexity of all methods
+        int wmc = cls.findAll(MethodDeclaration.class)
+                .stream()
+                .mapToInt(this::computeCyclomatic)
+                .sum();
+
+        // 2) ATFD = number of accesses to external data
+        int numAccess = cls.findAll(FieldAccessExpr.class).size();
+
+        // 3) LCOM (e.g. LCOM4, calculated by an external helper)
+        double lcom = new CohesionCalculator().calculateLcom4(cls);
+
+        // Example thresholds: WMC > 20, ATFD > 5, LCOM > 0.8
+        int soglieSuperate = 0;
+        if (wmc > 20) soglieSuperate++;
+        if (numAccess > 5) soglieSuperate++;
+        if (lcom > 0.8) soglieSuperate++;
+        return soglieSuperate >= 2;
+    }
+
+    // --- Duplicated Code Detection ---
+
+    /**
+     * Detects duplicated code in a method using PMD CPD.
+     * This method checks if the given method is a clone of another method.
+     *
+     * @param m the method declaration to analyze
+     * @return true if the method is duplicated, false otherwise
+     */
+    private boolean detectDuplicatedCode(MethodDeclaration m) throws SourceCollectionException, IOException {
+        // Wrapper su PMD CPD che analizza AST e individua cloni
+        return CloneDetector.isMethodDuplicated(m);
     }
 }

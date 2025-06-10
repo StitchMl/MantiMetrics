@@ -208,21 +208,12 @@ public class MantiMetrics {
             }
             List<String> jiraKeysForFile = file2Keys.getOrDefault(relUnixPath, List.of());
 
-            // 4.3) I determine prevTag (null if first release)
-            String prevTag = null;
-            if (prevData.containsKey(m.getUniqueKey())) {
-                prevTag = prevData.get(m.getUniqueKey()).getReleaseId();
-            }
-
-            log.debug("Requesting commits for filePath = [{}], fromTag = [{}]",
-                    relUnixPath, prevTag);
-
-            // 4.4) I request the list of commits
+            // 4.3) I request the list of commits
             List<String> actualCommits = touchMap.getOrDefault(relUnixPath, List.of());
             int touches = actualCommits.size();
 
 
-            // 4.6) codeSmells account within the method
+            // 4.4) codeSmells account within the method
             List<RuleViolation> vlist = byFileName.getOrDefault(methodFileName, List.of());
             long cnt = vlist.stream()
                     .filter(v -> {
@@ -231,12 +222,12 @@ public class MantiMetrics {
                     })
                     .count();
 
-            // 4.7) I get prevSmells and prevBuggy from the previous release
+            // 4.5) I get prevSmells and prevBuggy from the previous release
             MethodData prev = prevData.get(m.getUniqueKey());
             int prevSmells = (prev != null ? prev.getCodeSmells() : 0);
             boolean prevBuggy = (prev != null && prev.isBuggy());
 
-            // 4.8) I rebuild MethodData with updated commitHashes and touches
+            // 4.6) I rebuild MethodData with updated commitHashes and touches
             MethodData finalMethod = m.toBuilder()
                     .commitHashes(actualCommits)
                     .codeSmells((int) cnt)
@@ -247,7 +238,7 @@ public class MantiMetrics {
                     .prevBuggy(prevBuggy)
                     .build();
 
-            // 4.9) I only add the methods that have actually been touched at least once
+            // 4.7) I only add the methods that have actually been touched at least once
             if (touches > 0) {
                 result.add(finalMethod);
             }

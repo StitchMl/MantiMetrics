@@ -6,6 +6,7 @@ import com.github.javaparser.JavaParser;
 import com.github.javaparser.Providers;
 import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.mantimetrics.clone.SourceCollectionException;
 import com.mantimetrics.git.GitService;
 import com.mantimetrics.metrics.MetricsCalculator;
 import com.mantimetrics.model.MethodData;
@@ -175,6 +176,8 @@ public final class CodeParser {
                     .getResult()
                     .ifPresent(cu -> cu.findAll(MethodDeclaration.class)
                             .forEach(m -> m.getRange().ifPresent(r ->
+                            {
+                                try {
                                     sink.add(new MethodData.Builder()
                                             .projectName(repo)
                                             .path('/' + relUnix + '/')
@@ -185,7 +188,11 @@ public final class CodeParser {
                                             .buggy(false)
                                             .startLine(r.begin.line)
                                             .endLine(r.end.line)
-                                            .build()))));
+                                            .build());
+                                } catch (SourceCollectionException | IOException sce) {
+                                    LOG.warn("Failed to compute metrics for {}: {}", file, sce.getMessage());
+                                }
+                            })));
         } catch (ParseProblemException ppe) {
             LOG.warn("Failed to parse {}: {}", file, ppe.getMessage());
         } catch (IOException ioe) {
