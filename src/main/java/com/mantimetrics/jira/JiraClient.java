@@ -32,6 +32,7 @@ public class JiraClient {
 
     private String searchBase;
     private String authHeader;
+    private String baseUrl;
 
     public JiraClient() {
         // Configuring retry handlers for transient errors
@@ -56,31 +57,29 @@ public class JiraClient {
     public void initialize(String projectKey) throws JiraClientException {
         Properties props = new Properties();
         try (InputStream in = getClass().getResourceAsStream(PROPS_PATH)) {
-            if (in == null) {
-                throw new JiraClientException("JIRA configuration file not found: " + PROPS_PATH);
-            }
+            if (in == null) throw new JiraClientException(
+                    "JIRA configuration file not found: " + PROPS_PATH);
             props.load(in);
         } catch (IOException e) {
             throw new JiraClientException("Error loading JIRA properties", e);
         }
 
-        String baseUrl = stripTrailingSlashes(props.getProperty("jira.url", "").trim());
-        String pat     = props.getProperty("jira.pat",   "").trim();
-        String jqlTpl  = props.getProperty("jira.query", "").trim();
-        if (baseUrl.isEmpty() || pat.isEmpty() || jqlTpl.isEmpty()) {
-            throw new JiraClientException("jira.url, jira.pat and jira.query must be valorised");
-        }
+        /* 1) save baseUrl for future use */
+        this.baseUrl = stripTrailingSlashes(props.getProperty("jira.url", "").trim());
 
-        // Constructing URLs securely with URIBuilder
+        String pat    = props.getProperty("jira.pat",   "").trim();
+        String jqlTpl = props.getProperty("jira.query", "").trim();
+        if (baseUrl.isEmpty() || pat.isEmpty() || jqlTpl.isEmpty())
+            throw new JiraClientException("jira.url, jira.pat and jira.query must be set");
+
+        /* 2) basic search unchanged */
         try {
-            URI uri = new URIBuilder(baseUrl + "/rest/api/2/search")
+            this.searchBase = new URIBuilder(baseUrl + "/rest/api/2/search")
                     .addParameter("jql", jqlTpl.replace("{projectKey}", projectKey))
-                    .build();
-            this.searchBase = uri.toString();
+                    .build().toString();
         } catch (Exception e) {
             throw new JiraClientException("JIRA URI construction error", e);
         }
-
         this.authHeader = "Bearer " + pat;
         log.debug("JIRA search base = {}", searchBase);
     }
@@ -157,5 +156,44 @@ public class JiraClient {
         int end = s.length();
         while (end > 0 && s.charAt(end - 1) == '/') end--;
         return s.substring(0, end);
+    }
+
+    /** Returns the (normalized) list of version names present on Jira. */
+    public List<String> fetchProjectVersions(String projectKey) throws JiraClientException {
+        List<String> names = new ArrayList<>();
+        try {
+            /* official Jira Server/DataCenter endpoint */
+            URI uri = new URIBuilder(baseUrl
+                    + "/rest/api/2/project/" + projectKey + "/versions")
+                    .build();
+
+            JsonNode versions = doRequest(http, uri);
+            if (!versions.isArray()) {
+                throw new JiraClientException("Unexpected response for project versions");
+            }
+
+            versions.forEach(v -> {
+                String name = v.path("name").asText(null);
+                if (name != null && !name.isBlank()) {
+                    names.add(normalize(name));
+                }
+            });
+
+            log.debug("JIRA project {} – {} versions fetched",
+                    projectKey, names.size());
+            return names;
+
+        } catch (IOException e) {
+            throw new JiraClientException("I/O error fetching project versions", e);
+        } catch (Exception e) {
+            throw new JiraClientException("fetchProjectVersions error", e);
+        }
+    }
+
+    /** Normalize tags/versions: lower case, remove common prefixes. */
+    public static String normalize(String s) {
+        return s.toLowerCase(Locale.ROOT)
+                .replaceFirst("^(release-|rel-|ver-|v)", "")
+                .trim();
     }
 }

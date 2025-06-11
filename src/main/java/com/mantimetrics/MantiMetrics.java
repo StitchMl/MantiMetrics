@@ -1,11 +1,14 @@
 package com.mantimetrics;
 
 import com.mantimetrics.config.ProjectConfigLoader;
+import com.mantimetrics.release.ReleaseProcessingException;
 import com.mantimetrics.csv.CSVWriter;
+import com.mantimetrics.csv.CsvWriteException;
 import com.mantimetrics.git.FileKeyMappingException;
 import com.mantimetrics.git.GitService;
 import com.mantimetrics.git.ProjectConfig;
 import com.mantimetrics.jira.JiraClient;
+import com.mantimetrics.jira.JiraClientException;
 import com.mantimetrics.metrics.MetricsCalculator;
 import com.mantimetrics.model.MethodData;
 import com.mantimetrics.parser.CodeParser;
@@ -15,10 +18,12 @@ import com.mantimetrics.release.ReleaseSelector;
 import net.sourceforge.pmd.reporting.Report;
 import net.sourceforge.pmd.reporting.RuleViolation;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedWriter;
+import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -52,96 +57,192 @@ public class MantiMetrics {
         setJira(new JiraClient());
 
         for (ProjectConfig cfg : configs) {
-            String owner = cfg.getOwner();
-            String repo  = cfg.getName().toLowerCase();
-
-            // 1) list of all tags and selection of target releases
-            List<String> tags    = git.listTags(owner, repo);
-            List<String> chosen  = sel.selectFirstPercent(tags, cfg.getPercentage());
-            chosen.sort((t1, t2) -> git.compareTagDates(owner, repo, t1, t2));
-
-            String branch = git.getDefaultBranch(owner, repo);
-            log.info("{}/{} – processing {} tags", repo, branch, chosen.size());
-
-            // 2) init JIRA
-            jira.initialize(cfg.getJiraProjectKey());
-            List<String> bugKeys = jira.fetchBugKeys();
-            log.info("Found {} bug keys", bugKeys.size());
-
-            // 3) mapping file → issue keys
-            Map<String,List<String>> file2Keys;
-            try {
-                log.info("Building file → issue keys mapping");
-                file2Keys = git.getFileToIssueKeysMap(owner, repo, branch);
-            } catch (FileKeyMappingException ex) {
-                log.error("Skipping {} – {}", repo, ex.getMessage());
-                continue;
-            }
-            log.info("File to issue keys mapping: {} issue keys", file2Keys.size());
-
-            // CSV preparation
-            Path csvPath = Paths.get("output", repo + "_dataset.csv");
-            try (BufferedWriter w = csvOut.open(csvPath)) {
-                log.info("Writing CSV to {}", csvPath);
-
-                // map to hold data from the last release
-                Map<String,MethodData> prevData = new HashMap<>();
-
-                for (int i = 0; i < chosen.size(); i++) {
-                    String tag     = chosen.get(i);
-                    String prevTag = (i > 0 ? chosen.get(i - 1) : null);
-
-                    log.info("Processing release {} (previous {})", tag, prevTag);
-
-                    try {
-                        // a.0) download the current release into a temporary folder
-                        Path releaseDir = parser.downloadRelease(owner, repo, tag);
-
-                        // a.1) I parse all .java under releaseDir/src
-                        Report report = pmd.analyze(releaseDir);
-                        if (report.getViolations().isEmpty())
-                            log.warn("No violations found: check ruleset and input paths");
-
-                        List<RuleViolation> violations = report.getViolations();
-                        int codeSmells = violations.size();
-                        log.info("{}@{} – {} code smells", repo, tag, codeSmells);
-
-                        Map<String,List<String>> touchMap =
-                                git.buildTouchMap(owner, repo, prevTag, tag);
-                        log.info("{}@{} – {} files touched", repo, tag, touchMap.size());
-
-                        // b) parsing + metrics on the same folder
-                        List<MethodData> methods = getCollect(
-                                touchMap, releaseDir, owner + ";" + repo + ";" + tag,
-                                file2Keys, prevData,
-                                violations, bugKeys
-                        );
-
-                        log.info("release={} violationsTotali={} methodsFinali={}",
-                                tag, violations.size(), methods.size());
-
-                        // update prevDate
-                        prevData = methods.stream()
-                                .collect(Collectors.toMap(
-                                        MethodData::getUniqueKey,
-                                        m -> m
-                                ));
-
-                        // I write on the CSV
-                        csvOut.append(w, methods);
-
-                        long buggy = methods.stream().filter(MethodData::isBuggy).count();
-                        log.info("{}@{} → {} methods ({} buggy) [saved]", repo, tag,
-                                methods.size(), buggy);
-
-                    } catch (CodeParserException cpe) {
-                        log.error("❌ {}@{} skipped – {}", repo, tag, cpe.getMessage());
-                    }
-                }
-            }
+            processProject(cfg, git, sel, csvOut, pmd);
         }
+
         cleanup(git);
         log.info("Done! All temporary files cleaned up.");
+    }
+
+    /**
+     * Processes a project configuration by fetching tags, selecting releases,
+     * and analyzing code with PMD.
+     *
+     * @param cfg    the project configuration
+     * @param git    the GitService instance
+     * @param sel    the ReleaseSelector instance
+     * @param csvOut the CSVWriter instance for output
+     * @param pmd    the PmdAnalyzer instance for code analysis
+     */
+    private static void processProject(ProjectConfig cfg, GitService git, ReleaseSelector sel, CSVWriter csvOut, PmdAnalyzer pmd) throws JiraClientException, CsvWriteException {
+        String owner = cfg.getOwner();
+        String repo  = cfg.getName().toLowerCase();
+
+        List<String> validTags = getTags(cfg, git, owner, repo);
+
+        if (validTags == null) return;
+
+        List<String> chosen = sel.selectFirstPercent(validTags, cfg.getPercentage());
+        chosen.sort((t1, t2) -> git.compareTagDates(owner, repo, t1, t2));
+
+        log.info("{} - percentage {}% → {} release to be processed",
+                repo, cfg.getPercentage(), chosen.size());
+
+        String branch = git.getDefaultBranch(owner, repo);
+        log.info("{}/{} – processing {} tags", repo, branch, chosen.size());
+
+        jira.initialize(cfg.getJiraProjectKey());
+        List<String> bugKeys = jira.fetchBugKeys();
+        log.info("Found {} bug keys", bugKeys.size());
+
+        Map<String, List<String>> file2Keys = getFile2Keys(git, owner, repo, branch);
+
+        if (file2Keys == null) return;
+
+        Path csvPath = Paths.get("output", repo + "_dataset.csv");
+        try (BufferedWriter w = csvOut.open(csvPath)) {
+            log.info("Writing CSV to {}", csvPath);
+
+            Map<String,MethodData> prevData = new HashMap<>();
+
+            ProjectContext ctx = new ProjectContext.Builder()
+                    .owner(owner)
+                    .repo(repo)
+                    .git(git)
+                    .pmd(pmd)
+                    .csvOut(csvOut)
+                    .file2Keys(file2Keys)
+                    .prevData(prevData)
+                    .bugKeys(bugKeys)
+                    .writer(w)
+                    .build();
+
+            for (int i = 0; i < chosen.size(); i++) {
+                String tag     = chosen.get(i);
+                String prevTag = (i > 0 ? chosen.get(i - 1) : null);
+                processRelease(tag, prevTag, ctx);
+            }
+        } catch (IOException e) {
+            throw new ReleaseProcessingException("I/O error when writing CSV", e);
+        }
+    }
+
+    /**
+     * Processes a single release:
+     * - downloads the source code for the current tag;
+     * - performs PMD analysis and calculates code-smells;
+     * - reconstructs the touch-map between the previous and the current release;
+     * - enriches the MethodData with metrics, bugginess, and history;
+     * - appends the result to the CSV;
+     * - updates the shared state (prevData) for the next iteration.
+     *
+     * @param tag     current release tag
+     * @param prevTag previous release tag (can be {@code null} if it does not exist)
+     * @param ctx     project context encapsulating services, status, and output
+     */
+    private static void processRelease(
+            @NotNull String tag,
+            @Nullable String prevTag,
+            @NotNull ProjectContext ctx) {
+
+        log.info("▶️  {}@{} (prev={}) – start", ctx.repo, tag, prevTag);
+
+        try {
+            /* 1) code checkout ------------------------------------------ */
+            Path releaseDir = parser.downloadRelease(ctx.owner, ctx.repo, tag);
+
+            /* 2) PMD analysis --------------------------------------------------- */
+            Report report = ctx.pmd.analyze(releaseDir);
+            if (report.getViolations().isEmpty()) {
+                log.warn("{}@{} - no PMD violation found: check ruleset and input path",
+                        ctx.repo, tag);
+            }
+
+            List<RuleViolation> violations = report.getViolations();
+            log.info("{}@{} - {} code-smell totals", ctx.repo, tag, violations.size());
+
+            /* 3) touch-map between prevTag and tag ----------------------------------- */
+            Map<String,List<String>> touchMap =
+                    ctx.git.buildTouchMap(ctx.owner, ctx.repo, prevTag, tag);
+            log.info("{}@{} - {} files touched", ctx.repo, tag, touchMap.size());
+
+            /* 4) source parsing + feature construction ------------------------ */
+            List<MethodData> methods = getCollect(
+                    touchMap,
+                    releaseDir,
+                    ctx.owner + ";" + ctx.repo + ";" + tag,
+                    ctx.file2Keys,
+                    ctx.prevData,
+                    violations,
+                    ctx.bugKeys
+            );
+
+            log.info("{}@{} - methodsFinali={} (violationsThisRelease={})",
+                    ctx.repo, tag, methods.size(), violations.size());
+
+            /* 5) update status prevDate for next release ---------- */
+            ctx.prevData.clear();
+            ctx.prevData.putAll(methods.stream()
+                    .collect(Collectors.toMap(MethodData::getUniqueKey, m -> m)));
+
+            /* 6) writing to CSV ---------------------------------------------- */
+            ctx.csvOut.append(ctx.writer, methods);
+
+            long buggy = methods.stream().filter(MethodData::isBuggy).count();
+            log.info("✔️  {}@{} - saved {} methods ({} buggy)", ctx.repo, tag, methods.size(), buggy);
+
+        } catch (CodeParserException | CsvWriteException ex) {
+            log.error("❌  {}@{} - release skipped: {}", ctx.repo, tag, ex.getMessage());
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new ReleaseProcessingException(
+                    "Thread interrupted during release processing " + tag, ie);
+        } catch (IOException ioe) {
+            throw new ReleaseProcessingException(
+                    "I/O error during release processing " + tag, ioe);
+        }
+    }
+
+    @Nullable
+    private static Map<String, List<String>> getFile2Keys(GitService git, String owner, String repo, String branch) {
+        Map<String,List<String>> file2Keys;
+        try {
+            log.info("Building file → issue keys mapping");
+            file2Keys = git.getFileToIssueKeysMap(owner, repo, branch);
+        } catch (FileKeyMappingException ex) {
+            log.error("Skipping {} – {}", repo, ex.getMessage());
+            return null;
+        }
+        log.info("File to issue keys mapping: {} issue keys", file2Keys.size());
+        return file2Keys;
+    }
+
+    @Nullable
+    private static List<String> getTags(ProjectConfig cfg, GitService git, String owner, String repo) throws JiraClientException {
+        List<String> gitTagsRaw    = git.listTags(owner, repo);
+        List<String> gitTagsNorm  = gitTagsRaw.stream()
+                .map(JiraClient::normalize)
+                .toList();
+
+        jira.initialize(cfg.getJiraProjectKey());
+        List<String> jiraVersions = jira.fetchProjectVersions(cfg.getJiraProjectKey());
+
+        // intersection
+        Set<String> validNorm = new HashSet<>(gitTagsNorm);
+        validNorm.retainAll(jiraVersions);
+
+        log.info("{} - total Git tags: {}, Jira versions: {}, common: {}",
+                repo, gitTagsRaw.size(), jiraVersions.size(), validNorm.size());
+
+        if (validNorm.isEmpty()) {
+            log.warn("No valid release in common → project skipped");
+            return null;
+        }
+
+        // I reconstruct the original tags corresponding to the normalized list
+        return gitTagsRaw.stream()
+                .filter(t -> validNorm.contains(JiraClient.normalize(t)))
+                .toList();
     }
 
     /**
