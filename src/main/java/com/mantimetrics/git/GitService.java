@@ -125,7 +125,7 @@ public final class GitService {
     /**
      * Builds a map of files to commit SHAs that modified them
      * between the two given tags (exclusive prevTag, inclusive tag).
-     * The returned map is file → list of commit SHAs.
+     * The returned map is a file → list of commit SHAs.
      */
     public Map<String, List<String>> buildTouchMap(
             String owner, String repo, String prevTag, String tag) throws IOException, InterruptedException {

@@ -103,8 +103,7 @@ public class MethodData {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof MethodData)) return false;
-        MethodData that = (MethodData) o;
+        if (!(o instanceof MethodData that)) return false;
         return buggy == that.buggy &&
                 projectName.equals(that.projectName) &&
                 path.equals(that.path) &&

@@ -75,23 +75,23 @@ public class MantiMetrics {
      * @param pmd    the PmdAnalyzer instance for code analysis
      */
     private static void processProject(ProjectConfig cfg, GitService git, ReleaseSelector sel, CSVWriter csvOut, PmdAnalyzer pmd) throws JiraClientException, CsvWriteException {
-        String owner = cfg.getOwner();
-        String repo  = cfg.getName().toLowerCase();
+        String owner = cfg.owner();
+        String repo  = cfg.name().toLowerCase();
 
         List<String> validTags = getTags(cfg, git, owner, repo);
 
         if (validTags == null) return;
 
-        List<String> chosen = sel.selectFirstPercent(validTags, cfg.getPercentage());
+        List<String> chosen = sel.selectFirstPercent(validTags, cfg.percentage());
         chosen.sort((t1, t2) -> git.compareTagDates(owner, repo, t1, t2));
 
         log.info("{} - percentage {}% → {} release to be processed",
-                repo, cfg.getPercentage(), chosen.size());
+                repo, cfg.percentage(), chosen.size());
 
         String branch = git.getDefaultBranch(owner, repo);
         log.info("{}/{} – processing {} tags", repo, branch, chosen.size());
 
-        jira.initialize(cfg.getJiraProjectKey());
+        jira.initialize(cfg.jiraProjectKey());
         List<String> bugKeys = jira.fetchBugKeys();
         log.info("Found {} bug keys", bugKeys.size());
 
@@ -224,8 +224,8 @@ public class MantiMetrics {
                 .map(JiraClient::normalize)
                 .toList();
 
-        jira.initialize(cfg.getJiraProjectKey());
-        List<String> jiraVersions = jira.fetchProjectVersions(cfg.getJiraProjectKey());
+        jira.initialize(cfg.jiraProjectKey());
+        List<String> jiraVersions = jira.fetchProjectVersions(cfg.jiraProjectKey());
 
         // intersection
         Set<String> validNorm = new HashSet<>(gitTagsNorm);
