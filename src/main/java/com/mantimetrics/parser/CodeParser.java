@@ -5,10 +5,12 @@ import com.github.javaparser.ParseStart;
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.Providers;
 import com.github.javaparser.ParseProblemException;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.mantimetrics.clone.SourceCollectionException;
 import com.mantimetrics.git.GitService;
 import com.mantimetrics.metrics.MetricsCalculator;
+import com.mantimetrics.model.ClassData;
 import com.mantimetrics.model.MethodData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +25,7 @@ public final class CodeParser {
     private static final Logger LOG = LoggerFactory.getLogger(CodeParser.class);
     private final GitService git;
     private static final long MAX_FILE_BYTES = 8L * 1024 * 1024;
+    private static final String JAVA_EXT = ".java";
 
     /**
      * @param git GitService instance to download and unzip the repository
@@ -59,7 +62,7 @@ public final class CodeParser {
         try (Stream<Path> all = Files.walk(root)) {
             totalFiles = all
                     .filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(".java"))
+                    .filter(p -> p.toString().endsWith(JAVA_EXT))
                     .count();
         } catch (IOException e) {
             totalFiles = -1;
@@ -101,7 +104,7 @@ public final class CodeParser {
 
         try (Stream<Path> files = Files.walk(root)) {
             files.filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(".java"))
+                    .filter(p -> p.toString().endsWith(JAVA_EXT))
                     .filter(p -> !testDirMatcher.matches(p))
                     .filter(p -> !testClassMatcher.matches(p))
                     .filter(p -> !ignoreMatcher.matches(p))
@@ -128,7 +131,79 @@ public final class CodeParser {
                 .distinct()
                 .count();
 
-        LOG.info("release={} filesTotali={} filesProcessati={}",
+        LOG.info("[DIRECTORY] release={} filesTotali={} filesProcessati={}",
+                tag, totalFiles, processedFiles);
+
+        return out;
+    }
+
+    /** === NUOVO: parsing class-level === */
+    public List<ClassData> parseClassesFromDirectory(
+            Path root,
+            String repo,
+            String tag,
+            MetricsCalculator calc,
+            Map<String, List<String>> fileToKeys) {
+
+        long totalFiles;
+        try (Stream<Path> all = Files.walk(root)) {
+            totalFiles = all
+                    .filter(Files::isRegularFile)
+                    .filter(p -> p.toString().endsWith(JAVA_EXT))
+                    .count();
+        } catch (IOException e) {
+            totalFiles = -1;
+        }
+
+        List<ClassData> out = new ArrayList<>();
+
+        PathMatcher testDirMatcher = FileSystems.getDefault()
+                .getPathMatcher("glob:**/src/test/java/**");
+        PathMatcher testClassMatcher = FileSystems.getDefault()
+                .getPathMatcher("glob:**/*{Test,IT}.java");
+        PathMatcher ignoreMatcher = FileSystems.getDefault()
+                .getPathMatcher("glob:**/{target,build,generated-sources}/**");
+        PathMatcher otherMatcher = FileSystems.getDefault()
+                .getPathMatcher("glob:**/{common,utils,examples}/**");
+        PathMatcher infraMatcher = FileSystems.getDefault()
+                .getPathMatcher("glob:**/{api,internal}/**");
+        PathMatcher dtoIgnore = FileSystems.getDefault()
+                .getPathMatcher("glob:**/{dto,model}/**");
+        PathMatcher resourcesIgnore = FileSystems.getDefault()
+                .getPathMatcher("glob:**/{resources,config}/**");
+        PathMatcher genProto = FileSystems.getDefault()
+                .getPathMatcher("glob:**/{gen-src,generated-sources,grpc}/**");
+
+        try (Stream<Path> files = Files.walk(root)) {
+            files.filter(Files::isRegularFile)
+                    .filter(p -> p.toString().endsWith(JAVA_EXT))
+                    .filter(p -> !testDirMatcher.matches(p))
+                    .filter(p -> !testClassMatcher.matches(p))
+                    .filter(p -> !ignoreMatcher.matches(p))
+                    .filter(p -> !otherMatcher.matches(p))
+                    .filter(p -> !infraMatcher.matches(p))
+                    .filter(p -> !dtoIgnore.matches(p))
+                    .filter(p -> !resourcesIgnore.matches(p))
+                    .filter(p -> !genProto.matches(p))
+                    .forEach(p -> {
+                        Optional<String> relOpt = shouldSkip(root, p);
+                        relOpt.ifPresent(relUnix -> {
+                            List<String> jiraKeys = fileToKeys.getOrDefault(relUnix, List.of());
+                            collectClasses(p, relUnix, repo, tag, jiraKeys, calc, out);
+                        });
+                    });
+        } catch (IOException io) {
+            throw new UncheckedIOException("I/O walking " + root, io);
+        } finally {
+            deleteRecursively(root);
+        }
+
+        long processedFiles = out.stream()
+                .map(ClassData::getPath)
+                .distinct()
+                .count();
+
+        LOG.info("[CLASS] release={} filesTotali={} filesProcessati={}",
                 tag, totalFiles, processedFiles);
 
         return out;
@@ -153,9 +228,7 @@ public final class CodeParser {
 
         // 3) Always removes the first segment (e.g. "repo-1.0.0/src/..." -> "src/...")
         int slash = relUnix.indexOf('/');
-        if (slash >= 0) {
-            relUnix = relUnix.substring(slash + 1);
-        }
+        if (slash >= 0) relUnix = relUnix.substring(slash + 1);
 
         // 4) Returns the normalized path
         return Optional.of(relUnix);
@@ -175,8 +248,7 @@ public final class CodeParser {
             parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(reader))
                     .getResult()
                     .ifPresent(cu -> cu.findAll(MethodDeclaration.class)
-                            .forEach(m -> m.getRange().ifPresent(r ->
-                            {
+                            .forEach(m -> m.getRange().ifPresent(r -> {
                                 try {
                                     sink.add(new MethodData.Builder()
                                             .projectName(repo)
@@ -190,13 +262,52 @@ public final class CodeParser {
                                             .endLine(r.end.line)
                                             .build());
                                 } catch (SourceCollectionException | IOException sce) {
-                                    LOG.warn("Failed to compute metrics for {}: {}", file, sce.getMessage());
+                                    LOG.warn("[METHOD] Failed to compute metrics for {}: {}", file, sce.getMessage());
                                 }
                             })));
         } catch (ParseProblemException ppe) {
-            LOG.warn("Failed to parse {}: {}", file, ppe.getMessage());
+            LOG.warn("[METHOD] Failed to parse {}: {}", file, ppe.getMessage());
         } catch (IOException ioe) {
-            LOG.warn("Failed to read {}: {}", file, ioe.getMessage());
+            LOG.warn("[METHOD] Failed to read {}: {}", file, ioe.getMessage());
+        }
+    }
+
+    /** === NUOVO: collect class-level === */
+    private static void collectClasses(Path file,
+                                       String relUnix,
+                                       String repo,
+                                       String tag,
+                                       List<String> jiraKeys,
+                                       MetricsCalculator calc,
+                                       List<ClassData> sink) {
+        ParserConfiguration config = new ParserConfiguration();
+        JavaParser parser = new JavaParser(config);
+        try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(reader))
+                    .getResult()
+                    .ifPresent(cu -> cu.findAll(ClassOrInterfaceDeclaration.class)
+                            .forEach(cls -> cls.getRange().ifPresent(r -> {
+                                try {
+                                    String clsName = cls.getFullyQualifiedName().orElse(cls.getNameAsString());
+                                    sink.add(new ClassData.Builder()
+                                            .projectName(repo)
+                                            .path('/' + relUnix + '/')
+                                            .className(clsName)
+                                            .releaseId(tag)
+                                            .metrics(calc.computeAll(cls))
+                                            .commitHashes(jiraKeys)
+                                            .buggy(false)
+                                            .startLine(r.begin.line)
+                                            .endLine(r.end.line)
+                                            .build());
+                                } catch (Exception ex) {
+                                    LOG.warn("[CLASS] Failed to compute metrics for {}: {}", file, ex.getMessage());
+                                }
+                            })));
+        } catch (ParseProblemException ppe) {
+            LOG.warn("[CLASS] Failed to parse {}: {}", file, ppe.getMessage());
+        } catch (IOException ioe) {
+            LOG.warn("[CLASS] Failed to read {}: {}", file, ioe.getMessage());
         }
     }
 

@@ -7,7 +7,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.StringJoiner;
 
-public class MethodData {
+@SuppressWarnings("unused")
+public class MethodData implements DatasetRow {
     private final String projectName;
     private final String path;
     private final String methodSignature;
@@ -44,32 +45,38 @@ public class MethodData {
 
     // Getter methods
     public String getProjectName()        { return projectName; }
-    public String getPath()               { return path; }
+
+    @Override public String getPath()     { return path; }
+
     public String getMethodSignature()    { return methodSignature; }
     public String getReleaseId()          { return releaseId; }
     public MethodMetrics getMetrics()     { return metrics; }
     public List<String> getCommitHashes() { return commitHashes; }
-    public boolean isBuggy()              { return buggy; }
-    public int getCodeSmells()            { return codeSmells; }
-    public String getUniqueKey()          { return path + "#" + methodSignature;}
+
+    @Override public boolean isBuggy()    { return buggy; }
+
+    @Override public int getCodeSmells()  { return codeSmells; }
+
+    @Override public String getUniqueKey(){ return path + "#" + methodSignature; }
+
     public int getTouches()               { return touches; }
     public int getPrevCodeSmells()        { return prevCodeSmells; }
     public boolean isPrevBuggy()          { return prevBuggy; }
-    public int getStartLine()             { return startLine; }
-    public int getEndLine()               { return endLine; }
+
+    @Override public int getStartLine()   { return startLine; }
+    @Override public int getEndLine()     { return endLine; }
 
     /**
      * Builds a CSV line with appropriate quoting and escaping.
      */
+    @Override
     public String toCsvLine() {
         StringJoiner sj = new StringJoiner(",");
         sj.add(projectName)
                 .add(path)
-                // escape embedded quotes per RFC4180
                 .add('"' + methodSignature.replace("\"", "\"\"") + '"')
                 .add(releaseId);
 
-        // metrics fields
         sj.add(String.valueOf(metrics.getLoc()))
                 .add(String.valueOf(metrics.getStmtCount()))
                 .add(String.valueOf(metrics.getCyclomatic()))
@@ -115,15 +122,12 @@ public class MethodData {
 
     @Override
     public int hashCode() {
-        return Objects.hash(projectName, path, methodSignature,
-                releaseId,
-                metrics, commitHashes, buggy);
+        return Objects.hash(projectName, path, methodSignature, releaseId, metrics, commitHashes, buggy);
     }
 
     @Override
     public String toString() {
-        return "MethodData[" + projectName + "/" + path +
-                "@" + releaseId + ", signature=" + methodSignature + "]";
+        return "MethodData[" + projectName + "/" + path + "@" + releaseId + ", signature=" + methodSignature + "]";
     }
 
     /** Returns a CSV header line with the same fields as toCsvLine() */
@@ -138,7 +142,10 @@ public class MethodData {
                 .buggy(this.buggy)
                 .startLine(this.startLine)
                 .endLine(this.endLine)
-                .codeSmells(this.codeSmells);
+                .codeSmells(this.codeSmells)
+                .touches(this.touches)
+                .prevCodeSmells(this.prevCodeSmells)
+                .prevBuggy(this.prevBuggy);
     }
 
     /**
@@ -180,28 +187,12 @@ public class MethodData {
         public Builder buggy(boolean buggy) {
             this.buggy = buggy; return this;
         }
-        public Builder codeSmells(int cs) {
-            this.codeSmells = cs;
-            return this;
-        }
-        public Builder touches(int t) {
-            this.touches = t;
-            return this;
-        }
-        public Builder prevCodeSmells(int cs) {
-            this.prevCodeSmells = cs;
-            return this;
-        }
-        public Builder prevBuggy(boolean b) {
-            this.prevBuggy = b;
-            return this;
-        }
-        public Builder startLine(int line) {
-            this.startLine = line; return this;
-        }
-        public Builder endLine(int line) {
-            this.endLine = line; return this;
-        }
+        public Builder codeSmells(int cs) { this.codeSmells = cs; return this; }
+        public Builder touches(int t) { this.touches = t; return this; }
+        public Builder prevCodeSmells(int cs) { this.prevCodeSmells = cs; return this; }
+        public Builder prevBuggy(boolean b) { this.prevBuggy = b; return this; }
+        public Builder startLine(int line) { this.startLine = line; return this; }
+        public Builder endLine(int line) { this.endLine = line; return this; }
 
         private void validate() {
             Objects.requireNonNull(projectName,     "projectName missing");

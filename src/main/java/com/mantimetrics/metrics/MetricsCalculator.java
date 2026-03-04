@@ -64,6 +64,71 @@ public class MetricsCalculator {
 
     // --- Metriche di complessità ---
 
+    /** === NUOVO: metriche class-level (aggregazione su metodi contenuti) === */
+    public MethodMetrics computeAll(ClassOrInterfaceDeclaration cls) throws IOException {
+        MethodMetrics mm = new MethodMetrics();
+
+        int loc = cls.getRange().map(r -> r.end.line - r.begin.line + 1).orElse(0);
+        mm.setLoc(loc);
+
+        mm.setStmtCount(cls.findAll(com.github.javaparser.ast.stmt.Statement.class).size());
+
+        List<MethodDeclaration> methods = cls.findAll(MethodDeclaration.class);
+
+        mm.setCyclomatic(methods.stream().mapToInt(this::computeCyclomatic).sum());
+        mm.setCognitive(methods.stream().mapToInt(this::computeCognitive).sum());
+
+        HalsteadMetrics h = computeHalstead(cls);
+        mm.setDistinctOperators(h.getDistinctOperators());
+        mm.setDistinctOperands(h.getDistinctOperands());
+        mm.setTotalOperators(h.getTotalOperators());
+        mm.setTotalOperands(h.getTotalOperands());
+        mm.setVocabulary(h.getVocabulary());
+        mm.setLength(h.getLength());
+        mm.setVolume(h.getVolume());
+        mm.setDifficulty(h.getDifficulty());
+        mm.setEffort(h.getEffort());
+
+        int maxNest = methods.stream()
+                .mapToInt(m -> computeMaxNestingDepth(m, 0))
+                .max()
+                .orElse(0);
+        mm.setMaxNestingDepth(maxNest);
+
+        // isLongMethod: per classi → "contiene almeno un long method"
+        boolean hasLongMethod = methods.stream().anyMatch(m ->
+                m.getRange()
+                        .map(r -> (r.end.line - r.begin.line + 1) > 50)
+                        .orElse(false)
+        );
+        mm.setLongMethod(hasLongMethod);
+
+        // FeatureEnvy: per classi → "almeno un metodo è FeatureEnvy"
+        boolean hasFE = false;
+        for (MethodDeclaration m : methods) {
+            MethodMetrics tmp = new MethodMetrics();
+            detectFeatureEnvy(m, tmp);
+            if (tmp.isFeatureEnvy()) { hasFE = true; break; }
+        }
+        mm.setFeatureEnvy(hasFE);
+
+        // GodClass: calcolata direttamente sulla classe
+        mm.setGodClass(detectGodClass(cls));
+
+        // DuplicatedCode: per classi → "almeno un metodo duplicato" (best-effort)
+        boolean dup = false;
+        for (MethodDeclaration m : methods) {
+            try {
+                if (detectDuplicatedCode(m)) { dup = true; break; }
+            } catch (Exception ignore) {
+                // best-effort: non butto via l'intera classe se CPD fallisce su un metodo
+            }
+        }
+        mm.setDuplicatedCode(dup);
+
+        return mm;
+    }
+
     /**
      * Computes the cyclomatic complexity of a method.
      *
@@ -87,7 +152,6 @@ public class MetricsCalculator {
      * @return the cognitive complexity of the method
      */
     private int computeCognitive(MethodDeclaration m) {
-        // Proxy: counts nested control blocks
         return m.findAll(Node.class).stream()
                 .mapToInt(n -> (n instanceof IfStmt
                         || n instanceof ForStmt
@@ -102,16 +166,16 @@ public class MetricsCalculator {
     /**
      * Computes Halstead metrics for a method.
      *
-     * @param m the method declaration to analyze
+     * @param root the method declaration to analyze
      * @return a HalsteadMetrics object containing the computed metrics
      */
-    private HalsteadMetrics computeHalstead(MethodDeclaration m) {
+    private HalsteadMetrics computeHalstead(Node root) {
         Set<String> distinctOps = new HashSet<>();
         Set<String> distinctOpr = new HashSet<>();
         AtomicInteger totalOps = new AtomicInteger();
         AtomicInteger totalOpr = new AtomicInteger();
 
-        m.walk(node -> {
+        root.walk(node -> {
             if (node instanceof BinaryExpr binaryexpr) {
                 String op = binaryexpr.getOperator().asString();
                 distinctOps.add(op);
@@ -136,15 +200,15 @@ public class MetricsCalculator {
             }
         });
 
-        double n1       = distinctOps.size();
-        int n2       = distinctOpr.size();
-        double totalN1       = totalOps.get();
-        int totalN2       = totalOpr.get();
+        double n1 = distinctOps.size();
+        int n2 = distinctOpr.size();
+        double totalN1 = totalOps.get();
+        int totalN2 = totalOpr.get();
         double vocab = n1 + n2;
-        double len   = totalN1 + totalN2;
-        double vol   = (vocab > 0) ? len * (log(vocab) / log(2)) : 0;
-        double diff  = (n1 > 0 && n2 > 0) ? (n1 / 2.0) * (totalN2 / (double)n2) : 0;
-        double eff   = diff * vol;
+        double len = totalN1 + totalN2;
+        double vol = (vocab > 0) ? len * (log(vocab) / log(2)) : 0;
+        double diff = (n1 > 0 && n2 > 0) ? (n1 / 2.0) * (totalN2 / (double) n2) : 0;
+        double eff = diff * vol;
 
         return new HalsteadMetrics.Builder()
                 .n1((int) n1)
@@ -198,7 +262,6 @@ public class MetricsCalculator {
         AtomicInteger external = new AtomicInteger();
         m.walk(node -> {
             if (node instanceof FieldAccessExpr fa) {
-                // this.x or super.x → internal, otherwise external
                 String scope = fa.getScope().toString();
                 if ("this".equals(scope) || "super".equals(scope)) internal.getAndIncrement();
                 else external.getAndIncrement();
@@ -222,26 +285,28 @@ public class MetricsCalculator {
      * @return true if the method belongs to a God Class, false otherwise
      */
     private boolean detectGodClass(MethodDeclaration m) {
-        // Find the class declaration containing the method
-        Optional<ClassOrInterfaceDeclaration> clsOpt =
-                m.findCompilationUnit()
-                        .flatMap(cu -> cu.findFirst(ClassOrInterfaceDeclaration.class));
-        if (clsOpt.isEmpty()) return false;
-        ClassOrInterfaceDeclaration cls = clsOpt.get();
+        Optional<com.github.javaparser.ast.Node> cur = m.getParentNode();
+        while (cur.isPresent()) {
+            com.github.javaparser.ast.Node n = cur.get();
+            if (n instanceof ClassOrInterfaceDeclaration cls) {
+                return detectGodClass(cls);
+            }
+            cur = n.getParentNode();
+        }
+        return false;
+    }
 
-        // 1) WMC = sum of cyclomatic complexity of all methods
+    /** GodClass direttamente sulla classe */
+    private boolean detectGodClass(ClassOrInterfaceDeclaration cls) {
         int wmc = cls.findAll(MethodDeclaration.class)
                 .stream()
                 .mapToInt(this::computeCyclomatic)
                 .sum();
 
-        // 2) ATFD = number of accesses to external data
         int numAccess = cls.findAll(FieldAccessExpr.class).size();
 
-        // 3) LCOM (e.g. LCOM4, calculated by an external helper)
         double lcom = new CohesionCalculator().calculateLcom4(cls);
 
-        // Example thresholds: WMC > 20, ATFD > 5, LCOM > 0.8
         int soglieSuperate = 0;
         if (wmc > 20) soglieSuperate++;
         if (numAccess > 5) soglieSuperate++;
@@ -259,7 +324,6 @@ public class MetricsCalculator {
      * @return true if the method is duplicated, false otherwise
      */
     private boolean detectDuplicatedCode(MethodDeclaration m) throws SourceCollectionException, IOException {
-        // Wrapper su PMD CPD che analizza AST e individua cloni
         return CloneDetector.isMethodDuplicated(m);
     }
 }
