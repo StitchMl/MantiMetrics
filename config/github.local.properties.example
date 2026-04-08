@@ -1,0 +1,2 @@
+# Copy this file to config/github.local.properties and set your GitHub PAT there.
+github.pat=YOUR_GITHUB_PAT
