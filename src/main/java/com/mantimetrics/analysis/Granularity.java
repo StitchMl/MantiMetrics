@@ -1,4 +1,4 @@
-package com.mantimetrics;
+package com.mantimetrics.analysis;
 
 public enum Granularity {
     METHOD, CLASS;

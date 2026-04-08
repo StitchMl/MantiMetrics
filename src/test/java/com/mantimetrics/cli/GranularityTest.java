@@ -1,4 +1,6 @@
-package com.mantimetrics;
+package com.mantimetrics.cli;
+
+import com.mantimetrics.analysis.Granularity;
 
 import org.junit.jupiter.api.Test;
 

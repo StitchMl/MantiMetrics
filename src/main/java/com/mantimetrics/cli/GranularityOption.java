@@ -1,5 +1,6 @@
-package com.mantimetrics;
+package com.mantimetrics.cli;
 
+import com.mantimetrics.analysis.Granularity;
 import java.util.List;
 
 public enum GranularityOption {

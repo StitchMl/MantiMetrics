@@ -1,4 +1,4 @@
-package com.mantimetrics;
+package com.mantimetrics.cli;
 
 import com.mantimetrics.git.ProjectConfig;
 import org.junit.jupiter.api.Test;

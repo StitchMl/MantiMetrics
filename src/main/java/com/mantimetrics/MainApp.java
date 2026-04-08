@@ -1,10 +1,13 @@
 package com.mantimetrics;
 
+import com.mantimetrics.app.ApplicationBootstrap;
+import com.mantimetrics.cli.CliOptions;
+import com.mantimetrics.cli.CliOptionsParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public final class MantiMetrics {
-    private static final Logger LOG = LoggerFactory.getLogger(MantiMetrics.class);
+public final class MainApp {
+    private static final Logger LOG = LoggerFactory.getLogger(MainApp.class);
     private static final String USAGE = """
             Uso:
               --granularity=class|method|both
@@ -15,8 +18,8 @@ public final class MantiMetrics {
               se --repo-url manca, la CLI chiede quale progetto analizzare
             """;
 
-    private MantiMetrics() {
-        throw new AssertionError("Do not instantiate MantiMetrics");
+    private MainApp() {
+        throw new AssertionError("Do not instantiate MainApp");
     }
 
     public static void main(String[] args) throws Exception {

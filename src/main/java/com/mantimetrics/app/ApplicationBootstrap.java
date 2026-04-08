@@ -1,9 +1,12 @@
-package com.mantimetrics;
+package com.mantimetrics.app;
 
 import com.mantimetrics.analysis.ProjectProcessor;
 import com.mantimetrics.analysis.ProjectReleasePlanner;
 import com.mantimetrics.analysis.ReleaseDatasetCollector;
 import com.mantimetrics.analysis.ReleaseExecutionService;
+import com.mantimetrics.MainApp;
+import com.mantimetrics.cli.CliOptions;
+import com.mantimetrics.cli.ProjectSelectionPrompt;
 import com.mantimetrics.config.GitHubTokenLoader;
 import com.mantimetrics.config.ProjectConfigLoader;
 import com.mantimetrics.csv.CSVWriter;
@@ -24,11 +27,11 @@ import com.mantimetrics.util.TempDirectoryCleaner;
 
 import java.io.IOException;
 
-final class ApplicationBootstrap {
+public final class ApplicationBootstrap {
     private final GitHubTokenLoader gitHubTokenLoader = new GitHubTokenLoader();
     private final ProjectSelectionPrompt projectSelectionPrompt = new ProjectSelectionPrompt(System.in, System.out);
 
-    void run(CliOptions cliOptions) throws Exception {
+    public void run(CliOptions cliOptions) throws Exception {
         GitService gitService = new GitService(loadGithubToken());
         try {
             ProjectProcessor processor = createProcessor(gitService);
@@ -70,6 +73,6 @@ final class ApplicationBootstrap {
     }
 
     private String loadGithubToken() throws IOException {
-        return gitHubTokenLoader.load(MantiMetrics.class);
+        return gitHubTokenLoader.load(MainApp.class);
     }
 }

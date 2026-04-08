@@ -1,4 +1,4 @@
-package com.mantimetrics;
+package com.mantimetrics.cli;
 
 import com.mantimetrics.git.ProjectConfig;
 
@@ -9,18 +9,18 @@ import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 
-final class ProjectSelectionPrompt {
+public final class ProjectSelectionPrompt {
     private static final int DEFAULT_PERCENTAGE = 33;
 
     private final BufferedReader input;
     private final PrintStream output;
 
-    ProjectSelectionPrompt(InputStream input, PrintStream output) {
+    public ProjectSelectionPrompt(InputStream input, PrintStream output) {
         this.input = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
         this.output = output;
     }
 
-    ProjectConfig prompt(ProjectConfig[] configuredProjects) throws IOException {
+    public ProjectConfig prompt(ProjectConfig[] configuredProjects) throws IOException {
         if (configuredProjects == null || configuredProjects.length == 0) {
             output.println("Nessun progetto configurato trovato. Inserisci un repository GitHub da analizzare.");
             return promptCustomProject();
