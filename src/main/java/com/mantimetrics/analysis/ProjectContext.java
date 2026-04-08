@@ -1,4 +1,4 @@
-package com.mantimetrics;
+package com.mantimetrics.analysis;
 
 import com.mantimetrics.csv.CSVWriter;
 import com.mantimetrics.git.GitService;

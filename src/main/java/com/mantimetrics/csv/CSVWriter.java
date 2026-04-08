@@ -1,6 +1,6 @@
 package com.mantimetrics.csv;
 
-import com.mantimetrics.Granularity;
+import com.mantimetrics.analysis.Granularity;
 import com.mantimetrics.model.DatasetRow;
 
 import java.io.BufferedWriter;

@@ -1,7 +1,5 @@
 package com.mantimetrics.analysis;
 
-import com.mantimetrics.Granularity;
-import com.mantimetrics.ProjectContext;
 import com.mantimetrics.csv.CSVWriter;
 import com.mantimetrics.csv.CsvWriteException;
 import com.mantimetrics.dataset.DatasetArtifactService;
