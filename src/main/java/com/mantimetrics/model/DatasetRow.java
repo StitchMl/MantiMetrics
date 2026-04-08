@@ -6,6 +6,7 @@ public interface DatasetRow {
     int getStartLine();
     int getEndLine();
     int getCodeSmells();
+    int getNSmells();
     boolean isBuggy();
     String toCsvLine();
 }

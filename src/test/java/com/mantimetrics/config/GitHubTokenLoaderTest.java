@@ -1,0 +1,45 @@
+package com.mantimetrics.config;
+
+import com.mantimetrics.MantiMetrics;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+class GitHubTokenLoaderTest {
+
+    @TempDir
+    Path tempDir;
+
+    @Test
+    void loadsTokenFromIgnoredLocalOverrideFile() throws Exception {
+        Path overrideFile = tempDir.resolve("github.local.properties");
+        Files.writeString(overrideFile, "github.pat=test-token" + System.lineSeparator(), StandardCharsets.UTF_8);
+
+        String previousOverridePath = System.getProperty("mantimetrics.github.override.path");
+        String previousDirectToken = System.getProperty("mantimetrics.github.pat");
+        try {
+            System.setProperty("mantimetrics.github.override.path", overrideFile.toString());
+            System.clearProperty("mantimetrics.github.pat");
+
+            String token = new GitHubTokenLoader().load(MantiMetrics.class);
+
+            assertEquals("test-token", token);
+        } finally {
+            restoreProperty("mantimetrics.github.override.path", previousOverridePath);
+            restoreProperty("mantimetrics.github.pat", previousDirectToken);
+        }
+    }
+
+    private void restoreProperty(String key, String value) {
+        if (value == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, value);
+        }
+    }
+}

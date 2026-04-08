@@ -1,7 +1,10 @@
 package com.mantimetrics.pmd;
 
+import com.mantimetrics.parser.ParsedSourceFile;
+import com.mantimetrics.parser.SourceScanResult;
 import net.sourceforge.pmd.PmdAnalysis;
 import net.sourceforge.pmd.PMDConfiguration;
+import net.sourceforge.pmd.lang.document.FileId;
 import net.sourceforge.pmd.lang.document.FileCollector;
 import net.sourceforge.pmd.lang.document.TextFile;
 import net.sourceforge.pmd.lang.rule.RulePriority;
@@ -9,7 +12,6 @@ import net.sourceforge.pmd.reporting.Report;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,7 +41,7 @@ public class PmdAnalyzer {
     /**
      * It analyzes the code in 'sourceDir' and returns the PMD report.
      */
-    public Report analyze(Path releaseDir) {
+    public Report analyze(SourceScanResult sourceSet) {
         // 1) Duplicates the basic configuration
         PMDConfiguration cfg = new PMDConfiguration();
 
@@ -53,11 +55,9 @@ public class PmdAnalyzer {
         // 4) I also copy the auxClasspath if needed
         cfg.prependAuxClasspath("target/classes");
 
-        // 5) I only configure the input path on the release
-        cfg.setInputPathList(List.of(releaseDir));
-
-        // 6) Perform the analysis
+        // 5) Perform the analysis over in-memory source files
         try (PmdAnalysis analysis = PmdAnalysis.create(cfg)) {
+            addSources(analysis.files(), sourceSet.includedFiles());
             // 6.1) Check which .java files are actually collected
             FileCollector collector = analysis.files();
             List<TextFile> paths = collector.getCollectedFiles();
@@ -75,6 +75,12 @@ public class PmdAnalyzer {
                     .forEach(e -> logger.error("PMD error: {}", e.getMsg()));
 
             return report;
+        }
+    }
+
+    private void addSources(FileCollector collector, List<ParsedSourceFile> sources) {
+        for (ParsedSourceFile source : sources) {
+            collector.addSourceFile(FileId.fromPathLikeString(source.relativePath()), source.source());
         }
     }
 }

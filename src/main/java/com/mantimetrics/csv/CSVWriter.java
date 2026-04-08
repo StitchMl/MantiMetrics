@@ -11,31 +11,21 @@ import java.util.List;
 
 public final class CSVWriter {
 
-    /** exception thrown when CSV write fails */
-    private static final String[] METHOD_COLUMNS = {
-            "Project","Path","Method","ReleaseId",
-            "LOC","StmtCount","Cyclomatic","Cognitive",
-            "DistinctOperators","DistinctOperands",
-            "TotalOperators","TotalOperands",
-            "Vocabulary","Length","Volume","Difficulty","Effort",
-            "MaxNestingDepth","isLongMethod","isGodClass","isFeatureEnvy",
-            "isDuplicatedCode","CodeSmells","Touches","prevCodeSmells",
-            "prevBuggy","Buggy"
-    };
-
-    private static final String[] CLASS_COLUMNS = {
-            "Project","Path","Class","ReleaseId",
-            "LOC","StmtCount","Cyclomatic","Cognitive",
-            "DistinctOperators","DistinctOperands",
-            "TotalOperators","TotalOperands",
-            "Vocabulary","Length","Volume","Difficulty","Effort",
-            "MaxNestingDepth","isLongMethod","isGodClass","isFeatureEnvy",
-            "isDuplicatedCode","CodeSmells","Touches","prevCodeSmells",
-            "prevBuggy","Buggy"
-    };
-
     private static String headerFor(Granularity g) {
-        return String.join(",", g == Granularity.CLASS ? CLASS_COLUMNS : METHOD_COLUMNS);
+        return String.join(",", buildColumns(g == Granularity.CLASS ? "Class" : "Method"));
+    }
+
+    private static String[] buildColumns(String entityColumn) {
+        return new String[] {
+                "Project", "Path", entityColumn, "ReleaseId",
+                "LOC", "StmtCount", "Cyclomatic", "Cognitive",
+                "DistinctOperators", "DistinctOperands",
+                "TotalOperators", "TotalOperands",
+                "Vocabulary", "Length", "Volume", "Difficulty", "Effort",
+                "MaxNestingDepth", "isLongMethod", "isGodClass", "isFeatureEnvy",
+                "isDuplicatedCode", "CodeSmells", "NSmells", "Touches", "prevCodeSmells",
+                "prevBuggy", "Buggy"
+        };
     }
 
     /** opens the file in appending; if it does not exist, it first writes the header */

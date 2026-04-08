@@ -1,137 +1,198 @@
-# 📊 MantiMetrics
+# MantiMetrics
 
-**MantiMetrics** is a Java/Maven application designed to extract **static** and **commit** software metrics from Git projects and generate customised CSV datasets.
+MantiMetrics is a Java/Maven tool for building maintainability datasets from GitHub repositories and JIRA bug data.
+It supports `class`, `method`, and `both` execution modes, can load projects from JSON or directly from the CLI, produces raw CSV datasets, and then generates exam-ready artifacts for WEKA and what-if analysis.
 
----
+## What it does
 
-## 🚀 How it works
+For each configured project, MantiMetrics:
 
-MantiMetrics:
-- Reads configuration from `.properties` files
-- Extracts static metrics from source code
-- Extracts commit metrics from Git history
-- Merges data
-- Exports the final dataset in `.csv` format
+1. selects the target releases
+2. streams each release from GitHub and keeps only the production Java sources in memory for the time needed by the analysis.
+3. extracts static metrics and smell-related indicators
+4. enriches rows with Git touches and JIRA-based bug labels
+5. writes a raw dataset CSV
+6. generates derived artifacts for the exam workflow
 
-All are based **dynamically** on the required metrics, with no need to modify the code.
+## Granularity
 
----
+The tool supports two dataset granularities and one combined execution mode:
 
-## 🛠️ Project Structure
+- `method`: one row per method
+- `class`: one row per type, including classes, interfaces, records, enums and annotations.
+- `both`: runs `class` first and then `method` in the same execution
 
-```
-MantiMetrics/
-├── output/
-│   ├── avro_dataset.csv
-│   └── bookkeeper_dataset.csv
-├── src/
-│   └── main/
-│       ├── java/
-│       │   └── com/
-│       │       └── mantimetrics/
-│       │           ├── MantiMetrics.java
-│       │           ├── config/
-│       │           │   └── ProjectConfigLoader.java
-│       │           ├── csv/
-│       │           │   └── CSVWriter.java                      
-│       │           ├── git/
-│       │           │   ├── GitService.java
-│       │           │   └── ProjectConfig.java
-│       │           ├── jira/
-│       │           │   └── JiraClient.java 
-│       │           ├── metrics/
-│       │           │   ├── MethodMetrics.java
-│       │           │   └── MetricsCalculator.java
-│       │           ├── model/
-│       │           │   └── MethodData.java
-│       │           └── parser/
-│       │               └── CodeParser.java
-│       │           
-│       └── resources/
-│           ├── application.properties
-│           ├── github.properties
-│           └── log4j.properties
-│           └── projects-config.json
-├── pom.xml 
-└── README.md
+Choose the granularity from the CLI:
+
+```powershell
+.\mvnw.cmd exec:java "-Dexec.args=--granularity=method"
+.\mvnw.cmd exec:java "-Dexec.args=--granularity=class"
+.\mvnw.cmd exec:java "-Dexec.args=--granularity=both"
 ```
 
----
+The same works with global Maven:
 
-## ⚙️ Configuration
+```powershell
+mvn exec:java "-Dexec.args=--granularity=method"
+```
 
-For each Git project to be analyzed, you must add in `projects-config.json` configuration file like this one:
+For the current Milestone 1 setup, `class` is the primary mode and `both` is useful when you want to keep the method-level dataset available for comparison or reuse.
 
-### Example: `resources/projects-config.json`
+If you omit `--granularity`, the default is `class`.
+If you omit `--repo-url`, the CLI shows an interactive prompt, so you can choose one configured project or enter a custom GitHub repository.
 
-```properties
+## Configuration
+
+Projects are loaded from [src/main/resources/projects-config.json](C:/Users/matte/IdeaProjects/MantiMetrics/src/main/resources/projects-config.json).
+When you launch the tool without `--repo-url`, those projects are shown in the terminal, and the analysis starts only after you pick one of them.
+
+Example:
+
+```json
 [
-   {
-      "name": "BookKeeper",
-      "repoUrl": "https://github.com/apache/bookkeeper.git",
-      "jiraKey": "BOOKKEEPER"
-   },
-   {
-      "name": "Avro",
-      "repoUrl": "https://github.com/apache/avro.git",
-      "jiraKey": "AVRO"
-   }
+  {
+    "owner": "apache",
+    "name": "BookKeeper",
+    "percentage": 33,
+    "repoUrl": "https://github.com/apache/bookkeeper.git",
+    "jiraKey": "BOOKKEEPER"
+  },
+  {
+    "owner": "apache",
+    "name": "Avro",
+    "percentage": 33,
+    "repoUrl": "https://github.com/apache/avro.git",
+    "jiraKey": "AVRO"
+  }
 ]
 ```
 
-### Main parameters:
+Relevant fields:
 
-| Parameter        | Description                                           |
-|:-----------------|:------------------------------------------------------|
-| `name`           | Repo name.                                            |
-| `repoUrl`        | Path to the Git repository.                           |
-| `jiraKey`        | Name of repo on JIRA.                                 |
----
-## 🏃‍♂️ How to Execute
+- `owner`: GitHub organization or user
+- `name`: repository name
+- `repoUrl`: optional fallback source for `owner` and `name`; useful when you want a single canonical repository reference in the config.
+- `percentage`: percentage of releases to analyze; for the exam, `33` matches the first milestone guidance.
+- `jiraKey`: JIRA project key used to retrieve versions and fixed bugs
 
-1. **Cleanliness and compilation:**
-   ```bash
-   mvn clean compile
-   ```
-   
-✅ The final CSV will be saved to the specified path (`output/avro_dataset.csv`).
+## Ad-Hoc CLI Project
 
----
+If the exam changes the repository to analyze, you can skip the JSON file and launch a single project directly from the CLI:
 
-## 🧩 Main Dependencies
+```powershell
+.\mvnw.cmd exec:java "-Dexec.args=--repo-url=https://github.com/apache/avro.git --jira-key=AVRO"
+```
 
-- [JGit](https://www.eclipse.org/jgit/) – to access the Git history
-- [OpenCSV](http://opencsv.sourceforge.net/) – for the management of CSV files
-- [SLF4J](http://www.slf4j.org/) – for logging (optional)
+You can combine it with explicit granularity:
 
-> **Note**: If you see warnings of `SLF4J: Failed to load StaticLoggerBinder`, you can ignore them or add an SLF4J implementation.
+```powershell
+.\mvnw.cmd exec:java "-Dexec.args=--granularity=both --repo-url=https://github.com/apache/bookkeeper.git --jira-key=BOOKKEEPER --percentage=33"
+```
 
----
+Rules for ad-hoc mode:
 
-## 📈 Example of CSV Output
+- `--repo-url` enables single-project execution from the CLI
+- `--jira-key` is required together with `--repo-url`
+- `--percentage` is optional; if omitted in CLI ad-hoc mode, the default is `33`
+- `owner` and `name` are derived automatically from the repository URL
 
-| methodName | releaseId | LOC | cyclomaticComplexity | nestingDepth | branchCount | methodHistories | authors | churn |
-|:-----------|:----------|:----|:---------------------|:-------------|:------------|:----------------|:--------|:------|
-| fooMethod  | 1         | 15  | 2                    | 1            | 1           | 3               | 2       | 45    |
-| barMethod  | 1         | 30  | 4                    | 2            | 3           | 5               | 4       | 60    |
+If you do not pass `--repo-url`, the prompt also offers a `custom repository` option and asks for:
 
----
+- repository URL
+- JIRA key
+- percentage of releases to analyze, defaulting to `33`
 
-## 📋 Future TODO
+## Secrets Setup
 
-- [ ] Support advanced AST extraction (e.g., use of JavaParser)
-- [ ] Improve log management (insert SLF4J + Logback)
-- [ ] Extend support to OO metrics (e.g., LCOM, CBO)
+Tracked files no longer contain real tokens. Configure credentials in one of these ways:
 
----
+- create `config/github.local.properties` from [github.local.properties.example](C:/Users/matte/IdeaProjects/MantiMetrics/config/github.local.properties.example)
+- create `config/jira.local.properties` from [jira.local.properties.example](C:/Users/matte/IdeaProjects/MantiMetrics/config/jira.local.properties.example)
+- or pass secrets with `-Dmantimetrics.github.pat=...` and `-Dmantimetrics.jira.pat=...`
+- or use `MANTIMETRICS_GITHUB_PAT` and `MANTIMETRICS_JIRA_PAT`
 
-## 👨‍💻 Author
+Local `*.local.properties` files are ignored by Git.
 
-- **Matteo La Gioia**
+## Raw Dataset
 
----
+The raw CSV is written under `output/`:
 
-# 🔥 Ready to use!
-> Change the `projects-config.json` file, and you can generate as many datasets as you need.
+- `output/<repo>_dataset_method.csv`
+- `output/<repo>_dataset_class.csv`
 
----
+Each row contains identifiers, release information, static metrics, Git history metrics and bug labels.
+The dataset includes smell-related features such as:
+
+- `CodeSmells`
+- `NSmells`
+- `isLongMethod`
+- `isGodClass`
+- `isFeatureEnvy`
+- `isDuplicatedCode`
+
+`NSmells` is an explicit derived feature that combines PMD smell counts with the binary smell indicators exposed by the tool.
+
+## Exam Artifacts
+
+After the raw CSV is written, MantiMetrics creates a sibling directory:
+
+- `output/<repo>_dataset_method_artifacts/`
+- `output/<repo>_dataset_class_artifacts/`
+
+Inside that directory the tool generates:
+
+- `A.csv` and `A.arff`: classifier-ready dataset without identifier columns
+- `BPlus.csv` and `BPlus.arff`: rows with at least one smell
+- `B.csv` and `B.arff`: same rows as `BPlus`, but smell-related actionable features forced to zero.
+- `C.csv` and `C.arff`: rows with no smells
+- `metadata.json`: summary of columns, actionable features and produced artifacts
+
+This matches the exam workflow for the what-if analysis:
+
+- `A`: base dataset
+- `BPlus`: smelly subset
+- `B`: de-smelled version of `BPlus`
+- `C`: clean subset
+
+## Build And Test
+
+Compile:
+
+```powershell
+.\mvnw.cmd -DskipTests compile
+```
+
+Run tests:
+
+```powershell
+.\mvnw.cmd test
+```
+
+With global Maven:
+
+```powershell
+mvn -DskipTests compile
+mvn test
+```
+
+## Output Summary
+
+For each configured project and chosen granularity, the final outputs are:
+
+- one raw CSV dataset
+- four flat CSV datasets for classification and what-if analysis
+- four ARFF datasets for WEKA
+- one metadata JSON file
+
+If you run with `both`, the tool generates the full output set twice:
+
+- `output/<repo>_dataset_class.csv` plus its derived artifacts
+- `output/<repo>_dataset_method.csv` plus its derived artifacts
+
+## Notes
+
+- The current pipeline is designed around GitHub plus JIRA because bug labels come from fixed JIRA tickets.
+- Release selection is percentage-based and uses chronological tag order, so the first `33%` really means the oldest release window requested by the exam.
+- The runtime is web-first and zero-disk for the analyzed repository: no persistent clone and no extracted release tree are written locally during analysis.
+- To keep GitHub pressure under control, API calls use pagination, retries and backoff, and `both` still reuses the same release extraction, PMD scan and commit history for class-level and method-level outputs.
+- Tests currently cover dataset formatting, granularity handling, release commit mapping, path normalization and derived artifact generation.

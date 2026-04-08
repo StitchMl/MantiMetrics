@@ -1,13 +1,6 @@
 package com.mantimetrics.parser;
 
-import com.github.javaparser.ParserConfiguration;
-import com.github.javaparser.ParseStart;
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.Providers;
-import com.github.javaparser.ParseProblemException;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.mantimetrics.clone.SourceCollectionException;
+import com.mantimetrics.clone.CloneDetector;
 import com.mantimetrics.git.GitService;
 import com.mantimetrics.metrics.MetricsCalculator;
 import com.mantimetrics.model.ClassData;
@@ -15,316 +8,144 @@ import com.mantimetrics.model.MethodData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
-import java.util.*;
-import java.util.stream.Stream;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
+@SuppressWarnings("unused")
 public final class CodeParser {
     private static final Logger LOG = LoggerFactory.getLogger(CodeParser.class);
-    private final GitService git;
-    private static final long MAX_FILE_BYTES = 8L * 1024 * 1024;
-    private static final String JAVA_EXT = ".java";
 
-    /**
-     * @param git GitService instance to download and unzip the repository
-     */
+    private final GitService git;
+    private final JavaSourceScanner sourceScanner = new JavaSourceScanner();
+    private final MethodDataFactory methodDataFactory = new MethodDataFactory();
+    private final TypeDataFactory typeDataFactory = new TypeDataFactory();
+
     public CodeParser(GitService git) {
         this.git = git;
     }
 
-    /**
-     * Download and unpack the release without deleting it.
-     */
-    public Path downloadRelease(String owner, String repo, String tag) throws CodeParserException {
+    public SourceScanResult loadReleaseSources(String owner, String repo, String tag) throws CodeParserException {
         try {
-            return git.downloadAndUnzipRepo(owner, repo, tag, "release-" + tag);
-        } catch (InterruptedException ie) {
+            return git.downloadReleaseSources(owner, repo, tag);
+        } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new CodeParserException("Interrupted downloading " + tag, ie);
-        } catch (IOException ioe) {
-            throw new CodeParserException("Download/Unzip failed for " + repo + '@' + tag, ioe);
+            throw new CodeParserException("Interrupted downloading " + tag, exception);
+        } catch (IOException exception) {
+            throw new CodeParserException("Download failed for " + repo + '@' + tag, exception);
         }
     }
 
-    /**
-     * Parsing and metrics on an already downloaded root; **do not** delete the folder.
-     */
     public List<MethodData> parseFromDirectory(
             Path root,
             String repo,
             String tag,
-            MetricsCalculator calc,
-            Map<String, List<String>> fileToKeys) {
-        // Count all .java before filters
-        long totalFiles;
-        try (Stream<Path> all = Files.walk(root)) {
-            totalFiles = all
-                    .filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(JAVA_EXT))
-                    .count();
-        } catch (IOException e) {
-            totalFiles = -1;
-        }
-
-        List<MethodData> out = new ArrayList<>();
-
-        // 1) Define the matcher for test directories
-        PathMatcher testDirMatcher = FileSystems.getDefault()
-                .getPathMatcher("glob:**/src/test/java/**");
-
-        // 2) Matcher for test files by name (*Test.java, *IT.java)
-        PathMatcher testClassMatcher = FileSystems.getDefault()
-                .getPathMatcher("glob:**/*{Test,IT}.java");
-
-        // 3) Matcher for output and generation directories
-        PathMatcher ignoreMatcher = FileSystems.getDefault()
-                .getPathMatcher("glob:**/{target,build,generated-sources}/**");
-
-        // 4) Matcher for common directories
-        PathMatcher otherMatcher = FileSystems.getDefault()
-                .getPathMatcher("glob:**/{common,utils,examples}/**");
-
-        // 5) Matcher for infrastructure directories
-        PathMatcher infraMatcher = FileSystems.getDefault()
-                .getPathMatcher("glob:**/{api,internal}/**");
-
-        // 6) Matcher for DTO and model directories
-        PathMatcher dtoIgnore = FileSystems.getDefault()
-                .getPathMatcher("glob:**/{dto,model}/**");
-
-        // 7) Matcher for resources and config directories
-        PathMatcher resourcesIgnore = FileSystems.getDefault()
-                .getPathMatcher("glob:**/{resources,config}/**");
-
-        // 8) Matcher for generated sources
-        PathMatcher genProto = FileSystems.getDefault()
-                .getPathMatcher("glob:**/{gen-src,generated-sources,grpc}/**");
-
-        try (Stream<Path> files = Files.walk(root)) {
-            files.filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(JAVA_EXT))
-                    .filter(p -> !testDirMatcher.matches(p))
-                    .filter(p -> !testClassMatcher.matches(p))
-                    .filter(p -> !ignoreMatcher.matches(p))
-                    .filter(p -> !otherMatcher.matches(p))
-                    .filter(p -> !infraMatcher.matches(p))
-                    .filter(p -> !dtoIgnore.matches(p))
-                    .filter(p -> !resourcesIgnore.matches(p))
-                    .filter(p -> !genProto.matches(p))
-                    .forEach(p -> {
-                        Optional<String> relOpt = shouldSkip(root, p);
-                        relOpt.ifPresent(relUnix -> {
-                            List<String> jiraKeys = fileToKeys.getOrDefault(relUnix, List.of());
-                            collectMethods(p, relUnix, repo, tag, jiraKeys, calc, out);
-                        });
-                    });
-        } catch (IOException io) {
-            throw new UncheckedIOException("I/O walking " + root, io);
+            MetricsCalculator calculator,
+            Map<String, List<String>> fileToKeys
+    ) {
+        SourceScanResult scanResult = sourceScanner.scan(root, fileToKeys);
+        String cloneCacheKey = prepareCloneCache(scanResult);
+        try {
+            return parseMethods(scanResult, scanResult, repo, tag, cloneCacheKey, calculator, fileToKeys);
         } finally {
-            deleteRecursively(root);
+            CloneDetector.evict(cloneCacheKey);
         }
-
-        long processedFiles = out.stream()
-                .map(MethodData::getPath)
-                .distinct()
-                .count();
-
-        LOG.info("[DIRECTORY] release={} filesTotali={} filesProcessati={}",
-                tag, totalFiles, processedFiles);
-
-        return out;
     }
 
-    /** === NUOVO: parsing class-level === */
+    public List<MethodData> parseFromDirectory(
+            Path root,
+            String repo,
+            String tag,
+            String cloneCacheKey,
+            MetricsCalculator calculator,
+            Map<String, List<String>> fileToKeys
+    ) {
+        SourceScanResult scanResult = sourceScanner.scan(root, fileToKeys);
+        return parseMethods(scanResult, scanResult, repo, tag, cloneCacheKey, calculator, fileToKeys);
+    }
+
     public List<ClassData> parseClassesFromDirectory(
             Path root,
             String repo,
             String tag,
-            MetricsCalculator calc,
-            Map<String, List<String>> fileToKeys) {
-
-        long totalFiles;
-        try (Stream<Path> all = Files.walk(root)) {
-            totalFiles = all
-                    .filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(JAVA_EXT))
-                    .count();
-        } catch (IOException e) {
-            totalFiles = -1;
-        }
-
-        List<ClassData> out = new ArrayList<>();
-
-        PathMatcher testDirMatcher = FileSystems.getDefault()
-                .getPathMatcher("glob:**/src/test/java/**");
-        PathMatcher testClassMatcher = FileSystems.getDefault()
-                .getPathMatcher("glob:**/*{Test,IT}.java");
-        PathMatcher ignoreMatcher = FileSystems.getDefault()
-                .getPathMatcher("glob:**/{target,build,generated-sources}/**");
-        PathMatcher otherMatcher = FileSystems.getDefault()
-                .getPathMatcher("glob:**/{common,utils,examples}/**");
-        PathMatcher infraMatcher = FileSystems.getDefault()
-                .getPathMatcher("glob:**/{api,internal}/**");
-        PathMatcher dtoIgnore = FileSystems.getDefault()
-                .getPathMatcher("glob:**/{dto,model}/**");
-        PathMatcher resourcesIgnore = FileSystems.getDefault()
-                .getPathMatcher("glob:**/{resources,config}/**");
-        PathMatcher genProto = FileSystems.getDefault()
-                .getPathMatcher("glob:**/{gen-src,generated-sources,grpc}/**");
-
-        try (Stream<Path> files = Files.walk(root)) {
-            files.filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(JAVA_EXT))
-                    .filter(p -> !testDirMatcher.matches(p))
-                    .filter(p -> !testClassMatcher.matches(p))
-                    .filter(p -> !ignoreMatcher.matches(p))
-                    .filter(p -> !otherMatcher.matches(p))
-                    .filter(p -> !infraMatcher.matches(p))
-                    .filter(p -> !dtoIgnore.matches(p))
-                    .filter(p -> !resourcesIgnore.matches(p))
-                    .filter(p -> !genProto.matches(p))
-                    .forEach(p -> {
-                        Optional<String> relOpt = shouldSkip(root, p);
-                        relOpt.ifPresent(relUnix -> {
-                            List<String> jiraKeys = fileToKeys.getOrDefault(relUnix, List.of());
-                            collectClasses(p, relUnix, repo, tag, jiraKeys, calc, out);
-                        });
-                    });
-        } catch (IOException io) {
-            throw new UncheckedIOException("I/O walking " + root, io);
+            MetricsCalculator calculator,
+            Map<String, List<String>> fileToKeys
+    ) {
+        SourceScanResult scanResult = sourceScanner.scan(root, fileToKeys);
+        String cloneCacheKey = prepareCloneCache(scanResult);
+        try {
+            return parseClasses(scanResult, scanResult, repo, tag, cloneCacheKey, calculator, fileToKeys);
         } finally {
-            deleteRecursively(root);
+            CloneDetector.evict(cloneCacheKey);
+        }
+    }
+
+    public List<ClassData> parseClassesFromDirectory(
+            Path root,
+            String repo,
+            String tag,
+            String cloneCacheKey,
+            MetricsCalculator calculator,
+            Map<String, List<String>> fileToKeys
+    ) {
+        SourceScanResult scanResult = sourceScanner.scan(root, fileToKeys);
+        return parseClasses(scanResult, scanResult, repo, tag, cloneCacheKey, calculator, fileToKeys);
+    }
+
+    public List<MethodData> parseMethods(
+            SourceScanResult sourceSet,
+            SourceScanResult analyzedSources,
+            String repo,
+            String tag,
+            String cloneCacheKey,
+            MetricsCalculator calculator,
+            Map<String, List<String>> fileToKeys
+    ) {
+        List<MethodData> methods = new ArrayList<>();
+
+        for (ParsedSourceFile sourceFile : analyzedSources.includedFiles()) {
+            methods.addAll(methodDataFactory.collect(cloneCacheKey, withKeys(sourceFile, fileToKeys), repo, tag, calculator));
         }
 
-        long processedFiles = out.stream()
-                .map(ClassData::getPath)
-                .distinct()
-                .count();
+        LOG.info("[DIRECTORY] release={} filesTotali={} filesProcessati={}",
+                tag, sourceSet.totalJavaFiles(), analyzedSources.includedFiles().size());
+        return methods;
+    }
+
+    public List<ClassData> parseClasses(
+            SourceScanResult sourceSet,
+            SourceScanResult analyzedSources,
+            String repo,
+            String tag,
+            String cloneCacheKey,
+            MetricsCalculator calculator,
+            Map<String, List<String>> fileToKeys
+    ) {
+        List<ClassData> classes = new ArrayList<>();
+
+        for (ParsedSourceFile sourceFile : analyzedSources.includedFiles()) {
+            classes.addAll(typeDataFactory.collect(cloneCacheKey, withKeys(sourceFile, fileToKeys), repo, tag, calculator));
+        }
 
         LOG.info("[CLASS] release={} filesTotali={} filesProcessati={}",
-                tag, totalFiles, processedFiles);
-
-        return out;
+                tag, sourceSet.totalJavaFiles(), analyzedSources.includedFiles().size());
+        return classes;
     }
 
-    /** Returns the normalized unix-style path, or empty() if the file must be skipped. */
-    private static Optional<String> shouldSkip(Path root, Path path) {
-        // 1) Skip files too big
+    private ParsedSourceFile withKeys(ParsedSourceFile sourceFile, Map<String, List<String>> fileToKeys) {
+        return new ParsedSourceFile(
+                sourceFile.relativePath(),
+                sourceFile.source(),
+                fileToKeys.getOrDefault(sourceFile.relativePath(), List.of()));
+    }
+
+    private String prepareCloneCache(SourceScanResult scanResult) {
         try {
-            if (Files.size(path) > MAX_FILE_BYTES) {
-                LOG.warn("Skipping VERY large file {}", path);
-                return Optional.empty();
-            }
-        } catch (IOException ex) {
-            LOG.warn("Cannot stat {}, skipping – {}", path, ex.getMessage());
-            return Optional.empty();
-        }
-
-        // 2) Calculate the relevant route
-        Path rel = root.relativize(path);
-        String relUnix = rel.toString().replace('\\', '/');
-
-        // 3) Always removes the first segment (e.g. "repo-1.0.0/src/..." -> "src/...")
-        int slash = relUnix.indexOf('/');
-        if (slash >= 0) relUnix = relUnix.substring(slash + 1);
-
-        // 4) Returns the normalized path
-        return Optional.of(relUnix);
-    }
-
-    /** Parses the file, computes metrics, adds MethodData objects to *sink*. */
-    private static void collectMethods(Path file,
-                                       String relUnix,
-                                       String repo,
-                                       String tag,
-                                       List<String> jiraKeys,
-                                       MetricsCalculator calc,
-                                       List<MethodData> sink) {
-        ParserConfiguration config = new ParserConfiguration();
-        JavaParser parser = new JavaParser(config);
-        try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
-            parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(reader))
-                    .getResult()
-                    .ifPresent(cu -> cu.findAll(MethodDeclaration.class)
-                            .forEach(m -> m.getRange().ifPresent(r -> {
-                                try {
-                                    sink.add(new MethodData.Builder()
-                                            .projectName(repo)
-                                            .path('/' + relUnix + '/')
-                                            .methodSignature(m.getDeclarationAsString(true, true, true))
-                                            .releaseId(tag)
-                                            .metrics(calc.computeAll(m))
-                                            .commitHashes(jiraKeys)
-                                            .buggy(false)
-                                            .startLine(r.begin.line)
-                                            .endLine(r.end.line)
-                                            .build());
-                                } catch (SourceCollectionException | IOException sce) {
-                                    LOG.warn("[METHOD] Failed to compute metrics for {}: {}", file, sce.getMessage());
-                                }
-                            })));
-        } catch (ParseProblemException ppe) {
-            LOG.warn("[METHOD] Failed to parse {}: {}", file, ppe.getMessage());
-        } catch (IOException ioe) {
-            LOG.warn("[METHOD] Failed to read {}: {}", file, ioe.getMessage());
-        }
-    }
-
-    /** === NUOVO: collect class-level === */
-    private static void collectClasses(Path file,
-                                       String relUnix,
-                                       String repo,
-                                       String tag,
-                                       List<String> jiraKeys,
-                                       MetricsCalculator calc,
-                                       List<ClassData> sink) {
-        ParserConfiguration config = new ParserConfiguration();
-        JavaParser parser = new JavaParser(config);
-        try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
-            parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(reader))
-                    .getResult()
-                    .ifPresent(cu -> cu.findAll(ClassOrInterfaceDeclaration.class)
-                            .forEach(cls -> cls.getRange().ifPresent(r -> {
-                                try {
-                                    String clsName = cls.getFullyQualifiedName().orElse(cls.getNameAsString());
-                                    sink.add(new ClassData.Builder()
-                                            .projectName(repo)
-                                            .path('/' + relUnix + '/')
-                                            .className(clsName)
-                                            .releaseId(tag)
-                                            .metrics(calc.computeAll(cls))
-                                            .commitHashes(jiraKeys)
-                                            .buggy(false)
-                                            .startLine(r.begin.line)
-                                            .endLine(r.end.line)
-                                            .build());
-                                } catch (Exception ex) {
-                                    LOG.warn("[CLASS] Failed to compute metrics for {}: {}", file, ex.getMessage());
-                                }
-                            })));
-        } catch (ParseProblemException ppe) {
-            LOG.warn("[CLASS] Failed to parse {}: {}", file, ppe.getMessage());
-        } catch (IOException ioe) {
-            LOG.warn("[CLASS] Failed to read {}: {}", file, ioe.getMessage());
-        }
-    }
-
-    /** Best-effort recursive delete (no exceptions propagated). */
-    private static void deleteRecursively(Path dir) {
-        try (Stream<Path> s = Files.walk(dir)) {
-            s.sorted(Comparator.reverseOrder())
-                    .forEach(p -> {
-                        try {
-                            Files.deleteIfExists(p);
-                        } catch (IOException e) {
-                            LOG.warn("Failed to delete {}: {}", p, e.getMessage());
-                        }
-                    });
-            LOG.trace("Deleted temp dir {}", dir);
-        } catch (IOException ignore) {
-            LOG.warn("Failed to delete {}", dir);
+            return CloneDetector.prepareCloneMap(scanResult);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to precompute clone cache", exception);
         }
     }
 }

@@ -8,27 +8,26 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * Represents the configuration of a Git+JIRA project.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ProjectConfig(String owner, String name, Integer percentage, String jiraProjectKey) {
+public record ProjectConfig(String owner, String name, String repoUrl, Integer percentage, String jiraProjectKey) {
 
-    /**
-     * Jackson uses this constructor to create instances from JSON.
-     *
-     * @param owner          project owner
-     * @param name           project name
-     * @param percentage     percentage of release
-     * @param jiraProjectKey project key in JIRA
-     */
     @JsonCreator
     public ProjectConfig(
             @JsonProperty("owner") String owner,
             @JsonProperty("name") String name,
+            @JsonProperty("repoUrl") String repoUrl,
             @JsonProperty("percentage") Integer percentage,
             @JsonProperty("jiraKey") String jiraProjectKey
     ) {
-        this.owner = owner;
-        this.name = name;
+        RepositoryCoordinates coordinates = RepositoryUrlParser.resolve(owner, name, repoUrl);
+        this.owner = coordinates.owner();
+        this.name = coordinates.name();
+        this.repoUrl = repoUrl;
         this.percentage = percentage;
         this.jiraProjectKey = jiraProjectKey;
+    }
+
+    public ProjectConfig(String owner, String name, Integer percentage, String jiraProjectKey) {
+        this(owner, name, null, percentage, jiraProjectKey);
     }
 
     @Override

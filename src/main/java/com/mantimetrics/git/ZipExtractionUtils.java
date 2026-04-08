@@ -90,6 +90,7 @@ class ZipExtractionUtils {
     }
 
     /** Verifies that the path is within the root directory. */
+    @SuppressWarnings("unused")
     static Path safeTarget(Path root, String name) throws IOException {
         /* normalized path + traversal control */
         Path out = root.resolve(name).normalize();
@@ -101,6 +102,7 @@ class ZipExtractionUtils {
     }
 
     /** Extracts the ZIP entry to the given path. */
+    @SuppressWarnings("unused")
     static long extractFile(ZipInputStream zis, Path target) throws IOException {
         // creates parent directories if they are missing
         Files.createDirectories(target.getParent());
@@ -126,5 +128,15 @@ class ZipExtractionUtils {
         if (comp > 0 && (double)add/comp > MAX_INFLATION_RATIO)
             throw new IOException("Inflation ratio > " + MAX_INFLATION_RATIO);
         return newTot;
+    }
+
+    static boolean shouldMaterialize(String name, boolean directory) {
+        if (directory) {
+            return false;
+        }
+        return name.endsWith(".java")
+                && !name.matches("(?i).*/src/test/java/.*")
+                && !name.matches("(?i).*/test/.*")
+                && !name.matches(".*(Test|IT)\\.java$");
     }
 }

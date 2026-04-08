@@ -1,0 +1,29 @@
+{
+  "rawDataset" : "output\\avro_dataset_class.csv",
+  "identifierColumns" : [ "Project", "Path", "Method", "Class", "ReleaseId" ],
+  "featureColumns" : [ "LOC", "StmtCount", "Cyclomatic", "Cognitive", "DistinctOperators", "DistinctOperands", "TotalOperators", "TotalOperands", "Vocabulary", "Length", "Volume", "Difficulty", "Effort", "MaxNestingDepth", "isLongMethod", "isGodClass", "isFeatureEnvy", "isDuplicatedCode", "CodeSmells", "NSmells", "Touches", "prevCodeSmells", "prevBuggy" ],
+  "actionableColumns" : [ "CodeSmells", "NSmells", "isLongMethod", "isGodClass", "isFeatureEnvy", "isDuplicatedCode" ],
+  "labelColumn" : "Buggy",
+  "derivedDatasets" : {
+    "A" : {
+      "csv" : "output\\avro_dataset_class_artifacts\\A.csv",
+      "arff" : "output\\avro_dataset_class_artifacts\\A.arff",
+      "rows" : 1073
+    },
+    "BPlus" : {
+      "csv" : "output\\avro_dataset_class_artifacts\\BPlus.csv",
+      "arff" : "output\\avro_dataset_class_artifacts\\BPlus.arff",
+      "rows" : 800
+    },
+    "B" : {
+      "csv" : "output\\avro_dataset_class_artifacts\\B.csv",
+      "arff" : "output\\avro_dataset_class_artifacts\\B.arff",
+      "rows" : 800
+    },
+    "C" : {
+      "csv" : "output\\avro_dataset_class_artifacts\\C.csv",
+      "arff" : "output\\avro_dataset_class_artifacts\\C.arff",
+      "rows" : 273
+    }
+  }
+}

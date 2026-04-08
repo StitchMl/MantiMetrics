@@ -10,9 +10,12 @@
   <name>Manti Metrics</name>
 
   <properties>
-    <!-- Compiler -->
-    <maven.compiler.source>11</maven.compiler.source>
-    <maven.compiler.target>11</maven.compiler.target>
+    <!-- Build -->
+    <maven.compiler.release>16</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <maven.compiler.plugin.version>3.15.0</maven.compiler.plugin.version>
+    <maven.surefire.plugin.version>3.5.4</maven.surefire.plugin.version>
 
     <!-- Core library overrides -->
     <commons.codec.version>1.15</commons.codec.version>             <!-- latest Commons‑Codec 1.x release -->
@@ -23,7 +26,7 @@
 
     <!-- Safe versions for override -->
     <groovy.version>2.4.21</groovy.version>
-    <plexus.utils.version>3.0.24</plexus.utils.version>
+    <plexus.utils.version>4.0.3</plexus.utils.version>
     <maven.core.version>3.8.8</maven.core.version>
   </properties>
 
@@ -243,16 +246,17 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
-          <configuration>
-              <source>16</source>
-              <target>16</target>
-          </configuration>
+        <version>${maven.compiler.plugin.version}</version>
+        <configuration>
+          <release>${maven.compiler.release}</release>
+        </configuration>
       </plugin>
 
       <!-- Maven Surefire Plugin -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
+        <version>${maven.surefire.plugin.version}</version>
       </plugin>
 
         <!-- Maven Assembly Plugin -->

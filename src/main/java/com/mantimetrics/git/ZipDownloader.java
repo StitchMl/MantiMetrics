@@ -1,32 +1,34 @@
 package com.mantimetrics.git;
 
+import com.mantimetrics.parser.ParsedSourceFile;
+import com.mantimetrics.parser.SourceScanResult;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.SocketTimeoutException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
-import java.nio.file.attribute.PosixFilePermissions;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Semaphore;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 class ZipDownloader {
-    private static final Logger LOG      = LoggerFactory.getLogger(ZipDownloader.class);
-    private static final String ZIP      = "https://codeload.github.com";
-    private static final String DIR_SUFF = ".mantimetrics-tmp";
-    private final OkHttpClient  longClient;
-    private final List<Path>    tmpDirs  = new CopyOnWriteArrayList<>();
-    private static final int    MAX_R    = 5;
-    private final Semaphore     permits  = new Semaphore(5_000, true);
+    private static final Logger LOG = LoggerFactory.getLogger(ZipDownloader.class);
+    private static final String ZIP = "https://codeload.github.com";
+    private static final int MAX_R = 5;
+
+    private final OkHttpClient longClient;
+    private final Semaphore permits = new Semaphore(5_000, true);
 
     ZipDownloader(GitApiClient client) {
         this.longClient = client.http.newBuilder()
@@ -35,100 +37,85 @@ class ZipDownloader {
                 .build();
     }
 
-    /** download + unzip con timeout esteso e retry su SocketTimeout. */
-    Path downloadAndUnzip(String owner, String repo, String ref, String subDir)
+    SourceScanResult downloadSources(String owner, String repo, String ref)
             throws IOException, InterruptedException {
         String url = ZIP + "/" + owner + "/" + repo + "/zip/" +
                 URLEncoder.encode(ref, StandardCharsets.UTF_8);
         IOException last = new SocketTimeoutException("Timeout downloading " + ref);
         for (int i = 0; i < MAX_R; i++) {
             try {
-                return tryDownload(url, subDir);
-            } catch (SocketTimeoutException ste) {
-                last = ste;
+                return tryDownload(url, owner + "/" + repo + "@" + ref);
+            } catch (SocketTimeoutException exception) {
+                last = exception;
                 long wait = backoff(i);
                 LOG.warn("Timeout downloading {}, retry {}/{} in {} s",
-                        ref, i + 1, MAX_R, wait/1_000);
+                        ref, i + 1, MAX_R, wait / 1_000);
                 Thread.sleep(wait);
             }
         }
         throw last;
     }
 
-    /** Exponential backoff for rate-limit errors. */
-    private static long backoff(int attempt){
-        return (long)(3_000*Math.pow(2, attempt));
+    private static long backoff(int attempt) {
+        return (long) (3_000 * Math.pow(2, attempt));
     }
 
-    /**
-     * It securely downloads a ZIP archive and expands it under ~/.mantimetrics-tmp.
-     * – Previous Zip-Slip, symlink, decompression-bomb, too many entries ...
-     */
-    private Path tryDownload(String url, String subDir) throws IOException {
-
+    private SourceScanResult tryDownload(String url, String releaseId) throws IOException {
         permits.acquireUninterruptibly();
-
-        Request req = new Request.Builder().url(url).build();
-        try (Response resp = longClient.newCall(req).execute()) {
-            if (!resp.isSuccessful() || resp.body() == null)
-                throw new IOException("ZIP HTTP " + resp.code());
-
-            /* root sandbox isolata */
-            Path root = Files.createTempDirectory(getPrivateBox(),
-                    "mantimetrics-" + subDir + '-');
-            tmpDirs.add(root);
-
-            long total = 0;
-            int entries = 0;
-
-            try (InputStream in = resp.body().byteStream();
-                 ZipInputStream zis = new ZipInputStream(in)) {
-
-                ZipEntry ze;
-                while ((ze = ZipExtractionUtils.safeNextEntry(zis)) != null) {
-                    String name = ze.getName();
-
-                    // ── AUTOMATIC TEST FILTER ───
-                    // If the entry is inside a test folder or is a Test.java/IT.java, I skip it
-                    if (name.matches("(?i).*/src/test/java/.*")
-                            || name.matches("(?i).*/test/.*")
-                            || name.matches(".*(Test|IT)\\.java$")) {
-                        zis.closeEntry();
-                        continue;
-                    }
-
-                    ZipExtractionUtils.validateEntry(++entries);
-                    Path target = ZipExtractionUtils.safeTarget(root, ze.getName());
-
-                    if (ze.isDirectory()) {
-                        Files.createDirectories(target);
-                    } else {
-                        long written = ZipExtractionUtils.extractFile(zis, target);
-                        total = ZipExtractionUtils.checkQuotas(total, written, ze.getCompressedSize());
-                    }
-
-                    zis.closeEntry();
+        try {
+            Request request = new Request.Builder().url(url).build();
+            try (Response response = longClient.newCall(request).execute()) {
+                if (!response.isSuccessful() || response.body() == null) {
+                    throw new IOException("ZIP HTTP " + response.code());
                 }
+
+                List<ParsedSourceFile> sources = new ArrayList<>();
+                long total = 0;
+                int entries = 0;
+                try (InputStream inputStream = response.body().byteStream();
+                     ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
+                    ZipEntry entry;
+                    while ((entry = ZipExtractionUtils.safeNextEntry(zipInputStream)) != null) {
+                        entries++;
+                        ZipExtractionUtils.validateEntry(entries);
+                        if (!ZipExtractionUtils.shouldMaterialize(entry.getName(), entry.isDirectory())) {
+                            zipInputStream.closeEntry();
+                            continue;
+                        }
+
+                        byte[] bytes = readEntryBytes(zipInputStream);
+                        total = ZipExtractionUtils.checkQuotas(total, bytes.length, entry.getCompressedSize());
+                        sources.add(new ParsedSourceFile(
+                                toRelativeSourcePath(entry.getName()),
+                                new String(bytes, StandardCharsets.UTF_8),
+                                List.of()));
+                        zipInputStream.closeEntry();
+                    }
+                }
+                return new SourceScanResult(releaseId, sources.size(), List.copyOf(sources));
             }
-            return root;
+        } finally {
+            permits.release();
         }
     }
 
-    /** Deletes the temporary directory and all its contents. */
-    private static Path getPrivateBox() throws IOException {
-        Path box = Paths.get(System.getProperty("user.home")).resolve(DIR_SUFF);
-        if (Files.notExists(box)) {
-            if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
-                Files.createDirectory(box,
-                        PosixFilePermissions.asFileAttribute(
-                                PosixFilePermissions.fromString("rwx------")));
-            } else {
-                Files.createDirectory(box);
-            }
+    private byte[] readEntryBytes(ZipInputStream zipInputStream) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8 * 1024];
+        int length;
+        while ((length = zipInputStream.read(buffer)) > 0) {
+            outputStream.write(buffer, 0, length);
         }
-        return box;
+        return outputStream.toByteArray();
     }
 
-    /** Deletes the temporary directory and all its contents. */
-    public List<Path> getTmpDirs() { return List.copyOf(tmpDirs); }
+    private String toRelativeSourcePath(String entryName) {
+        String normalized = entryName.replace('\\', '/');
+        int firstSlash = normalized.indexOf('/');
+        return firstSlash >= 0 ? normalized.substring(firstSlash + 1) : normalized;
+    }
+
+    public List<Path> getTmpDirs() {
+        return List.of();
+    }
 }

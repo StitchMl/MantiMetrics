@@ -1,147 +1,64 @@
 package com.mantimetrics.model;
 
 import com.mantimetrics.metrics.MethodMetrics;
-import java.util.*;
-import java.util.StringJoiner;
+
+import java.util.List;
+import java.util.Objects;
 
 @SuppressWarnings("unused")
-public class ClassData implements DatasetRow {
-    private final String projectName;
-    private final String path;
+public final class ClassData implements DatasetRow {
+    private final MetricDatasetRowData data;
     private final String className;
-    private final String releaseId;
-    private final MethodMetrics metrics;
 
-    private final List<String> commitHashes;
-    private final boolean buggy;
-
-    private final int codeSmells;
-    private final int touches;
-    private final int prevCodeSmells;
-    private final boolean prevBuggy;
-
-    private final int startLine;
-    private final int endLine;
-
-    private ClassData(Builder b) {
-        this.projectName = b.projectName;
-        this.path = b.path;
-        this.className = b.className;
-        this.releaseId = b.releaseId;
-        this.metrics = b.metrics;
-        this.commitHashes = List.copyOf(b.commitHashes);
-        this.buggy = b.buggy;
-        this.codeSmells = b.codeSmells;
-        this.touches = b.touches;
-        this.prevCodeSmells = b.prevCodeSmells;
-        this.prevBuggy = b.prevBuggy;
-        this.startLine = b.startLine;
-        this.endLine = b.endLine;
+    private ClassData(Builder builder) {
+        this.data = builder.buildCommon();
+        this.className = Objects.requireNonNull(builder.className, "className");
     }
 
-    public String getProjectName() { return projectName; }
-    public String getPath() { return path; }
+    public String getProjectName() { return data.projectName(); }
+    @Override public String getPath() { return data.path(); }
     public String getClassName() { return className; }
-    public String getReleaseId() { return releaseId; }
-    public MethodMetrics getMetrics() { return metrics; }
-    public List<String> getCommitHashes() { return commitHashes; }
-    public boolean isBuggy() { return buggy; }
-    public int getCodeSmells() { return codeSmells; }
-    public int getTouches() { return touches; }
-    public int getPrevCodeSmells() { return prevCodeSmells; }
-    public boolean isPrevBuggy() { return prevBuggy; }
-    public int getStartLine() { return startLine; }
-    public int getEndLine() { return endLine; }
-
-    public String getUniqueKey() { return path + "#" + className; }
+    public String getReleaseId() { return data.releaseId(); }
+    public MethodMetrics getMetrics() { return data.metrics(); }
+    public List<String> getCommitHashes() { return data.commitHashes(); }
+    @Override public boolean isBuggy() { return data.buggy(); }
+    @Override public int getCodeSmells() { return data.codeSmells(); }
+    @Override public int getNSmells() { return data.nSmells(); }
+    public int getTouches() { return data.touches(); }
+    public int getPrevCodeSmells() { return data.prevCodeSmells(); }
+    public boolean isPrevBuggy() { return data.prevBuggy(); }
+    @Override public int getStartLine() { return data.startLine(); }
+    @Override public int getEndLine() { return data.endLine(); }
+    @Override public String getUniqueKey() { return data.path() + "#" + className; }
 
     @Override
     public String toCsvLine() {
-        StringJoiner sj = new StringJoiner(",");
-        sj.add(projectName)
-                .add(path)
-                .add('"' + className.replace("\"", "\"\"") + '"')
-                .add(releaseId);
-
-        sj.add(String.valueOf(metrics.getLoc()))
-                .add(String.valueOf(metrics.getStmtCount()))
-                .add(String.valueOf(metrics.getCyclomatic()))
-                .add(String.valueOf(metrics.getCognitive()))
-                .add(String.valueOf(metrics.getDistinctOperators()))
-                .add(String.valueOf(metrics.getDistinctOperands()))
-                .add(String.valueOf(metrics.getTotalOperators()))
-                .add(String.valueOf(metrics.getTotalOperands()))
-                .add(String.valueOf(metrics.getVocabulary()))
-                .add(String.valueOf(metrics.getLength()))
-                .add(String.valueOf(metrics.getVolume()))
-                .add(String.valueOf(metrics.getDifficulty()))
-                .add(String.valueOf(metrics.getEffort()))
-                .add(String.valueOf(metrics.getMaxNestingDepth()))
-                .add(metrics.isLongMethod() ? "1" : "0")
-                .add(metrics.isGodClass() ? "1" : "0")
-                .add(metrics.isFeatureEnvy() ? "1" : "0")
-                .add(metrics.isDuplicatedCode() ? "1" : "0")
-                .add(String.valueOf(codeSmells))
-                .add(String.valueOf(touches))
-                .add(String.valueOf(prevCodeSmells))
-                .add(prevBuggy ? "yes" : "no")
-                .add(buggy ? "yes" : "no");
-        return sj.toString();
+        return DatasetCsvFormatter.format(data, className);
     }
 
     public Builder toBuilder() {
         return new Builder()
-                .projectName(projectName)
-                .path(path)
-                .className(className)
-                .releaseId(releaseId)
-                .metrics(metrics)
-                .commitHashes(commitHashes)
-                .buggy(buggy)
-                .codeSmells(codeSmells)
-                .touches(touches)
-                .prevCodeSmells(prevCodeSmells)
-                .prevBuggy(prevBuggy)
-                .startLine(startLine)
-                .endLine(endLine);
+                .copyCommonFrom(data)
+                .className(className);
     }
 
-    public static class Builder {
-        private String projectName;
-        private String path;
+    public static final class Builder extends MetricDatasetRowBuilder<Builder> {
         private String className;
-        private String releaseId;
-        private MethodMetrics metrics;
-        private List<String> commitHashes = Collections.emptyList();
-        private boolean buggy;
-        private int codeSmells;
-        private int touches;
-        private int prevCodeSmells;
-        private boolean prevBuggy;
-        private int startLine;
-        private int endLine;
 
-        public Builder projectName(String v){ projectName=Objects.requireNonNull(v); return this; }
-        public Builder path(String v){ path=Objects.requireNonNull(v); return this; }
-        public Builder className(String v){ className=Objects.requireNonNull(v); return this; }
-        public Builder releaseId(String v){ releaseId=Objects.requireNonNull(v); return this; }
-        public Builder metrics(MethodMetrics v){ metrics=Objects.requireNonNull(v); return this; }
-        public Builder commitHashes(List<String> v){ commitHashes=Objects.requireNonNull(v); return this; }
-        public Builder buggy(boolean v){ buggy=v; return this; }
-        public Builder codeSmells(int v){ codeSmells=v; return this; }
-        public Builder touches(int v){ touches=v; return this; }
-        public Builder prevCodeSmells(int v){ prevCodeSmells=v; return this; }
-        public Builder prevBuggy(boolean v){ prevBuggy=v; return this; }
-        public Builder startLine(int v){ startLine=v; return this; }
-        public Builder endLine(int v){ endLine=v; return this; }
+        public Builder className(String value) {
+            this.className = Objects.requireNonNull(value, "className");
+            return this;
+        }
 
         public ClassData build() {
-            Objects.requireNonNull(projectName);
-            Objects.requireNonNull(path);
-            Objects.requireNonNull(className);
-            Objects.requireNonNull(releaseId);
-            Objects.requireNonNull(metrics);
+            validateCommon();
+            Objects.requireNonNull(className, "className missing");
             return new ClassData(this);
+        }
+
+        @Override
+        protected Builder self() {
+            return this;
         }
     }
 }

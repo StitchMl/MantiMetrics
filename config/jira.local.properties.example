@@ -1,0 +1,2 @@
+# Copy this file to config/jira.local.properties and set your JIRA PAT there.
+jira.pat=YOUR_JIRA_PAT
