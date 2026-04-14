@@ -16,13 +16,15 @@ class ReleaseCommitDataBuilderTest {
                 new ReleaseCommitDataBuilder.ReleaseCommitSnapshot(
                         "sha-1",
                         "PROJ-1 Fix parser regression",
-                        Set.of("src/main/java/com/acme/Sample.java"))));
+                        "Alice",
+                        Set.of(new ReleaseCommitDataBuilder.ReleaseCommitFile("src/main/java/com/acme/Sample.java", 10, 2)))));
 
         ReleaseCommitData secondRelease = ReleaseCommitDataBuilder.aggregate(List.of(
                 new ReleaseCommitDataBuilder.ReleaseCommitSnapshot(
                         "sha-2",
                         "PROJ-2 Fix parser edge case",
-                        Set.of("src/main/java/com/acme/Sample.java"))));
+                        "Bob",
+                        Set.of(new ReleaseCommitDataBuilder.ReleaseCommitFile("src/main/java/com/acme/Sample.java", 3, 1)))));
 
         assertEquals(
                 List.of("PROJ-1"),
@@ -33,6 +35,9 @@ class ReleaseCommitDataBuilderTest {
         assertFalse(firstRelease.fileToIssueKeys()
                 .get("src/main/java/com/acme/Sample.java")
                 .contains("PROJ-2"));
+        assertEquals(List.of("Alice"), firstRelease.authorMap().get("src/main/java/com/acme/Sample.java"));
+        assertEquals(10, firstRelease.additionsFor("src/main/java/com/acme/Sample.java"));
+        assertEquals(2, firstRelease.deletionsFor("src/main/java/com/acme/Sample.java"));
     }
 
     @Test
@@ -41,11 +46,17 @@ class ReleaseCommitDataBuilderTest {
                 new ReleaseCommitDataBuilder.ReleaseCommitSnapshot(
                         "sha-1",
                         "Refactor parser internals",
-                        Set.of("src/main/java/com/acme/Sample.java", "README.md"))));
+                        "Alice",
+                        Set.of(
+                                new ReleaseCommitDataBuilder.ReleaseCommitFile("src/main/java/com/acme/Sample.java", 4, 4),
+                                new ReleaseCommitDataBuilder.ReleaseCommitFile("README.md", 1, 0)
+                        ))));
 
         assertEquals(
                 List.of("sha-1"),
                 data.touchMap().get("src/main/java/com/acme/Sample.java"));
         assertFalse(data.fileToIssueKeys().containsKey("src/main/java/com/acme/Sample.java"));
+        assertEquals(List.of("Alice"), data.authorMap().get("src/main/java/com/acme/Sample.java"));
+        assertEquals(8, data.churnFor("src/main/java/com/acme/Sample.java"));
     }
 }

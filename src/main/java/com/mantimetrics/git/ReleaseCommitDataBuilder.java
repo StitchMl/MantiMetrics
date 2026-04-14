@@ -13,25 +13,51 @@ final class ReleaseCommitDataBuilder {
 
     static ReleaseCommitData aggregate(List<ReleaseCommitSnapshot> commits) {
         Map<String, List<String>> touchMap = new HashMap<>();
+        Map<String, List<String>> issueTouchMap = new HashMap<>();
         Map<String, List<String>> fileToIssueKeys = new HashMap<>();
+        Map<String, List<String>> authorMap = new HashMap<>();
+        Map<String, Integer> additionsMap = new HashMap<>();
+        Map<String, Integer> deletionsMap = new HashMap<>();
 
         for (ReleaseCommitSnapshot commit : commits) {
-            Set<String> javaFiles = commit.files().stream()
-                    .filter(path -> path.endsWith(".java"))
+            Set<ReleaseCommitFile> javaFiles = commit.files().stream()
+                    .filter(file -> file.path().endsWith(".java"))
                     .collect(Collectors.toCollection(LinkedHashSet::new));
 
             if (javaFiles.isEmpty()) {
                 continue;
             }
 
-            for (String file : javaFiles) {
-                touchMap.computeIfAbsent(file, ignored -> new ArrayList<>()).add(commit.sha());
+            Set<String> javaPaths = javaFiles.stream()
+                    .map(ReleaseCommitFile::path)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+
+            for (ReleaseCommitFile file : javaFiles) {
+                touchMap.computeIfAbsent(file.path(), ignored -> new ArrayList<>()).add(commit.sha());
+                if (!commit.author().isBlank()) {
+                    authorMap.computeIfAbsent(file.path(), ignored -> new ArrayList<>()).add(commit.author());
+                }
+                additionsMap.merge(file.path(), file.additions(), Integer::sum);
+                deletionsMap.merge(file.path(), file.deletions(), Integer::sum);
             }
 
-            IssueKeySupport.addKeysForFiles(javaFiles, IssueKeySupport.extractKeys(commit.message()), fileToIssueKeys);
+            List<String> issueKeys = IssueKeySupport.extractKeys(commit.message());
+            if (!issueKeys.isEmpty()) {
+                for (String file : javaPaths) {
+                    issueTouchMap.computeIfAbsent(file, ignored -> new ArrayList<>()).add(commit.sha());
+                }
+                IssueKeySupport.addKeysForFiles(javaPaths, issueKeys, fileToIssueKeys);
+            }
         }
 
-        return new ReleaseCommitData(immutableCopy(touchMap), immutableCopy(fileToIssueKeys));
+        return new ReleaseCommitData(
+                immutableCopy(touchMap),
+                immutableCopy(issueTouchMap),
+                immutableCopy(fileToIssueKeys),
+                immutableCopy(authorMap),
+                Map.copyOf(additionsMap),
+                Map.copyOf(deletionsMap)
+        );
     }
 
     private static Map<String, List<String>> immutableCopy(Map<String, List<String>> source) {
@@ -40,6 +66,9 @@ final class ReleaseCommitDataBuilder {
         return Collections.unmodifiableMap(copy);
     }
 
-    record ReleaseCommitSnapshot(String sha, String message, Set<String> files) {
+    record ReleaseCommitSnapshot(String sha, String message, String author, Set<ReleaseCommitFile> files) {
+    }
+
+    record ReleaseCommitFile(String path, int additions, int deletions) {
     }
 }

@@ -15,8 +15,18 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
     protected boolean buggy;
     protected int codeSmells;
     protected int touches;
+    protected int totalTouches;
+    protected int issueTouches;
+    protected int totalIssueTouches;
+    protected int authors;
+    protected int totalAuthors;
+    protected int addedLines;
+    protected int deletedLines;
+    protected int churn;
+    protected int totalChurn;
     protected int prevCodeSmells;
     protected boolean prevBuggy;
+    protected int ageInReleases;
     protected int startLine;
     protected int endLine;
 
@@ -60,6 +70,51 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
         return self();
     }
 
+    public final T totalTouches(int value) {
+        this.totalTouches = value;
+        return self();
+    }
+
+    public final T issueTouches(int value) {
+        this.issueTouches = value;
+        return self();
+    }
+
+    public final T totalIssueTouches(int value) {
+        this.totalIssueTouches = value;
+        return self();
+    }
+
+    public final T authors(int value) {
+        this.authors = value;
+        return self();
+    }
+
+    public final T totalAuthors(int value) {
+        this.totalAuthors = value;
+        return self();
+    }
+
+    public final T addedLines(int value) {
+        this.addedLines = value;
+        return self();
+    }
+
+    public final T deletedLines(int value) {
+        this.deletedLines = value;
+        return self();
+    }
+
+    public final T churn(int value) {
+        this.churn = value;
+        return self();
+    }
+
+    public final T totalChurn(int value) {
+        this.totalChurn = value;
+        return self();
+    }
+
     public final T prevCodeSmells(int value) {
         this.prevCodeSmells = value;
         return self();
@@ -67,6 +122,11 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
 
     public final T prevBuggy(boolean value) {
         this.prevBuggy = value;
+        return self();
+    }
+
+    public final T ageInReleases(int value) {
+        this.ageInReleases = value;
         return self();
     }
 
@@ -89,8 +149,18 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
                 .buggy(data.buggy())
                 .codeSmells(data.codeSmells())
                 .touches(data.touches())
+                .totalTouches(data.totalTouches())
+                .issueTouches(data.issueTouches())
+                .totalIssueTouches(data.totalIssueTouches())
+                .authors(data.authors())
+                .totalAuthors(data.totalAuthors())
+                .addedLines(data.addedLines())
+                .deletedLines(data.deletedLines())
+                .churn(data.churn())
+                .totalChurn(data.totalChurn())
                 .prevCodeSmells(data.prevCodeSmells())
                 .prevBuggy(data.prevBuggy())
+                .ageInReleases(data.ageInReleases())
                 .startLine(data.startLine())
                 .endLine(data.endLine());
     }
@@ -106,8 +176,18 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
                 buggy,
                 codeSmells,
                 touches,
+                totalTouches,
+                issueTouches,
+                totalIssueTouches,
+                authors,
+                totalAuthors,
+                addedLines,
+                deletedLines,
+                churn,
+                totalChurn,
                 prevCodeSmells,
                 prevBuggy,
+                ageInReleases,
                 startLine,
                 endLine);
     }

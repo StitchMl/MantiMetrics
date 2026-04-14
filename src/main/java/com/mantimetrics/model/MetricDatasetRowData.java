@@ -4,20 +4,11 @@ import com.mantimetrics.metrics.MethodMetrics;
 
 import java.util.List;
 
-final class MetricDatasetRowData {
-    private final String projectName;
-    private final String path;
-    private final String releaseId;
-    private final MethodMetrics metrics;
-    private final List<String> commitHashes;
-    private final boolean buggy;
-    private final int codeSmells;
-    private final int touches;
-    private final int prevCodeSmells;
-    private final boolean prevBuggy;
-    private final int startLine;
-    private final int endLine;
-
+record MetricDatasetRowData(String projectName, String path, String releaseId, MethodMetrics metrics,
+                            List<String> commitHashes, boolean buggy, int codeSmells, int touches, int totalTouches,
+                            int issueTouches, int totalIssueTouches, int authors, int totalAuthors, int addedLines,
+                            int deletedLines, int churn, int totalChurn, int prevCodeSmells, boolean prevBuggy,
+                            int ageInReleases, int startLine, int endLine) {
     MetricDatasetRowData(
             String projectName,
             String path,
@@ -27,8 +18,18 @@ final class MetricDatasetRowData {
             boolean buggy,
             int codeSmells,
             int touches,
+            int totalTouches,
+            int issueTouches,
+            int totalIssueTouches,
+            int authors,
+            int totalAuthors,
+            int addedLines,
+            int deletedLines,
+            int churn,
+            int totalChurn,
             int prevCodeSmells,
             boolean prevBuggy,
+            int ageInReleases,
             int startLine,
             int endLine
     ) {
@@ -40,24 +41,21 @@ final class MetricDatasetRowData {
         this.buggy = buggy;
         this.codeSmells = codeSmells;
         this.touches = touches;
+        this.totalTouches = totalTouches;
+        this.issueTouches = issueTouches;
+        this.totalIssueTouches = totalIssueTouches;
+        this.authors = authors;
+        this.totalAuthors = totalAuthors;
+        this.addedLines = addedLines;
+        this.deletedLines = deletedLines;
+        this.churn = churn;
+        this.totalChurn = totalChurn;
         this.prevCodeSmells = prevCodeSmells;
         this.prevBuggy = prevBuggy;
+        this.ageInReleases = ageInReleases;
         this.startLine = startLine;
         this.endLine = endLine;
     }
-
-    String projectName() { return projectName; }
-    String path() { return path; }
-    String releaseId() { return releaseId; }
-    MethodMetrics metrics() { return metrics; }
-    List<String> commitHashes() { return commitHashes; }
-    boolean buggy() { return buggy; }
-    int codeSmells() { return codeSmells; }
-    int touches() { return touches; }
-    int prevCodeSmells() { return prevCodeSmells; }
-    boolean prevBuggy() { return prevBuggy; }
-    int startLine() { return startLine; }
-    int endLine() { return endLine; }
 
     int nSmells() {
         int binarySmells = 0;

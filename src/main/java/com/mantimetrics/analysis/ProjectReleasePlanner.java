@@ -4,6 +4,8 @@ import com.mantimetrics.git.GitService;
 import com.mantimetrics.git.ProjectConfig;
 import com.mantimetrics.jira.JiraClient;
 import com.mantimetrics.jira.JiraClientException;
+import com.mantimetrics.jira.JiraBugTicket;
+import com.mantimetrics.labeling.ReleaseTimeline;
 import com.mantimetrics.release.ReleaseSelector;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -13,6 +15,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Resolves the release timeline shared by Git and Jira and returns the oldest percentage requested by the exam.
+ */
 public final class ProjectReleasePlanner {
     private static final Logger LOG = LoggerFactory.getLogger(ProjectReleasePlanner.class);
 
@@ -38,14 +43,14 @@ public final class ProjectReleasePlanner {
         }
 
         List<String> selectedTags = releaseSelector.selectFirstPercent(chronologicalTags, config.percentage());
-        List<String> bugKeys = jiraClient.fetchBugKeys();
+        List<JiraBugTicket> resolvedTickets = jiraClient.fetchResolvedBugTickets();
 
         LOG.info("{} - percentage {}% -> {} release to be processed",
                 repo, config.percentage(), selectedTags.size());
-        LOG.info("{} - processing {} tags", repo, selectedTags.size());
-        LOG.info("Found {} bug keys", bugKeys.size());
+        LOG.info("{} - {} historical releases available for snoring/labeling", repo, chronologicalTags.size());
+        LOG.info("Found {} resolved bug tickets", resolvedTickets.size());
 
-        return new ProjectReleasePlan(owner, repo, selectedTags, bugKeys);
+        return new ProjectReleasePlan(owner, repo, new ReleaseTimeline(chronologicalTags), selectedTags, resolvedTickets);
     }
 
     @Nullable

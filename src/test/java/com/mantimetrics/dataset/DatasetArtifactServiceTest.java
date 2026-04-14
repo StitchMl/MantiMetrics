@@ -48,14 +48,14 @@ class DatasetArtifactServiceTest {
         assertTrue(Files.exists(metadata));
 
         List<String> aLines = Files.readAllLines(datasetA, StandardCharsets.UTF_8);
-        assertEquals("LOC,StmtCount,Cyclomatic,Cognitive,DistinctOperators,DistinctOperands,TotalOperators,TotalOperands,Vocabulary,Length,Volume,Difficulty,Effort,MaxNestingDepth,isLongMethod,isGodClass,isFeatureEnvy,isDuplicatedCode,CodeSmells,NSmells,Touches,prevCodeSmells,prevBuggy,Buggy", aLines.get(0));
+        assertEquals("LOC,StmtCount,Cyclomatic,Cognitive,DistinctOperators,DistinctOperands,TotalOperators,TotalOperands,Vocabulary,Length,Volume,Difficulty,Effort,MaxNestingDepth,isLongMethod,isGodClass,isFeatureEnvy,isDuplicatedCode,CodeSmells,NSmells,Touches,TotalTouches,IssueTouches,TotalIssueTouches,Authors,TotalAuthors,AddedLines,DeletedLines,Churn,TotalChurn,prevCodeSmells,AgeInReleases,prevBuggy,Buggy", aLines.get(0));
         assertEquals(3, aLines.size());
 
         List<String> bPlusLines = Files.readAllLines(datasetBPlus, StandardCharsets.UTF_8);
         assertEquals(2, bPlusLines.size());
 
         List<String> bLines = Files.readAllLines(datasetB, StandardCharsets.UTF_8);
-        assertEquals("10,4,3,2,5,6,7,8,9.0,10.0,11.0,12.0,13.0,2,0,0,0,0,0,0,3,1,no,yes", bLines.get(1));
+        assertEquals("10,4,3,2,5,6,7,8,9.0,10.0,11.0,12.0,13.0,2,0,0,0,0,0,0,3,5,1,2,1,2,10,4,14,20,1,2,no,yes", bLines.get(1));
 
         List<String> cLines = Files.readAllLines(datasetC, StandardCharsets.UTF_8);
         assertEquals(2, cLines.size());
@@ -71,9 +71,9 @@ class DatasetArtifactServiceTest {
 
     private String rawDatasetContent() {
         return String.join(System.lineSeparator(),
-                "Project,Path,Method,ReleaseId,LOC,StmtCount,Cyclomatic,Cognitive,DistinctOperators,DistinctOperands,TotalOperators,TotalOperands,Vocabulary,Length,Volume,Difficulty,Effort,MaxNestingDepth,isLongMethod,isGodClass,isFeatureEnvy,isDuplicatedCode,CodeSmells,NSmells,Touches,prevCodeSmells,prevBuggy,Buggy",
-                "repo,src/main/java/com/acme/Foo.java,\"void run()\",v1,10,4,3,2,5,6,7,8,9.0,10.0,11.0,12.0,13.0,2,1,0,1,0,2,4,3,1,no,yes",
-                "repo,src/main/java/com/acme/Bar.java,\"void clean()\",v1,12,5,4,3,6,7,8,9,10.0,11.0,12.0,13.0,14.0,1,0,0,0,0,0,0,1,0,no,no",
+                "Project,Path,Method,ReleaseId,LOC,StmtCount,Cyclomatic,Cognitive,DistinctOperators,DistinctOperands,TotalOperators,TotalOperands,Vocabulary,Length,Volume,Difficulty,Effort,MaxNestingDepth,isLongMethod,isGodClass,isFeatureEnvy,isDuplicatedCode,CodeSmells,NSmells,Touches,TotalTouches,IssueTouches,TotalIssueTouches,Authors,TotalAuthors,AddedLines,DeletedLines,Churn,TotalChurn,prevCodeSmells,AgeInReleases,prevBuggy,Buggy",
+                "repo,src/main/java/com/acme/Foo.java,\"void run()\",v1,10,4,3,2,5,6,7,8,9.0,10.0,11.0,12.0,13.0,2,1,0,1,0,2,4,3,5,1,2,1,2,10,4,14,20,1,2,no,yes",
+                "repo,src/main/java/com/acme/Bar.java,\"void clean()\",v1,12,5,4,3,6,7,8,9,10.0,11.0,12.0,13.0,14.0,1,0,0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,1,no,no",
                 "");
     }
 }

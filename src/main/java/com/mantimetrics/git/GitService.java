@@ -6,6 +6,9 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 
+/**
+ * Small facade over the GitHub-specific clients used by the pipeline.
+ */
 public final class GitService {
     private final GitHubRepositoryClient repositoryClient;
     private final GitHubReleaseCommitDataClient releaseCommitDataClient;

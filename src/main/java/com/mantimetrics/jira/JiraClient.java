@@ -9,12 +9,14 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
+/**
+ * Thin JIRA facade responsible for authentication, pagination setup and project-scoped queries.
+ */
 public class JiraClient {
     private static final Logger LOG = LoggerFactory.getLogger(JiraClient.class);
     private static final String PROPS_PATH =
             System.getProperty("jira.config.path", "/jira.properties");
 
-    @SuppressWarnings("FieldCanBeLocal")
     private final CloseableHttpClient httpClient;
     private final JiraConfigurationLoader configurationLoader;
     private final JiraProjectReader projectReader;
@@ -35,14 +37,20 @@ public class JiraClient {
         LOG.debug("JIRA search base = {}", session.searchBase());
     }
 
+    @SuppressWarnings("unused")
     public List<String> fetchBugKeys() throws JiraClientException {
         return projectReader.fetchBugKeys(requireSession());
+    }
+
+    public List<JiraBugTicket> fetchResolvedBugTickets() throws JiraClientException {
+        return projectReader.fetchResolvedBugTickets(requireSession());
     }
 
     public List<String> fetchProjectVersions(String projectKey) throws JiraClientException {
         return projectReader.fetchProjectVersions(requireSession(), projectKey);
     }
 
+    @SuppressWarnings("unused")
     public boolean isMethodBuggy(List<String> commitKeys, List<String> bugKeys) {
         return commitKeys.stream().anyMatch(bugKeys::contains);
     }

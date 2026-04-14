@@ -8,11 +8,13 @@ It supports `class`, `method`, and `both` execution modes, can load projects fro
 For each configured project, MantiMetrics:
 
 1. selects the target releases
-2. streams each release from GitHub and keeps only the production Java sources in memory for the time needed by the analysis.
-3. extracts static metrics and smell-related indicators
-4. enriches rows with Git touches and JIRA-based bug labels
-5. writes a raw dataset CSV
-6. generates derived artifacts for the exam workflow
+2. builds the full historical release timeline shared by GitHub and JIRA.
+3. streams each selected release from GitHub and keeps only the production Java sources in memory for the time needed by the analysis.
+4. extracts static metrics, smell-related indicators and release-local Git history
+5. enriches every class/method row with cumulative history features and historical JIRA-based bug labels.
+6. writes a raw dataset CSV
+7. generates derived artifacts for the exam workflow
+8. writes a milestone-1 audit report that documents snoring coverage and labeling policy.
 
 ## Granularity
 
@@ -46,23 +48,32 @@ If you omit `--repo-url`, the CLI shows an interactive prompt, so you can choose
 Projects are loaded from [src/main/resources/projects-config.json](C:/Users/matte/IdeaProjects/MantiMetrics/src/main/resources/projects-config.json).
 When you launch the tool without `--repo-url`, those projects are shown in the terminal, and the analysis starts only after you pick one of them.
 
+The bundled catalog is aligned with the six Apache projects typically allowed for the exam:
+
+- `AVRO`
+- `OPENJPA`
+- `STORM`
+- `ZOOKEEPER`
+- `SYNCOPE`
+- `TAJO`
+
 Example:
 
 ```json
 [
   {
     "owner": "apache",
-    "name": "BookKeeper",
-    "percentage": 33,
-    "repoUrl": "https://github.com/apache/bookkeeper.git",
-    "jiraKey": "BOOKKEEPER"
-  },
-  {
-    "owner": "apache",
     "name": "Avro",
     "percentage": 33,
     "repoUrl": "https://github.com/apache/avro.git",
     "jiraKey": "AVRO"
+  },
+  {
+    "owner": "apache",
+    "name": "ZooKeeper",
+    "percentage": 33,
+    "repoUrl": "https://github.com/apache/zookeeper.git",
+    "jiraKey": "ZOOKEEPER"
   }
 ]
 ```
@@ -86,7 +97,7 @@ If the exam changes the repository to analyze, you can skip the JSON file and la
 You can combine it with explicit granularity:
 
 ```powershell
-.\mvnw.cmd exec:java "-Dexec.args=--granularity=both --repo-url=https://github.com/apache/bookkeeper.git --jira-key=BOOKKEEPER --percentage=33"
+.\mvnw.cmd exec:java "-Dexec.args=--granularity=both --repo-url=https://github.com/apache/zookeeper.git --jira-key=ZOOKEEPER --percentage=33"
 ```
 
 Rules for ad-hoc mode:
@@ -132,6 +143,14 @@ The dataset includes smell-related features such as:
 
 `NSmells` is an explicit derived feature that combines PMD smell counts with the binary smell indicators exposed by the tool.
 
+The raw dataset now also carries release-local and cumulative history features, for example:
+
+- `Touches` and `TotalTouches`
+- `IssueTouches` and `TotalIssueTouches`
+- `Authors` and `TotalAuthors`
+- `AddedLines`, `DeletedLines`, `Churn` and `TotalChurn`
+- `AgeInReleases`
+
 ## Exam Artifacts
 
 After the raw CSV is written, MantiMetrics creates a sibling directory:
@@ -146,6 +165,7 @@ Inside that directory the tool generates:
 - `B.csv` and `B.arff`: same rows as `BPlus`, but smell-related actionable features forced to zero.
 - `C.csv` and `C.arff`: rows with no smells
 - `metadata.json`: summary of columns, actionable features and produced artifacts
+- `milestone1-audit.json`: audit of feature count, snoring coverage and historical labeling policy
 
 This matches the exam workflow for the what-if analysis:
 
@@ -183,6 +203,7 @@ For each configured project and chosen granularity, the final outputs are:
 - four flat CSV datasets for classification and what-if analysis
 - four ARFF datasets for WEKA
 - one metadata JSON file
+- one milestone audit JSON file
 
 If you run with `both`, the tool generates the full output set twice:
 
@@ -193,6 +214,9 @@ If you run with `both`, the tool generates the full output set twice:
 
 - The current pipeline is designed around GitHub plus JIRA because bug labels come from fixed JIRA tickets.
 - Release selection is percentage-based and uses chronological tag order, so the first `33%` really means the oldest release window requested by the exam.
+- The dataset is emitted for the oldest release window only, while the full available timeline is still used to label the past according to the simplified `Total` policy when Jira affected versions are incomplete.
 - The runtime is web-first and zero-disk for the analyzed repository: no persistent clone and no extracted release tree are written locally during analysis.
 - To keep GitHub pressure under control, API calls use pagination, retries and backoff, and `both` still reuses the same release extraction, PMD scan and commit history for class-level and method-level outputs.
-- Tests currently cover dataset formatting, granularity handling, release commit mapping, path normalization and derived artifact generation.
+- Tests currently cover dataset formatting, granularity handling, historical labeling, release commit mapping, path normalization and derived artifact generation.
+
+Architecture details and package roles are documented in [docs/milestone1-architecture.md](C:/Users/matte/IdeaProjects/MantiMetrics/docs/milestone1-architecture.md).

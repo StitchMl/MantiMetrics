@@ -1,5 +1,6 @@
 package com.mantimetrics.model;
 
+@SuppressWarnings("unused")
 public interface DatasetRow {
     String getUniqueKey();
     String getPath();

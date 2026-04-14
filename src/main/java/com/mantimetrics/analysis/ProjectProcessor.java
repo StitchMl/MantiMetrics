@@ -5,7 +5,11 @@ import com.mantimetrics.csv.CsvWriteException;
 import com.mantimetrics.dataset.DatasetArtifactService;
 import com.mantimetrics.git.GitService;
 import com.mantimetrics.git.ProjectConfig;
+import com.mantimetrics.history.RowHistoryStore;
 import com.mantimetrics.jira.JiraClientException;
+import com.mantimetrics.labeling.HistoricalBugLabelIndex;
+import com.mantimetrics.labeling.HistoricalBugLabelIndexBuilder;
+import com.mantimetrics.audit.MilestoneAuditService;
 import com.mantimetrics.pmd.PmdAnalyzer;
 import com.mantimetrics.release.ReleaseProcessingException;
 
@@ -19,6 +23,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Project-level orchestrator. It preloads the full release history once, builds the historical bug oracle,
+ * then writes one raw dataset per requested granularity.
+ */
 public final class ProjectProcessor {
     private final ProjectReleasePlanner releasePlanner;
     private final ReleaseExecutionService releaseExecutionService;
@@ -26,6 +34,7 @@ public final class ProjectProcessor {
     private final CSVWriter csvWriter;
     private final PmdAnalyzer pmdAnalyzer;
     private final DatasetArtifactService datasetArtifactService;
+    private final MilestoneAuditService milestoneAuditService;
 
     public ProjectProcessor(
             ProjectReleasePlanner releasePlanner,
@@ -33,7 +42,8 @@ public final class ProjectProcessor {
             GitService gitService,
             CSVWriter csvWriter,
             PmdAnalyzer pmdAnalyzer,
-            DatasetArtifactService datasetArtifactService
+            DatasetArtifactService datasetArtifactService,
+            MilestoneAuditService milestoneAuditService
     ) {
         this.releasePlanner = releasePlanner;
         this.releaseExecutionService = releaseExecutionService;
@@ -41,6 +51,7 @@ public final class ProjectProcessor {
         this.csvWriter = csvWriter;
         this.pmdAnalyzer = pmdAnalyzer;
         this.datasetArtifactService = datasetArtifactService;
+        this.milestoneAuditService = milestoneAuditService;
     }
 
     public void process(ProjectConfig config, List<Granularity> granularities)
@@ -50,25 +61,34 @@ public final class ProjectProcessor {
             return;
         }
 
+        List<ReleaseSnapshot> releaseHistory = buildReleaseHistory(plan);
+        HistoricalBugLabelIndex labelIndex = new HistoricalBugLabelIndexBuilder()
+                .build(plan.timeline(), plan.selectedTags(), plan.resolvedTickets(), releaseHistory);
         Map<Granularity, Path> csvPaths = new LinkedHashMap<>();
-        List<ProjectContext> contexts = openContexts(plan, granularities, csvPaths);
+        List<ProjectContext> contexts = openContexts(plan, granularities, csvPaths, labelIndex);
         try {
-            for (int index = 0; index < plan.selectedTags().size(); index++) {
-                String tag = plan.selectedTags().get(index);
-                String prevTag = index > 0 ? plan.selectedTags().get(index - 1) : null;
-                releaseExecutionService.processRelease(tag, prevTag, contexts);
+            for (ReleaseSnapshot snapshot : releaseHistory) {
+                if (!plan.selectedTags().contains(snapshot.tag())) {
+                    continue;
+                }
+                releaseExecutionService.processRelease(snapshot, contexts);
             }
         } finally {
             closeContexts(contexts);
         }
 
-        generateArtifacts(csvPaths);
+        generateArtifacts(csvPaths, plan, labelIndex);
     }
 
+    /**
+     * Opens one CSV writer and one independent history state per granularity so class-level and method-level
+     * analyses can coexist without sharing mutable state.
+     */
     private List<ProjectContext> openContexts(
             ProjectReleasePlan plan,
             List<Granularity> granularities,
-            Map<Granularity, Path> csvPaths
+            Map<Granularity, Path> csvPaths,
+            HistoricalBugLabelIndex labelIndex
     ) throws CsvWriteException {
         List<ProjectContext> contexts = new ArrayList<>();
         try {
@@ -80,11 +100,11 @@ public final class ProjectProcessor {
                         plan.owner(),
                         plan.repo(),
                         granularity,
-                        gitService,
                         pmdAnalyzer,
                         csvWriter,
                         new HashMap<>(),
-                        plan.bugKeys(),
+                        new RowHistoryStore(),
+                        labelIndex,
                         writer
                 ));
             }
@@ -99,10 +119,46 @@ public final class ProjectProcessor {
         }
     }
 
-    private void generateArtifacts(Map<Granularity, Path> csvPaths) {
+    /**
+     * Preloads the complete release history, including the releases excluded by snoring, because those future
+     * fix commits are still needed to label the older dataset rows.
+     */
+    private List<ReleaseSnapshot> buildReleaseHistory(ProjectReleasePlan plan) {
+        List<ReleaseSnapshot> history = new ArrayList<>();
+        List<String> timelineTags = plan.timeline().orderedTags();
+        for (int index = 0; index < timelineTags.size(); index++) {
+            String tag = timelineTags.get(index);
+            String previousTag = index > 0 ? timelineTags.get(index - 1) : null;
+            try {
+                history.add(new ReleaseSnapshot(
+                        tag,
+                        previousTag,
+                        gitService.buildReleaseCommitData(plan.owner(), plan.repo(), previousTag, tag)
+                ));
+            } catch (IOException exception) {
+                throw new ReleaseProcessingException("I/O error while preloading commit history for " + tag, exception);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new ReleaseProcessingException("Interrupted while preloading commit history for " + tag, exception);
+            }
+        }
+        return history;
+    }
+
+    private void generateArtifacts(
+            Map<Granularity, Path> csvPaths,
+            ProjectReleasePlan plan,
+            HistoricalBugLabelIndex labelIndex
+    ) {
         for (Path csvPath : csvPaths.values()) {
             try {
                 datasetArtifactService.generate(csvPath);
+                milestoneAuditService.write(
+                        csvPath,
+                        plan.timeline().size(),
+                        plan.selectedTags().size(),
+                        labelIndex.summary()
+                );
             } catch (IOException exception) {
                 throw new ReleaseProcessingException("I/O error when generating derived dataset artifacts", exception);
             }

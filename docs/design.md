@@ -13,7 +13,7 @@ The **MantiMetrics** project is structured in separate modules, each responsible
 3. **MetricsCalculator**
     - Calculate a set of metrics for each method:
         - **Basic metrics**: LOC, statement count, cyclomatic and cognitive complexity.
-        - **Halstead metrics**: n₁, n₂, N₁, N₂, vocabulary, length, volume, difficulty, effort.
+        - **Halstead's metrics**: n₁, n₂, N₁, N₂, vocabulary, length, volume, difficulty, effort.
         - **Nested depth**: maximum nesting depth.
         - **Code smells**: Simple detection of `Long method`, `Feature envy`, `God class`, `Duplicate code`.
 

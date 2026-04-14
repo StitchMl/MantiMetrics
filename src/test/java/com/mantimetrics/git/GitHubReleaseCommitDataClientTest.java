@@ -26,10 +26,10 @@ class GitHubReleaseCommitDataClientTest {
                 "https://api.github.com/repos/apache/demo/commits/sha-1?per_page=100&page=1",
                 """
                 {
-                  "commit":{"message":"PROJ-1 Fix parser regression"},
+                  "commit":{"message":"PROJ-1 Fix parser regression","author":{"name":"Alice"}},
                   "files":[
-                    {"filename":"src/main/java/com/acme/Sample.java"},
-                    {"filename":"README.md"}
+                    {"filename":"src/main/java/com/acme/Sample.java","additions":10,"deletions":2},
+                    {"filename":"README.md","additions":1,"deletions":0}
                   ]
                 }
                 """);
@@ -37,10 +37,10 @@ class GitHubReleaseCommitDataClientTest {
                 "https://api.github.com/repos/apache/demo/commits/sha-2?per_page=100&page=1",
                 """
                 {
-                  "commit":{"message":"Refactor parser internals"},
+                  "commit":{"message":"Refactor parser internals","author":{"name":"Bob"}},
                   "files":[
-                    {"filename":"src/main/java/com/acme/Sample.java"},
-                    {"filename":"src/main/java/com/acme/Extra.java"}
+                    {"filename":"src/main/java/com/acme/Sample.java","additions":4,"deletions":1},
+                    {"filename":"src/main/java/com/acme/Extra.java","additions":2,"deletions":2}
                   ]
                 }
                 """);
@@ -58,6 +58,9 @@ class GitHubReleaseCommitDataClientTest {
                 List.of("PROJ-1"),
                 data.fileToIssueKeys().get("src/main/java/com/acme/Sample.java"));
         assertFalse(data.fileToIssueKeys().containsKey("src/main/java/com/acme/Extra.java"));
+        assertEquals(List.of("Alice", "Bob"), data.authorMap().get("src/main/java/com/acme/Sample.java"));
+        assertEquals(14, data.additionsFor("src/main/java/com/acme/Sample.java"));
+        assertEquals(3, data.deletionsFor("src/main/java/com/acme/Sample.java"));
     }
 
     @Test
@@ -77,16 +80,16 @@ class GitHubReleaseCommitDataClientTest {
                 "https://api.github.com/repos/apache/demo/commits/sha-1?per_page=100&page=1",
                 """
                 {
-                  "commit":{"message":"PROJ-7 Initial parser fix"},
-                  "files":[{"filename":"src/main/java/com/acme/Sample.java"}]
+                  "commit":{"message":"PROJ-7 Initial parser fix","author":{"name":"Alice"}},
+                  "files":[{"filename":"src/main/java/com/acme/Sample.java","additions":7,"deletions":1}]
                 }
                 """);
         apiClient.when(
                 "https://api.github.com/repos/apache/demo/commits/sha-2?per_page=100&page=1",
                 """
                 {
-                  "commit":{"message":"Second change without bug key"},
-                  "files":[{"filename":"src/main/java/com/acme/Sample.java"}]
+                  "commit":{"message":"Second change without bug key","author":{"name":"Bob"}},
+                  "files":[{"filename":"src/main/java/com/acme/Sample.java","additions":5,"deletions":0}]
                 }
                 """);
 
@@ -99,5 +102,7 @@ class GitHubReleaseCommitDataClientTest {
         assertEquals(
                 List.of("PROJ-7"),
                 data.fileToIssueKeys().get("src/main/java/com/acme/Sample.java"));
+        assertEquals(List.of("Alice", "Bob"), data.authorMap().get("src/main/java/com/acme/Sample.java"));
+        assertEquals(12, data.additionsFor("src/main/java/com/acme/Sample.java"));
     }
 }

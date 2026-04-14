@@ -23,11 +23,11 @@ public final class TempDirectoryCleaner {
                     try {
                         Files.deleteIfExists(path);
                     } catch (Exception exception) {
-                        LOG.warn("Cannot delete {}: {}", path, exception.getMessage());
+                        LOG.warn("[INT] Cannot delete {}: {}", path, exception.getMessage());
                     }
                 });
             } catch (Exception exception) {
-                LOG.warn("Cannot delete {}: {}", directory, exception.getMessage());
+                LOG.warn("[EXT] Cannot delete {}: {}", directory, exception.getMessage());
             }
         }
     }

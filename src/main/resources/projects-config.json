@@ -1,16 +1,44 @@
 [
   {
     "owner": "apache",
-    "name": "BookKeeper",
-    "percentage": 33,
-    "repoUrl": "https://github.com/apache/bookkeeper.git",
-    "jiraKey": "BOOKKEEPER"
-  },
-  {
-    "owner": "apache",
     "name": "Avro",
     "percentage": 33,
     "repoUrl": "https://github.com/apache/avro.git",
     "jiraKey": "AVRO"
+  },
+  {
+    "owner": "apache",
+    "name": "OpenJPA",
+    "percentage": 33,
+    "repoUrl": "https://github.com/apache/openjpa.git",
+    "jiraKey": "OPENJPA"
+  },
+  {
+    "owner": "apache",
+    "name": "Storm",
+    "percentage": 33,
+    "repoUrl": "https://github.com/apache/storm.git",
+    "jiraKey": "STORM"
+  },
+  {
+    "owner": "apache",
+    "name": "ZooKeeper",
+    "percentage": 33,
+    "repoUrl": "https://github.com/apache/zookeeper.git",
+    "jiraKey": "ZOOKEEPER"
+  },
+  {
+    "owner": "apache",
+    "name": "Syncope",
+    "percentage": 33,
+    "repoUrl": "https://github.com/apache/syncope.git",
+    "jiraKey": "SYNCOPE"
+  },
+  {
+    "owner": "apache",
+    "name": "Tajo",
+    "percentage": 33,
+    "repoUrl": "https://github.com/apache/tajo.git",
+    "jiraKey": "TAJO"
   }
 ]

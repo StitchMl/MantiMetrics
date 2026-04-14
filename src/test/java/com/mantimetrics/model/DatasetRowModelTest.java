@@ -21,14 +21,24 @@ class DatasetRowModelTest {
                 .buggy(true)
                 .codeSmells(2)
                 .touches(3)
+                .totalTouches(5)
+                .issueTouches(1)
+                .totalIssueTouches(2)
+                .authors(1)
+                .totalAuthors(2)
+                .addedLines(10)
+                .deletedLines(4)
+                .churn(14)
+                .totalChurn(20)
                 .prevCodeSmells(1)
+                .ageInReleases(2)
                 .prevBuggy(false)
                 .startLine(10)
                 .endLine(20)
                 .build();
 
         assertEquals(
-                "repo,/src/main/java/com/acme/Foo.java/,\"void run(String value)\",v1,10,4,3,2,5,6,7,8,9.0,10.0,11.0,12.0,13.0,2,1,0,1,0,2,4,3,1,no,yes",
+                "repo,/src/main/java/com/acme/Foo.java/,\"void run(String value)\",v1,10,4,3,2,5,6,7,8,9.0,10.0,11.0,12.0,13.0,2,1,0,1,0,2,4,3,5,1,2,1,2,10,4,14,20,1,2,no,yes",
                 method.toCsvLine());
     }
 
@@ -44,14 +54,24 @@ class DatasetRowModelTest {
                 .buggy(false)
                 .codeSmells(4)
                 .touches(5)
+                .totalTouches(8)
+                .issueTouches(2)
+                .totalIssueTouches(3)
+                .authors(1)
+                .totalAuthors(2)
+                .addedLines(9)
+                .deletedLines(1)
+                .churn(10)
+                .totalChurn(15)
                 .prevCodeSmells(2)
+                .ageInReleases(3)
                 .prevBuggy(true)
                 .startLine(1)
                 .endLine(30)
                 .build();
 
         assertEquals(
-                "repo,/src/main/java/com/acme/Foo.java/,\"com.acme.Foo\",v1,10,4,3,2,5,6,7,8,9.0,10.0,11.0,12.0,13.0,2,1,0,1,0,4,6,5,2,yes,no",
+                "repo,/src/main/java/com/acme/Foo.java/,\"com.acme.Foo\",v1,10,4,3,2,5,6,7,8,9.0,10.0,11.0,12.0,13.0,2,1,0,1,0,4,6,5,8,2,3,1,2,9,1,10,15,2,3,yes,no",
                 type.toCsvLine());
     }
 
@@ -67,7 +87,17 @@ class DatasetRowModelTest {
                 .buggy(true)
                 .codeSmells(1)
                 .touches(2)
+                .totalTouches(4)
+                .issueTouches(1)
+                .totalIssueTouches(1)
+                .authors(1)
+                .totalAuthors(1)
+                .addedLines(3)
+                .deletedLines(2)
+                .churn(5)
+                .totalChurn(5)
                 .prevCodeSmells(3)
+                .ageInReleases(1)
                 .prevBuggy(true)
                 .startLine(4)
                 .endLine(8)

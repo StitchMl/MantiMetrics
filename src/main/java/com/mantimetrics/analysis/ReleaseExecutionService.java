@@ -2,7 +2,6 @@ package com.mantimetrics.analysis;
 
 import com.mantimetrics.clone.CloneDetector;
 import com.mantimetrics.csv.CsvWriteException;
-import com.mantimetrics.git.ReleaseCommitData;
 import com.mantimetrics.model.DatasetRow;
 import com.mantimetrics.parser.CodeParser;
 import com.mantimetrics.parser.CodeParserException;
@@ -11,16 +10,17 @@ import com.mantimetrics.release.ReleaseProcessingException;
 import net.sourceforge.pmd.reporting.Report;
 import net.sourceforge.pmd.reporting.RuleViolation;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Executes the expensive work for a single release: source download, PMD scan and dataset row generation.
+ */
 public final class ReleaseExecutionService {
     private static final Logger LOG = LoggerFactory.getLogger(ReleaseExecutionService.class);
 
@@ -32,39 +32,36 @@ public final class ReleaseExecutionService {
         this.datasetCollector = datasetCollector;
     }
 
-    void processRelease(@NotNull String tag, @Nullable String prevTag, @NotNull List<ProjectContext> contexts) {
+    /**
+     * Processes one release snapshot. The snapshot already carries commit history so the expensive GitHub
+     * history walk is not repeated for each dataset granularity.
+     */
+    void processRelease(@NotNull ReleaseSnapshot snapshot, @NotNull List<ProjectContext> contexts) {
         if (contexts.isEmpty()) {
             return;
         }
 
         ProjectContext baseContext = contexts.get(0);
+        String tag = snapshot.tag();
+        String prevTag = snapshot.previousTag();
         LOG.info("Processing {}@{} (prev={}) [{}]", baseContext.repo(), tag, prevTag,
                 contexts.stream().map(ProjectContext::granularity).toList());
 
         try {
-            ReleaseCommitData commitData = baseContext.git().buildReleaseCommitData(
-                    baseContext.owner(), baseContext.repo(), prevTag, tag);
-            LOG.info("{}@{} - {} files touched", baseContext.repo(), tag, commitData.touchMap().size());
+            LOG.info("{}@{} - {} files touched", baseContext.repo(), tag, snapshot.commitData().touchMap().size());
             LOG.info("{}@{} - {} files linked to bug-fix issue keys in range",
-                    baseContext.repo(), tag, commitData.fileToIssueKeys().size());
-
-            Set<String> touchedFiles = commitData.touchMap().keySet();
-            if (touchedFiles.isEmpty()) {
-                LOG.info("{}@{} - no touched Java sources in release range, skipping analysis", baseContext.repo(), tag);
-                return;
-            }
+                    baseContext.repo(), tag, snapshot.commitData().fileToIssueKeys().size());
 
             SourceScanResult releaseSources = codeParser.loadReleaseSources(baseContext.owner(), baseContext.repo(), tag);
             String cloneCacheKey = CloneDetector.prepareCloneMap(releaseSources);
-            SourceScanResult analyzedSources = releaseSources.filterTo(touchedFiles);
-            Report report = baseContext.pmd().analyze(analyzedSources);
+            Report report = baseContext.pmd().analyze(releaseSources);
             List<RuleViolation> violations = report.getViolations();
             if (violations.isEmpty()) {
-                LOG.warn("{}@{} - no PMD violation found on touched sources",
+                LOG.warn("{}@{} - no PMD violation found on release sources",
                         baseContext.repo(), tag);
             }
 
-            PreparedRelease prepared = new PreparedRelease(analyzedSources, cloneCacheKey, violations, commitData);
+            PreparedRelease prepared = new PreparedRelease(releaseSources, cloneCacheKey, violations, snapshot.commitData());
             try {
                 for (ProjectContext context : contexts) {
                     processPreparedRelease(tag, context, prepared);
@@ -74,26 +71,31 @@ public final class ReleaseExecutionService {
             }
         } catch (CodeParserException exception) {
             LOG.error("{}@{} - release skipped: {}", baseContext.repo(), tag, exception.getMessage());
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new ReleaseProcessingException("Thread interrupted during release processing " + tag, exception);
         } catch (IOException exception) {
             throw new ReleaseProcessingException("I/O error during release processing " + tag, exception);
         }
     }
 
+    /**
+     * Delegates row collection to the correct granularity-specific collector while reusing the same prepared release.
+     */
     private void processPreparedRelease(String tag, ProjectContext context, PreparedRelease prepared) {
         LOG.info("Processing {}@{} [{}]", context.repo(), tag, context.granularity());
         try {
+            ReleaseDatasetRequest request = new ReleaseDatasetRequest(
+                    prepared.releaseSources(),
+                    context.repo(),
+                    tag,
+                    prepared.cloneCacheKey(),
+                    prepared.commitData(),
+                    context.prevData(),
+                    context.historyStore(),
+                    prepared.violations(),
+                    context.labelIndex()
+            );
             List<? extends DatasetRow> rows = context.granularity() == Granularity.CLASS
-                    ? datasetCollector.collectClassRows(prepared.analyzedSources(), prepared.analyzedSources(), context.repo(), tag,
-                    prepared.cloneCacheKey(),
-                    prepared.commitData().touchMap(), prepared.commitData().fileToIssueKeys(),
-                    context.prevData(), prepared.violations(), context.bugKeys())
-                    : datasetCollector.collectMethodRows(prepared.analyzedSources(), prepared.analyzedSources(), context.repo(), tag,
-                    prepared.cloneCacheKey(),
-                    prepared.commitData().touchMap(), prepared.commitData().fileToIssueKeys(),
-                    context.prevData(), prepared.violations(), context.bugKeys());
+                    ? datasetCollector.collectClassRows(request)
+                    : datasetCollector.collectMethodRows(request);
 
             LOG.info("{}@{} - finalRows={} (violationsThisRelease={})",
                     context.repo(), tag, rows.size(), prepared.violations().size());
@@ -104,7 +106,7 @@ public final class ReleaseExecutionService {
             long buggyCount = rows.stream().filter(DatasetRow::isBuggy).count();
             LOG.info("{}@{} - saved {} rows ({} buggy)", context.repo(), tag, rows.size(), buggyCount);
         } catch (CsvWriteException exception) {
-            LOG.error("{}@{} - release skipped: {}", context.repo(), tag, exception.getMessage());
+            LOG.error("[Prepared] {}@{} - release skipped: {}", context.repo(), tag, exception.getMessage());
         }
     }
 
@@ -119,10 +121,10 @@ public final class ReleaseExecutionService {
     }
 
     private record PreparedRelease(
-            SourceScanResult analyzedSources,
+            SourceScanResult releaseSources,
             String cloneCacheKey,
             List<RuleViolation> violations,
-            ReleaseCommitData commitData
+            com.mantimetrics.git.ReleaseCommitData commitData
     ) {
     }
 }

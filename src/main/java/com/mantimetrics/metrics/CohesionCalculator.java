@@ -55,26 +55,24 @@ public final class CohesionCalculator {
         return components.size();
     }
 
-    private static final class DisjointSet {
-        private final int[] parent;
-
-        private DisjointSet(int size) {
-            this.parent = IntStream.range(0, size).toArray();
-        }
-
-        private int find(int index) {
-            if (parent[index] != index) {
-                parent[index] = find(parent[index]);
+    private record DisjointSet(int[] parent) {
+            private DisjointSet(int parent) {
+                this(IntStream.range(0, parent).toArray());
             }
-            return parent[index];
-        }
 
-        private void union(int left, int right) {
-            int parentLeft = find(left);
-            int parentRight = find(right);
-            if (parentLeft != parentRight) {
-                parent[parentRight] = parentLeft;
+            private int find(int index) {
+                if (parent[index] != index) {
+                    parent[index] = find(parent[index]);
+                }
+                return parent[index];
+            }
+
+            private void union(int left, int right) {
+                int parentLeft = find(left);
+                int parentRight = find(right);
+                if (parentLeft != parentRight) {
+                    parent[parentRight] = parentLeft;
+                }
             }
         }
-    }
 }

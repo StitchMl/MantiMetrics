@@ -41,11 +41,13 @@ final class GitHubCommitDetailsClient {
         String template = API + owner + "/" + repo + "/commits/" + encodedSha + "?per_page=100&page=%d";
 
         String message = null;
-        Set<String> files = new LinkedHashSet<>();
+        String author = "";
+        Set<ReleaseCommitDataBuilder.ReleaseCommitFile> files = new LinkedHashSet<>();
         for (int page = 1; ; page++) {
             JsonNode response = apiClient.getApi(String.format(template, page));
             if (message == null) {
                 message = response.path("commit").path("message").asText("");
+                author = response.path("commit").path("author").path("name").asText("");
             }
 
             JsonNode fileNodes = response.path("files");
@@ -58,14 +60,23 @@ final class GitHubCommitDetailsClient {
             }
         }
 
-        return new ReleaseCommitDataBuilder.ReleaseCommitSnapshot(sha, message == null ? "" : message, files);
+        return new ReleaseCommitDataBuilder.ReleaseCommitSnapshot(
+                sha,
+                message == null ? "" : message,
+                author,
+                files
+        );
     }
 
-    private static void addFilename(JsonNode fileNode, Set<String> files) {
+    private static void addFilename(JsonNode fileNode, Set<ReleaseCommitDataBuilder.ReleaseCommitFile> files) {
         String filename = fileNode.path("filename").asText(null);
         if (filename == null || filename.isBlank()) {
             throw new UncheckedIOException(new IOException("Missing filename in GitHub commit response"));
         }
-        files.add(filename);
+        files.add(new ReleaseCommitDataBuilder.ReleaseCommitFile(
+                filename,
+                fileNode.path("additions").asInt(0),
+                fileNode.path("deletions").asInt(0)
+        ));
     }
 }

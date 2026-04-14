@@ -5,6 +5,7 @@ import com.mantimetrics.analysis.ProjectReleasePlanner;
 import com.mantimetrics.analysis.ReleaseDatasetCollector;
 import com.mantimetrics.analysis.ReleaseExecutionService;
 import com.mantimetrics.MainApp;
+import com.mantimetrics.audit.MilestoneAuditService;
 import com.mantimetrics.cli.CliOptions;
 import com.mantimetrics.cli.ProjectSelectionPrompt;
 import com.mantimetrics.config.GitHubTokenLoader;
@@ -27,6 +28,11 @@ import com.mantimetrics.util.TempDirectoryCleaner;
 
 import java.io.IOException;
 
+/**
+ * Application composition root. It wires the concrete services once and then delegates the actual work
+ * to the release-processing pipeline.
+ */
+@SuppressWarnings("GrazieInspectionRunner")
 public final class ApplicationBootstrap {
     private final GitHubTokenLoader gitHubTokenLoader = new GitHubTokenLoader();
     private final ProjectSelectionPrompt projectSelectionPrompt = new ProjectSelectionPrompt(System.in, System.out);
@@ -44,6 +50,9 @@ public final class ApplicationBootstrap {
         }
     }
 
+    /**
+     * Builds the concrete processing pipeline while keeping each service narrowly focused.
+     */
     private ProjectProcessor createProcessor(GitService gitService) {
         JiraClient jiraClient = new JiraClient();
         CodeParser codeParser = new CodeParser(gitService);
@@ -51,7 +60,7 @@ public final class ApplicationBootstrap {
         return new ProjectProcessor(
                 new ProjectReleasePlanner(gitService, new ReleaseSelector(), jiraClient),
                 new ReleaseExecutionService(codeParser,
-                        new ReleaseDatasetCollector(codeParser, new MetricsCalculator(), jiraClient)),
+                        new ReleaseDatasetCollector(codeParser, new MetricsCalculator())),
                 gitService,
                 new CSVWriter(),
                 new PmdAnalyzer(),
@@ -61,10 +70,15 @@ public final class ApplicationBootstrap {
                         new DatasetArffWriter(),
                         new DatasetMetadataWriter(),
                         new WhatIfDatasetBuilder()
-                )
+                ),
+                new MilestoneAuditService(new DatasetCsvTableReader())
         );
     }
 
+    /**
+     * Resolves the project to analyze either from the CLI or from the interactive prompt.
+     */
+    @SuppressWarnings("GrazieInspectionRunner")
     private ProjectConfig[] resolveProjectConfigs(CliOptions cliOptions) throws Exception {
         if (cliOptions.hasCliProject()) {
             return new ProjectConfig[] { cliOptions.cliProject() };

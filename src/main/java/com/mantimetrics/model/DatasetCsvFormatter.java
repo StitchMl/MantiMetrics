@@ -35,7 +35,17 @@ final class DatasetCsvFormatter {
                 .add(String.valueOf(data.codeSmells()))
                 .add(String.valueOf(data.nSmells()))
                 .add(String.valueOf(data.touches()))
+                .add(String.valueOf(data.totalTouches()))
+                .add(String.valueOf(data.issueTouches()))
+                .add(String.valueOf(data.totalIssueTouches()))
+                .add(String.valueOf(data.authors()))
+                .add(String.valueOf(data.totalAuthors()))
+                .add(String.valueOf(data.addedLines()))
+                .add(String.valueOf(data.deletedLines()))
+                .add(String.valueOf(data.churn()))
+                .add(String.valueOf(data.totalChurn()))
                 .add(String.valueOf(data.prevCodeSmells()))
+                .add(String.valueOf(data.ageInReleases()))
                 .add(yesNo(data.prevBuggy()))
                 .add(yesNo(data.buggy()));
         return joiner.toString();

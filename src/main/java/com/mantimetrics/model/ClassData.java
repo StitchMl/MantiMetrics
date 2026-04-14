@@ -25,8 +25,18 @@ public final class ClassData implements DatasetRow {
     @Override public int getCodeSmells() { return data.codeSmells(); }
     @Override public int getNSmells() { return data.nSmells(); }
     public int getTouches() { return data.touches(); }
+    public int getTotalTouches() { return data.totalTouches(); }
+    public int getIssueTouches() { return data.issueTouches(); }
+    public int getTotalIssueTouches() { return data.totalIssueTouches(); }
+    public int getAuthors() { return data.authors(); }
+    public int getTotalAuthors() { return data.totalAuthors(); }
+    public int getAddedLines() { return data.addedLines(); }
+    public int getDeletedLines() { return data.deletedLines(); }
+    public int getChurn() { return data.churn(); }
+    public int getTotalChurn() { return data.totalChurn(); }
     public int getPrevCodeSmells() { return data.prevCodeSmells(); }
     public boolean isPrevBuggy() { return data.prevBuggy(); }
+    public int getAgeInReleases() { return data.ageInReleases(); }
     @Override public int getStartLine() { return data.startLine(); }
     @Override public int getEndLine() { return data.endLine(); }
     @Override public String getUniqueKey() { return data.path() + "#" + className; }
