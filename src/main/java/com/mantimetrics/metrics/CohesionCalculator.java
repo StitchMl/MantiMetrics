@@ -55,11 +55,9 @@ public final class CohesionCalculator {
  return components.size();
  }
 
- private static final class DisjointSet {
- private final int[] parent;
-
- private DisjointSet(int size) {
- this.parent = IntStream.range(0, size).toArray();
+ private record DisjointSet(int[] parent) {
+ private DisjointSet(int parent) {
+ this(IntStream.range(0, parent).toArray());
  }
 
  private int find(int index) {
