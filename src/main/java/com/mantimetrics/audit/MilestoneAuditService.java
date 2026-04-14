@@ -6,6 +6,7 @@ import com.mantimetrics.dataset.DatasetColumns;
 import com.mantimetrics.dataset.DatasetCsvTableReader;
 import com.mantimetrics.dataset.DatasetTable;
 import com.mantimetrics.labeling.HistoricalBugLabelIndex;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -52,13 +53,7 @@ public final class MilestoneAuditService {
         snoring.put("policy", "Rows are emitted only for the oldest release window; the full timeline is still used for labels.");
         audit.put("snoring", snoring);
 
-        Map<String, Object> labeling = new LinkedHashMap<>();
-        labeling.put("strategy", labelingSummary.strategy());
-        labeling.put("totalResolvedTickets", labelingSummary.totalResolvedTickets());
-        labeling.put("ticketsWithFixCommit", labelingSummary.ticketsWithFixCommit());
-        labeling.put("ticketsUsingAffectedVersions", labelingSummary.ticketsUsingAffectedVersions());
-        labeling.put("ticketsUsingTotalFallback", labelingSummary.ticketsUsingTotalFallback());
-        labeling.put("notes", labelingSummary.notes());
+        Map<String, Object> labeling = getStringObjectMap(labelingSummary);
         audit.put("labeling", labeling);
 
         audit.put("kappaNote",
@@ -66,6 +61,18 @@ public final class MilestoneAuditService {
 
         Path outputPath = resolveAuditPath(rawCsvPath);
         JSON.writeValue(outputPath.toFile(), audit);
+    }
+
+    @NotNull
+    private static Map<String, Object> getStringObjectMap(HistoricalBugLabelIndex.Summary labelingSummary) {
+        Map<String, Object> labeling = new LinkedHashMap<>();
+        labeling.put("strategy", labelingSummary.strategy());
+        labeling.put("totalResolvedTickets", labelingSummary.totalResolvedTickets());
+        labeling.put("ticketsWithFixCommit", labelingSummary.ticketsWithFixCommit());
+        labeling.put("ticketsUsingAffectedVersions", labelingSummary.ticketsUsingAffectedVersions());
+        labeling.put("ticketsUsingTotalFallback", labelingSummary.ticketsUsingTotalFallback());
+        labeling.put("notes", labelingSummary.notes());
+        return labeling;
     }
 
     private Path resolveAuditPath(Path rawCsvPath) {

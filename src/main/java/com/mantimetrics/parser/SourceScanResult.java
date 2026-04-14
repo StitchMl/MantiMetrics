@@ -8,6 +8,7 @@ public record SourceScanResult(
         long totalJavaFiles,
         List<ParsedSourceFile> includedFiles
 ) {
+    @SuppressWarnings("unused")
     public SourceScanResult filterTo(Set<String> relativePaths) {
         List<ParsedSourceFile> filtered = includedFiles.stream()
                 .filter(source -> relativePaths.contains(source.relativePath()))
