@@ -16,6 +16,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+/**
+ * Scans a source tree and keeps only the production Java files eligible for analysis.
+ */
 final class JavaSourceScanner {
     private static final Logger LOG = LoggerFactory.getLogger(JavaSourceScanner.class);
     private static final long MAX_FILE_BYTES = 8L * 1024 * 1024;
@@ -38,6 +41,13 @@ final class JavaSourceScanner {
     private final PathMatcher genProto = FileSystems.getDefault()
             .getPathMatcher("glob:**/{gen-src,generated-sources,grpc}/**");
 
+    /**
+     * Scans the source tree, filters unsupported files and returns the parsed source-file descriptors.
+     *
+     * @param root root directory to scan
+     * @param fileToKeys Jira issue keys grouped by relative path
+     * @return scan result containing the eligible files
+     */
     SourceScanResult scan(Path root, Map<String, List<String>> fileToKeys) {
         long totalFiles = countJavaFiles(root);
         List<ParsedSourceFile> includedFiles = new ArrayList<>();
@@ -57,6 +67,12 @@ final class JavaSourceScanner {
                 List.copyOf(includedFiles));
     }
 
+    /**
+     * Counts all Java files under the root directory before applying eligibility filters.
+     *
+     * @param root root directory to inspect
+     * @return total Java file count, or {@code -1} when the tree cannot be traversed
+     */
     private long countJavaFiles(Path root) {
         try (Stream<Path> files = Files.walk(root)) {
             return files.filter(Files::isRegularFile)
@@ -67,6 +83,12 @@ final class JavaSourceScanner {
         }
     }
 
+    /**
+     * Reports whether a file is an eligible production Java source.
+     *
+     * @param path file path to inspect
+     * @return {@code true} when the file should be analyzed
+     */
     private boolean isEligibleJavaFile(Path path) {
         return path.toString().endsWith(JAVA_EXT)
                 && !testDirMatcher.matches(path)
@@ -79,6 +101,14 @@ final class JavaSourceScanner {
                 && !genProto.matches(path);
     }
 
+    /**
+     * Builds the parsed-source descriptor for an eligible file.
+     *
+     * @param root source root directory
+     * @param path file path to load
+     * @param fileToKeys Jira issue keys grouped by relative path
+     * @return parsed source file, or an empty optional when the file cannot be read
+     */
     private Optional<ParsedSourceFile> buildParsedSourceFile(
             Path root,
             Path path,

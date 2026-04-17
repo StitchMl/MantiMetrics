@@ -2,12 +2,25 @@ package com.mantimetrics.model;
 
 import java.util.StringJoiner;
 
+/**
+ * Serializes dataset rows into CSV lines matching the exported dataset header.
+ */
 final class DatasetCsvFormatter {
 
+    /**
+     * Prevents instantiation of the static utility class.
+     */
     private DatasetCsvFormatter() {
         throw new AssertionError("Do not instantiate DatasetCsvFormatter");
     }
 
+    /**
+     * Formats the shared dataset payload plus the entity name into one CSV line.
+     *
+     * @param data shared dataset payload
+     * @param entityName class or method name to serialize
+     * @return CSV line matching the exported header
+     */
     static String format(MetricDatasetRowData data, String entityName) {
         StringJoiner joiner = new StringJoiner(",");
         joiner.add(data.projectName())
@@ -51,14 +64,32 @@ final class DatasetCsvFormatter {
         return joiner.toString();
     }
 
+    /**
+     * Quotes a CSV field escaping embedded double quotes.
+     *
+     * @param value raw field value
+     * @return quoted CSV field
+     */
     private static String quote(String value) {
         return '"' + value.replace("\"", "\"\"") + '"';
     }
 
+    /**
+     * Encodes a boolean smell flag as {@code 1} or {@code 0}.
+     *
+     * @param value boolean value to encode
+     * @return numeric binary flag
+     */
     private static String binaryFlag(boolean value) {
         return value ? "1" : "0";
     }
 
+    /**
+     * Encodes a boolean label as {@code yes} or {@code no}.
+     *
+     * @param value boolean value to encode
+     * @return yes/no representation
+     */
     private static String yesNo(boolean value) {
         return value ? "yes" : "no";
     }

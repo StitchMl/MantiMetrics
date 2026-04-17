@@ -12,11 +12,17 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Tests for {@link DatasetArtifactService}.
+ */
 class DatasetArtifactServiceTest {
 
     @TempDir
     Path tempDir;
 
+    /**
+     * Verifies that the service generates the full set of exam-friendly dataset artifacts from the raw CSV.
+     */
     @Test
     void generatesExamFriendlyArtifactsFromRawDataset() throws IOException {
         Path rawCsv = tempDir.resolve("repo_dataset_method.csv");
@@ -69,6 +75,11 @@ class DatasetArtifactServiceTest {
         assertTrue(metadataContent.contains("\"BPlus\""));
     }
 
+    /**
+     * Returns a representative raw dataset CSV payload used by the artifact-generation test.
+     *
+     * @return raw dataset CSV content
+     */
     private String rawDatasetContent() {
         return String.join(System.lineSeparator(),
                 "Project,Path,Method,ReleaseId,LOC,StmtCount,Cyclomatic,Cognitive,DistinctOperators,DistinctOperands,TotalOperators,TotalOperands,Vocabulary,Length,Volume,Difficulty,Effort,MaxNestingDepth,isLongMethod,isGodClass,isFeatureEnvy,isDuplicatedCode,CodeSmells,NSmells,Touches,TotalTouches,IssueTouches,TotalIssueTouches,Authors,TotalAuthors,AddedLines,DeletedLines,Churn,TotalChurn,prevCodeSmells,AgeInReleases,prevBuggy,Buggy",

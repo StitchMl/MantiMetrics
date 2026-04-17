@@ -13,16 +13,31 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Reads Jira project data such as bug keys, versions and resolved bug tickets.
+ */
 final class JiraProjectReader {
     private static final Logger LOG = LoggerFactory.getLogger(JiraProjectReader.class);
     private static final int PAGE_SIZE = 100;
 
     private final JiraJsonClient jsonClient;
 
+    /**
+     * Creates a project reader backed by the shared Jira JSON client.
+     *
+     * @param jsonClient Jira JSON client used for REST calls
+     */
     JiraProjectReader(JiraJsonClient jsonClient) {
         this.jsonClient = jsonClient;
     }
 
+    /**
+     * Fetches all bug issue keys matching the configured Jira search.
+     *
+     * @param session initialized Jira project session
+     * @return bug keys returned by Jira
+     * @throws JiraClientException when Jira cannot be queried
+     */
     List<String> fetchBugKeys(JiraProjectSession session) throws JiraClientException {
         Set<String> keys = new HashSet<>();
         int startAt = 0;
@@ -52,6 +67,14 @@ final class JiraProjectReader {
         return new ArrayList<>(keys);
     }
 
+    /**
+     * Fetches the normalized version names defined for a Jira project.
+     *
+     * @param session initialized Jira project session
+     * @param projectKey Jira project key
+     * @return normalized Jira version names
+     * @throws JiraClientException when Jira cannot be queried
+     */
     List<String> fetchProjectVersions(JiraProjectSession session, String projectKey) throws JiraClientException {
         try {
             URI uri = new URIBuilder(session.baseUrl() + "/rest/api/2/project/" + projectKey + "/versions").build();
@@ -77,6 +100,13 @@ final class JiraProjectReader {
         }
     }
 
+    /**
+     * Fetches the resolved bug tickets used by the historical labeling flow.
+     *
+     * @param session initialized Jira project session
+     * @return resolved Jira bug tickets
+     * @throws JiraClientException when Jira cannot be queried
+     */
     List<JiraBugTicket> fetchResolvedBugTickets(JiraProjectSession session) throws JiraClientException {
         List<JiraBugTicket> tickets = new ArrayList<>();
         int startAt = 0;
@@ -106,6 +136,12 @@ final class JiraProjectReader {
         return List.copyOf(tickets);
     }
 
+    /**
+     * Extracts issue keys from a Jira search result page.
+     *
+     * @param issues Jira issues array
+     * @param keys target set receiving the keys
+     */
     private void collectIssueKeys(JsonNode issues, Set<String> keys) {
         for (JsonNode issue : issues) {
             String key = issue.path("key").asText(null);
@@ -115,6 +151,12 @@ final class JiraProjectReader {
         }
     }
 
+    /**
+     * Extracts the minimal bug-ticket information needed by the labeling flow.
+     *
+     * @param issues Jira issues array
+     * @param tickets target list receiving the extracted bug tickets
+     */
     private void collectTickets(JsonNode issues, List<JiraBugTicket> tickets) {
         for (JsonNode issue : issues) {
             String key = issue.path("key").asText(null);

@@ -16,12 +16,27 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.lang.Math.log;
 
+/**
+ * Computes Halstead metrics from JavaParser AST nodes.
+ */
 public final class HalsteadCalculator {
 
+    /**
+     * Computes Halstead metrics for a single AST root.
+     *
+     * @param root AST root to analyze
+     * @return Halstead metrics
+     */
     public HalsteadMetrics compute(Node root) {
         return compute(List.of(root));
     }
 
+    /**
+     * Computes Halstead metrics for multiple AST roots treated as one aggregate entity.
+     *
+     * @param roots AST roots to analyze
+     * @return Halstead metrics
+     */
     public HalsteadMetrics compute(Collection<? extends Node> roots) {
         Set<String> distinctOps = new HashSet<>();
         Set<String> distinctOperands = new HashSet<>();

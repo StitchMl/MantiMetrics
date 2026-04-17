@@ -5,8 +5,14 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Tests for {@link ZipExtractionUtils}.
+ */
 class ZipExtractionUtilsTest {
 
+    /**
+     * Verifies that only production Java sources are kept when filtering ZIP entries.
+     */
     @Test
     void materializesOnlyProductionJavaSources() {
         assertTrue(ZipExtractionUtils.shouldMaterialize("repo/src/main/java/com/acme/App.java", false));

@@ -7,8 +7,14 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+/**
+ * Tests for {@link GitHubReleaseCommitDataClient}.
+ */
 class GitHubReleaseCommitDataClientTest {
 
+    /**
+     * Verifies that paginated compare responses and commit details are merged into one release aggregate.
+     */
     @Test
     void buildsReleaseCommitDataFromPaginatedCompareAndCommitDetails() throws Exception {
         TestGitApiClient apiClient = new TestGitApiClient();
@@ -63,6 +69,9 @@ class GitHubReleaseCommitDataClientTest {
         assertEquals(3, data.deletionsFor("src/main/java/com/acme/Sample.java"));
     }
 
+    /**
+     * Verifies that the first release is built from commit history when no previous tag exists.
+     */
     @Test
     void buildsFirstReleaseDataFromCommitHistoryWithoutPreviousTag() throws Exception {
         TestGitApiClient apiClient = new TestGitApiClient();

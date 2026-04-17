@@ -8,8 +8,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
+/**
+ * Writes dataset tables in CSV format.
+ */
 public final class DatasetTableWriter {
 
+    /**
+     * Writes a dataset table to a CSV file.
+     *
+     * @param outputPath target CSV path
+     * @param table dataset table to serialize
+     * @throws IOException when the output file cannot be written
+     */
     public void write(Path outputPath, DatasetTable table) throws IOException {
         Files.createDirectories(outputPath.getParent());
         try (ICSVWriter writer = new com.opencsv.CSVWriter(Files.newBufferedWriter(

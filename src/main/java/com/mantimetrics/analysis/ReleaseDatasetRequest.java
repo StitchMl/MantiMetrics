@@ -12,6 +12,16 @@ import java.util.Map;
 
 /**
  * Narrow request object passed to the dataset collector so the release pipeline stays explicit and testable.
+ *
+ * @param releaseSources extracted source tree for the release
+ * @param repo repository name
+ * @param tag release tag currently being analyzed
+ * @param cloneCacheKey key of the clone map prepared for the release
+ * @param commitData commit and churn information for the current release range
+ * @param previousRows previous dataset rows for the same granularity, keyed by unique identifier
+ * @param historyStore cumulative history state for the same granularity
+ * @param violations PMD rule violations found in the release
+ * @param labelIndex historical bug labels used to mark buggy rows
  */
 public record ReleaseDatasetRequest(
         SourceScanResult releaseSources,

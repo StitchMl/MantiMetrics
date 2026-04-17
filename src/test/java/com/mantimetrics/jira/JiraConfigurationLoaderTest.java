@@ -9,11 +9,17 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+/**
+ * Tests for {@link JiraConfigurationLoader}.
+ */
 class JiraConfigurationLoaderTest {
 
     @TempDir
     Path tempDir;
 
+    /**
+     * Verifies that the Jira PAT can be loaded from the local override file.
+     */
     @Test
     void loadsPatFromIgnoredLocalOverrideFile() throws Exception {
         Path overrideFile = tempDir.resolve("jira.local.properties");
@@ -34,6 +40,12 @@ class JiraConfigurationLoaderTest {
         }
     }
 
+    /**
+     * Restores a system property to its previous value after a test.
+     *
+     * @param key property name
+     * @param value previous property value, or {@code null} to clear it
+     */
     private void restoreProperty(String key, String value) {
         if (value == null) {
             System.clearProperty(key);

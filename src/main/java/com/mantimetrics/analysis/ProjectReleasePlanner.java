@@ -25,12 +25,26 @@ public final class ProjectReleasePlanner {
     private final ReleaseSelector releaseSelector;
     private final JiraClient jiraClient;
 
+    /**
+     * Creates a planner with the collaborators required to reconcile Git releases and Jira metadata.
+     *
+     * @param gitService Git service used to list and sort repository tags
+     * @param releaseSelector component that applies the release percentage policy
+     * @param jiraClient Jira client used to fetch versions and resolved tickets
+     */
     public ProjectReleasePlanner(GitService gitService, ReleaseSelector releaseSelector, JiraClient jiraClient) {
         this.gitService = gitService;
         this.releaseSelector = releaseSelector;
         this.jiraClient = jiraClient;
     }
 
+    /**
+     * Builds the release plan for a configured project.
+     *
+     * @param config project configuration resolved from properties or CLI options
+     * @return release plan, or {@code null} when the project has no valid releases in common between Git and Jira
+     * @throws JiraClientException when Jira metadata cannot be loaded
+     */
     @Nullable
     ProjectReleasePlan plan(ProjectConfig config) throws JiraClientException {
         String owner = config.owner();
@@ -53,6 +67,15 @@ public final class ProjectReleasePlanner {
         return new ProjectReleasePlan(owner, repo, new ReleaseTimeline(chronologicalTags), selectedTags, resolvedTickets);
     }
 
+    /**
+     * Resolves the Git tags that also exist as Jira versions and orders them chronologically.
+     *
+     * @param config project configuration containing the Jira project key
+     * @param owner repository owner
+     * @param repo repository name
+     * @return chronological list of valid tags, or {@code null} when no overlap exists
+     * @throws JiraClientException when Jira versions cannot be fetched
+     */
     @Nullable
     private List<String> resolveChronologicalValidTags(ProjectConfig config, String owner, String repo)
             throws JiraClientException {

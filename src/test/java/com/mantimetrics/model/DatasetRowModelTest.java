@@ -7,8 +7,14 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+/**
+ * Tests for the dataset row model classes.
+ */
 class DatasetRowModelTest {
 
+    /**
+     * Verifies that method rows preserve the expected CSV serialization format.
+     */
     @Test
     void methodDataKeepsCsvFormatStable() {
         MethodData method = new MethodData.Builder()
@@ -42,6 +48,9 @@ class DatasetRowModelTest {
                 method.toCsvLine());
     }
 
+    /**
+     * Verifies that class rows preserve the expected CSV serialization format.
+     */
     @Test
     void classDataKeepsCsvFormatStable() {
         ClassData type = new ClassData.Builder()
@@ -75,6 +84,9 @@ class DatasetRowModelTest {
                 type.toCsvLine());
     }
 
+    /**
+     * Verifies that rebuilding a method row through {@code toBuilder()} preserves its state.
+     */
     @Test
     void toBuilderPreservesMethodDataState() {
         MethodData original = new MethodData.Builder()
@@ -110,6 +122,11 @@ class DatasetRowModelTest {
         assertEquals(original.getCommitHashes(), rebuilt.getCommitHashes());
     }
 
+    /**
+     * Returns a representative metrics aggregate reused by the dataset row tests.
+     *
+     * @return sample method metrics
+     */
     private MethodMetrics sampleMetrics() {
         return MethodMetrics.builder()
                 .loc(10)

@@ -6,8 +6,17 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Applies a simple heuristic to detect Feature Envy on method declarations.
+ */
 public final class FeatureEnvyDetector {
 
+    /**
+     * Reports whether a method accesses external members more often than its own members.
+     *
+     * @param method method declaration to analyze
+     * @return {@code true} when the method is considered feature-envious
+     */
     public boolean isFeatureEnvy(MethodDeclaration method) {
         AtomicInteger internal = new AtomicInteger();
         AtomicInteger external = new AtomicInteger();

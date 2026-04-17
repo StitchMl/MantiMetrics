@@ -24,6 +24,9 @@ public class PmdAnalyzer {
     private final PMDConfiguration config;
     private final Logger logger = LoggerFactory.getLogger(PmdAnalyzer.class);
 
+    /**
+     * Creates a PMD analyzer configured for the Java rules used by the project.
+     */
     public PmdAnalyzer() {
         config = new PMDConfiguration();
 
@@ -39,7 +42,10 @@ public class PmdAnalyzer {
     }
 
     /**
-     * It analyzes the code in 'sourceDir' and returns the PMD report.
+     * Analyzes the in-memory release sources and returns the PMD report.
+     *
+     * @param sourceSet release sources to analyze
+     * @return PMD report containing violations and processing errors
      */
     public Report analyze(SourceScanResult sourceSet) {
         // 1) Duplicates the basic configuration
@@ -78,6 +84,12 @@ public class PmdAnalyzer {
         }
     }
 
+    /**
+     * Registers the parsed source files with the PMD file collector.
+     *
+     * @param collector PMD collector receiving the sources
+     * @param sources parsed source files to analyze
+     */
     private void addSources(FileCollector collector, List<ParsedSourceFile> sources) {
         for (ParsedSourceFile source : sources) {
             collector.addSourceFile(FileId.fromPathLikeString(source.relativePath()), source.source());

@@ -14,6 +14,14 @@ import java.util.stream.Collectors;
  * Applies release-local Git history, cumulative history and historical bug labels to parsed rows.
  */
 final class DatasetRowEnricher {
+    /**
+     * Enriches method-level rows with release-local and cumulative history features.
+     *
+     * @param rows parsed method rows for the current release
+     * @param request immutable release request carrying history and labels
+     * @param violationIndex PMD violations indexed by relative path
+     * @return enriched method rows ready for serialization
+     */
     List<MethodData> enrichMethods(
             List<MethodData> rows,
             ReleaseDatasetRequest request,
@@ -47,6 +55,14 @@ final class DatasetRowEnricher {
         return result;
     }
 
+    /**
+     * Enriches class-level rows with release-local and cumulative history features.
+     *
+     * @param rows parsed class rows for the current release
+     * @param request immutable release request carrying history and labels
+     * @param violationIndex PMD violations indexed by relative path
+     * @return enriched class rows ready for serialization
+     */
     List<ClassData> enrichClasses(
             List<ClassData> rows,
             ReleaseDatasetRequest request,
@@ -80,6 +96,14 @@ final class DatasetRowEnricher {
         return result;
     }
 
+    /**
+     * Updates the cumulative history state associated with a dataset row and returns the refreshed value.
+     *
+     * @param uniqueKey stable dataset identifier for the row
+     * @param relativePath normalized relative source path
+     * @param request immutable release request carrying commit history and the mutable store
+     * @return updated history state after processing the current release
+     */
     private RowHistoryState updateHistory(String uniqueKey, String relativePath, ReleaseDatasetRequest request) {
         RowHistoryState previous = request.historyStore().get(uniqueKey);
         List<String> currentAuthors = distinctAuthors(request.commitData().authorsFor(relativePath));
@@ -102,22 +126,55 @@ final class DatasetRowEnricher {
         return updated;
     }
 
+    /**
+     * Counts the PMD violations that fall inside the row source range.
+     *
+     * @param row dataset row being enriched
+     * @param violationIndex indexed PMD violations for the current release
+     * @return number of violations associated with the row range
+     */
     private int codeSmellsForRow(DatasetRow row, ReleaseViolationIndex violationIndex) {
         return violationIndex.countViolations(normalizedPath(row), row.getStartLine(), row.getEndLine());
     }
 
+    /**
+     * Reports whether the current row is historically labeled as buggy for the analyzed release.
+     *
+     * @param releaseId release identifier currently being processed
+     * @param relativePath normalized relative source path
+     * @param request immutable release request carrying the historical label index
+     * @return {@code true} when the row belongs to a historically buggy file in the current release
+     */
     private boolean isBuggyRow(String releaseId, String relativePath, ReleaseDatasetRequest request) {
         return request.labelIndex().isBuggy(releaseId, relativePath);
     }
 
+    /**
+     * Normalizes the row path into the canonical dataset representation.
+     *
+     * @param row dataset row whose path must be normalized
+     * @return normalized relative path
+     */
     private String normalizedPath(DatasetRow row) {
         return AnalysisPathUtils.normalizeDatasetPath(row.getPath());
     }
 
+    /**
+     * Removes duplicate authors while preserving their encounter order.
+     *
+     * @param authors authors collected from the current release history
+     * @return distinct author list
+     */
     private List<String> distinctAuthors(List<String> authors) {
         return authors.stream().distinct().collect(Collectors.toList());
     }
 
+    /**
+     * Counts the distinct authors touching a row.
+     *
+     * @param authors authors collected from the current release history
+     * @return number of unique authors
+     */
     private int distinctCount(List<String> authors) {
         return distinctAuthors(authors).size();
     }

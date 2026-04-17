@@ -22,6 +22,9 @@ import java.util.concurrent.Semaphore;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+/**
+ * Downloads GitHub source archives and extracts Java production sources directly in memory.
+ */
 class ZipDownloader {
     private static final Logger LOG = LoggerFactory.getLogger(ZipDownloader.class);
     private static final String ZIP = "https://codeload.github.com";
@@ -30,6 +33,11 @@ class ZipDownloader {
     private final OkHttpClient longClient;
     private final Semaphore permits = new Semaphore(5_000, true);
 
+    /**
+     * Creates a downloader sharing the HTTP configuration of the GitHub API client.
+     *
+     * @param client shared GitHub API client
+     */
     ZipDownloader(GitApiClient client) {
         this.longClient = client.http.newBuilder()
                 .readTimeout(Duration.ofMinutes(10))
@@ -37,6 +45,16 @@ class ZipDownloader {
                 .build();
     }
 
+    /**
+     * Downloads and extracts the Java production sources for the requested release reference.
+     *
+     * @param owner repository owner
+     * @param repo repository name
+     * @param ref tag or branch reference to download
+     * @return extracted source files for the release
+     * @throws IOException when the download or extraction fails
+     * @throws InterruptedException when the thread is interrupted while waiting between retries
+     */
     SourceScanResult downloadSources(String owner, String repo, String ref)
             throws IOException, InterruptedException {
         String url = ZIP + "/" + owner + "/" + repo + "/zip/" +
@@ -56,10 +74,24 @@ class ZipDownloader {
         throw last;
     }
 
+    /**
+     * Computes the exponential backoff delay between download retries.
+     *
+     * @param attempt zero-based retry attempt index
+     * @return delay in milliseconds
+     */
     private static long backoff(int attempt) {
         return (long) (3_000 * Math.pow(2, attempt));
     }
 
+    /**
+     * Performs one download attempt and extracts the Java production sources from the ZIP archive.
+     *
+     * @param url GitHub codeload URL
+     * @param releaseId stable identifier for the downloaded release
+     * @return extracted source files for the release
+     * @throws IOException when the download or extraction fails
+     */
     private SourceScanResult tryDownload(String url, String releaseId) throws IOException {
         permits.acquireUninterruptibly();
         try {
@@ -99,6 +131,13 @@ class ZipDownloader {
         }
     }
 
+    /**
+     * Reads the current ZIP entry fully into memory.
+     *
+     * @param zipInputStream ZIP stream positioned at the desired entry
+     * @return entry bytes
+     * @throws IOException when the entry cannot be read
+     */
     private byte[] readEntryBytes(ZipInputStream zipInputStream) throws IOException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         byte[] buffer = new byte[8 * 1024];
@@ -109,12 +148,23 @@ class ZipDownloader {
         return outputStream.toByteArray();
     }
 
+    /**
+     * Removes the top-level archive folder from an entry name and normalizes separators.
+     *
+     * @param entryName ZIP entry name
+     * @return normalized relative source path
+     */
     private String toRelativeSourcePath(String entryName) {
         String normalized = entryName.replace('\\', '/');
         int firstSlash = normalized.indexOf('/');
         return firstSlash >= 0 ? normalized.substring(firstSlash + 1) : normalized;
     }
 
+    /**
+     * Returns temporary directories created by the downloader.
+     *
+     * @return empty list because the current implementation keeps everything in memory
+     */
     public List<Path> getTmpDirs() {
         return List.of();
     }

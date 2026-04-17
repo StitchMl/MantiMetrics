@@ -37,6 +37,12 @@ public final class ApplicationBootstrap {
     private final GitHubTokenLoader gitHubTokenLoader = new GitHubTokenLoader();
     private final ProjectSelectionPrompt projectSelectionPrompt = new ProjectSelectionPrompt(System.in, System.out);
 
+    /**
+     * Wires the runtime services, resolves the target project and executes the analysis pipeline.
+     *
+     * @param cliOptions command-line options resolved at startup
+     * @throws Exception when configuration loading or project processing fails
+     */
     public void run(CliOptions cliOptions) throws Exception {
         GitService gitService = new GitService(loadGithubToken());
         try {
@@ -52,6 +58,9 @@ public final class ApplicationBootstrap {
 
     /**
      * Builds the concrete processing pipeline while keeping each service narrowly focused.
+     *
+     * @param gitService Git service shared by the analysis pipeline
+     * @return fully wired project processor
      */
     private ProjectProcessor createProcessor(GitService gitService) {
         JiraClient jiraClient = new JiraClient();
@@ -77,6 +86,10 @@ public final class ApplicationBootstrap {
 
     /**
      * Resolves the project to analyze either from the CLI or from the interactive prompt.
+     *
+     * @param cliOptions command-line options resolved at startup
+     * @return single-element array containing the selected project configuration
+     * @throws Exception when project configuration loading or interactive prompting fails
      */
     @SuppressWarnings("GrazieInspectionRunner")
     private ProjectConfig[] resolveProjectConfigs(CliOptions cliOptions) throws Exception {
@@ -86,6 +99,12 @@ public final class ApplicationBootstrap {
         return new ProjectConfig[] { projectSelectionPrompt.prompt(ProjectConfigLoader.load()) };
     }
 
+    /**
+     * Loads the GitHub token required by the GitHub-backed services.
+     *
+     * @return configured GitHub personal access token
+     * @throws IOException when the token cannot be resolved from configuration
+     */
     private String loadGithubToken() throws IOException {
         return gitHubTokenLoader.load(MainApp.class);
     }

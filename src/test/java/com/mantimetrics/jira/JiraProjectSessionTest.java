@@ -8,8 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Tests for {@link JiraProjectSession}.
+ */
 class JiraProjectSessionTest {
 
+    /**
+     * Verifies that a valid property set produces a normalized Jira session.
+     */
     @Test
     void buildsSessionFromPropertiesAndNormalizesSearchBase() throws Exception {
         Properties properties = new Properties();
@@ -24,6 +30,9 @@ class JiraProjectSessionTest {
         assertTrue(session.searchBase().contains("project+%3D+BOOK"));
     }
 
+    /**
+     * Verifies that missing required Jira properties are rejected.
+     */
     @Test
     void rejectsMissingRequiredProperties() {
         Properties properties = new Properties();

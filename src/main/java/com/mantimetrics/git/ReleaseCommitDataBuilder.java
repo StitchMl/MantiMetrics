@@ -9,8 +9,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Aggregates commit-level snapshots into file-level release metadata.
+ */
 final class ReleaseCommitDataBuilder {
 
+    /**
+     * Builds release-level file aggregates from the commit snapshots belonging to a release range.
+     *
+     * @param commits commit snapshots collected for the release range
+     * @return immutable release commit data grouped by relative path
+     */
     static ReleaseCommitData aggregate(List<ReleaseCommitSnapshot> commits) {
         Map<String, List<String>> touchMap = new HashMap<>();
         Map<String, List<String>> issueTouchMap = new HashMap<>();
@@ -60,15 +69,36 @@ final class ReleaseCommitDataBuilder {
         );
     }
 
+    /**
+     * Copies a map of mutable lists into an immutable equivalent.
+     *
+     * @param source source map containing mutable list values
+     * @return immutable map with immutable list values
+     */
     private static Map<String, List<String>> immutableCopy(Map<String, List<String>> source) {
         Map<String, List<String>> copy = new HashMap<>();
         source.forEach((key, value) -> copy.put(key, List.copyOf(value)));
         return Collections.unmodifiableMap(copy);
     }
 
+    /**
+     * Immutable snapshot of one commit enriched with author, message and touched files.
+     *
+     * @param sha commit SHA
+     * @param message commit message
+     * @param author commit author name
+     * @param files changed files touched by the commit
+     */
     record ReleaseCommitSnapshot(String sha, String message, String author, Set<ReleaseCommitFile> files) {
     }
 
+    /**
+     * Immutable snapshot of one file changed by a commit.
+     *
+     * @param path relative file path
+     * @param additions added lines reported by GitHub
+     * @param deletions deleted lines reported by GitHub
+     */
     record ReleaseCommitFile(String path, int additions, int deletions) {
     }
 }

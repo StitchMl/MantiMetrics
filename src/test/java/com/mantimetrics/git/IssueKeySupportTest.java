@@ -11,9 +11,15 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+/**
+ * Tests for {@link IssueKeySupport}.
+ */
 class IssueKeySupportTest {
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    /**
+     * Verifies that distinct issue keys accumulate across multiple commits touching the same Java file.
+     */
     @Test
     void addKeysForFilesAccumulatesDistinctKeysAcrossCommits() {
         ArrayNode firstCommitFiles = JSON.createArrayNode();
@@ -32,6 +38,9 @@ class IssueKeySupportTest {
                 map.get("src/main/java/com/acme/Sample.java"));
     }
 
+    /**
+     * Verifies that non-Java files are ignored when mapping issue keys to files.
+     */
     @Test
     void addKeysForFilesSkipsNonJavaFiles() {
         ArrayNode files = JSON.createArrayNode();

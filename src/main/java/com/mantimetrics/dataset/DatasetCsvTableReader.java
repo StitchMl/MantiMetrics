@@ -12,8 +12,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Reads raw or derived dataset CSV files into immutable tabular objects.
+ */
 public final class DatasetCsvTableReader {
 
+    /**
+     * Reads a CSV dataset into an immutable {@link DatasetTable}.
+     *
+     * @param csvPath CSV file to read
+     * @return immutable dataset table
+     * @throws IOException when the CSV cannot be parsed
+     */
     public DatasetTable read(Path csvPath) throws IOException {
         try (CSVReader reader = new CSVReader(Files.newBufferedReader(csvPath, StandardCharsets.UTF_8))) {
             String[] headerRow = reader.readNext();

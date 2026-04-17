@@ -8,8 +8,14 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+/**
+ * Tests for {@link ReleaseCommitDataBuilder}.
+ */
 class ReleaseCommitDataBuilderTest {
 
+    /**
+     * Verifies that issue keys stay scoped to the release range being aggregated.
+     */
     @Test
     void aggregateKeepsBugLabelsScopedToTheCurrentReleaseRange() {
         ReleaseCommitData firstRelease = ReleaseCommitDataBuilder.aggregate(List.of(
@@ -40,6 +46,9 @@ class ReleaseCommitDataBuilderTest {
         assertEquals(2, firstRelease.deletionsFor("src/main/java/com/acme/Sample.java"));
     }
 
+    /**
+     * Verifies that touch and churn metrics are tracked even when no issue key is present.
+     */
     @Test
     void aggregateTracksTouchesEvenWithoutIssueKeys() {
         ReleaseCommitData data = ReleaseCommitDataBuilder.aggregate(List.of(

@@ -27,6 +27,12 @@ public final class ReleaseExecutionService {
     private final CodeParser codeParser;
     private final ReleaseDatasetCollector datasetCollector;
 
+    /**
+     * Creates a release executor with the parsing and dataset-collection services it coordinates.
+     *
+     * @param codeParser parser service responsible for loading release sources
+     * @param datasetCollector collector used to build dataset rows for each granularity
+     */
     public ReleaseExecutionService(CodeParser codeParser, ReleaseDatasetCollector datasetCollector) {
         this.codeParser = codeParser;
         this.datasetCollector = datasetCollector;
@@ -35,6 +41,9 @@ public final class ReleaseExecutionService {
     /**
      * Processes one release snapshot. The snapshot already carries commit history so the expensive GitHub
      * history walk is not repeated for each dataset granularity.
+     *
+     * @param snapshot release snapshot to execute
+     * @param contexts open project contexts, one for each requested granularity
      */
     void processRelease(@NotNull ReleaseSnapshot snapshot, @NotNull List<ProjectContext> contexts) {
         if (contexts.isEmpty()) {
@@ -78,6 +87,10 @@ public final class ReleaseExecutionService {
 
     /**
      * Delegates row collection to the correct granularity-specific collector while reusing the same prepared release.
+     *
+     * @param tag release tag currently being processed
+     * @param context output context for the current granularity
+     * @param prepared reusable prepared release state
      */
     private void processPreparedRelease(String tag, ProjectContext context, PreparedRelease prepared) {
         LOG.info("Processing {}@{} [{}]", context.repo(), tag, context.granularity());
@@ -110,6 +123,12 @@ public final class ReleaseExecutionService {
         }
     }
 
+    /**
+     * Replaces the previous-row cache with the rows produced for the current release.
+     *
+     * @param prevData cache of previous rows to overwrite
+     * @param rows rows produced for the current release
+     */
     private void updatePreviousData(Map<String, DatasetRow> prevData, List<? extends DatasetRow> rows) {
         prevData.clear();
         prevData.putAll(rows.stream()
@@ -120,6 +139,14 @@ public final class ReleaseExecutionService {
                 )));
     }
 
+    /**
+     * Prepared release state shared across granularity-specific dataset collectors.
+     *
+     * @param releaseSources extracted source tree for the release
+     * @param cloneCacheKey key used to access the cached clone map
+     * @param violations PMD rule violations found in the release
+     * @param commitData commit-range metadata for the release
+     */
     private record PreparedRelease(
             SourceScanResult releaseSources,
             String cloneCacheKey,

@@ -1,7 +1,7 @@
 package com.mantimetrics.metrics;
 
 /**
- * Immutable object che contiene tutte le metriche di Halstead.
+ * Immutable container for Halstead metrics.
  */
 public class HalsteadMetrics {
     private final int n1;
@@ -15,7 +15,9 @@ public class HalsteadMetrics {
     private final double effort;
 
     /**
-     * Private Builder to force the use of the Builder.
+     * Creates an immutable Halstead-metrics aggregate from the builder values.
+     *
+     * @param b builder providing the metric values
      */
     private HalsteadMetrics(Builder b) {
         this.n1         = b.n1;
@@ -29,19 +31,71 @@ public class HalsteadMetrics {
         this.effort     = b.effort;
     }
 
-    // getters...
+    /**
+     * Returns the number of distinct operators.
+     *
+     * @return distinct operators
+     */
     public int getDistinctOperators()   { return n1; }
+
+    /**
+     * Returns the number of distinct operands.
+     *
+     * @return distinct operands
+     */
     public int getDistinctOperands()    { return n2; }
+
+    /**
+     * Returns the total number of operators.
+     *
+     * @return total operators
+     */
     public int getTotalOperators()      { return totalN1; }
+
+    /**
+     * Returns the total number of operands.
+     *
+     * @return total operands
+     */
     public int getTotalOperands()       { return totalN2; }
+
+    /**
+     * Returns the Halstead vocabulary.
+     *
+     * @return vocabulary
+     */
     public double getVocabulary()       { return vocabulary; }
+
+    /**
+     * Returns the Halstead length.
+     *
+     * @return length
+     */
     public double getLength()           { return length; }
+
+    /**
+     * Returns the Halstead volume.
+     *
+     * @return volume
+     */
     public double getVolume()           { return volume; }
+
+    /**
+     * Returns the Halstead difficulty.
+     *
+     * @return difficulty
+     */
     public double getDifficulty()       { return difficulty; }
+
+    /**
+     * Returns the Halstead effort.
+     *
+     * @return effort
+     */
     public double getEffort()           { return effort; }
 
     /**
-     * Builder for HalsteadMetrics.
+     * Fluent builder for {@link HalsteadMetrics}.
      */
     public static class Builder {
         private int n1;
@@ -54,40 +108,110 @@ public class HalsteadMetrics {
         private double difficulty;
         private double effort;
 
+        /**
+         * Sets the number of distinct operators.
+         *
+         * @param n1 distinct operators
+         * @return current builder
+         */
         public Builder n1(int n1) {
             this.n1 = n1; return this;
         }
+
+        /**
+         * Sets the number of distinct operands.
+         *
+         * @param n2 distinct operands
+         * @return current builder
+         */
         public Builder n2(int n2) {
             this.n2 = n2; return this;
         }
+
+        /**
+         * Sets the total number of operators.
+         *
+         * @param totalN1 total operators
+         * @return current builder
+         */
         public Builder totalN1(int totalN1) {
             this.totalN1 = totalN1; return this;
         }
+
+        /**
+         * Sets the total number of operands.
+         *
+         * @param totalN2 total operands
+         * @return current builder
+         */
         public Builder totalN2(int totalN2) {
             this.totalN2 = totalN2; return this;
         }
+
+        /**
+         * Sets the Halstead vocabulary.
+         *
+         * @param v vocabulary
+         * @return current builder
+         */
         public Builder vocabulary(double v) {
             this.vocabulary = v; return this;
         }
+
+        /**
+         * Sets the Halstead length.
+         *
+         * @param l length
+         * @return current builder
+         */
         public Builder length(double l) {
             this.length = l; return this;
         }
+
+        /**
+         * Sets the Halstead volume.
+         *
+         * @param v volume
+         * @return current builder
+         */
         public Builder volume(double v) {
             this.volume = v; return this;
         }
+
+        /**
+         * Sets the Halstead difficulty.
+         *
+         * @param d difficulty
+         * @return current builder
+         */
         public Builder difficulty(double d) {
             this.difficulty = d; return this;
         }
+
+        /**
+         * Sets the Halstead effort.
+         *
+         * @param e effort
+         * @return current builder
+         */
         public Builder effort(double e) {
             this.effort = e; return this;
         }
 
+        /**
+         * Validates that the current builder state is internally consistent.
+         */
         private void validate() {
             if (vocabulary < 0 || length < 0) {
                 throw new IllegalStateException("Halstead metrics invalid");
             }
         }
 
+        /**
+         * Builds the immutable Halstead metrics aggregate.
+         *
+         * @return immutable Halstead metrics
+         */
         public HalsteadMetrics build() {
             validate();
             return new HalsteadMetrics(this);

@@ -7,9 +7,20 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Selects the oldest prefix of releases required by the assignment percentage rule.
+ */
 public class ReleaseSelector {
     private static final Logger logger = LoggerFactory.getLogger(ReleaseSelector.class);
 
+    /**
+     * Selects the first percentage of tags from an already ordered release list.
+     *
+     * @param orderedTags chronologically ordered release tags
+     * @param percent percentage of releases to keep
+     * @return mutable list containing the selected oldest releases
+     * @throws IllegalArgumentException when {@code percent} is outside the {@code 0..100} range
+     */
     public List<String> selectFirstPercent(List<String> orderedTags, int percent) {
         logger.debug("Selecting first {}% of {} total tags", percent, orderedTags.size());
 

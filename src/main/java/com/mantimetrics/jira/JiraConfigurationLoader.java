@@ -5,9 +5,21 @@ import com.mantimetrics.config.PropertiesLoaderSupport;
 import java.io.IOException;
 import java.util.Properties;
 
+/**
+ * Loads Jira connection settings from bundled configuration, overrides and runtime properties.
+ */
 final class JiraConfigurationLoader {
     private final PropertiesLoaderSupport propertiesLoaderSupport = new PropertiesLoaderSupport();
 
+    /**
+     * Loads and resolves the Jira session for a project key.
+     *
+     * @param resourceOwner class used to resolve classpath resources
+     * @param propsPath filesystem or classpath location of the base Jira properties
+     * @param projectKey Jira project key
+     * @return initialized Jira project session
+     * @throws JiraClientException when the properties cannot be loaded or are invalid
+     */
     JiraProjectSession load(Class<?> resourceOwner, String propsPath, String projectKey) throws JiraClientException {
         try {
             Properties properties = propertiesLoaderSupport.loadResourceOrFile(

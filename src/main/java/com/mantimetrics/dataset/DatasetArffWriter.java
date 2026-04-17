@@ -8,8 +8,19 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.stream.Collectors;
 
+/**
+ * Writes dataset tables in Weka-compatible ARFF format.
+ */
 public final class DatasetArffWriter {
 
+    /**
+     * Writes a dataset table to an ARFF file.
+     *
+     * @param outputPath target ARFF path
+     * @param relationName ARFF relation name
+     * @param table dataset table to serialize
+     * @throws IOException when the output file cannot be written
+     */
     public void write(Path outputPath, String relationName, DatasetTable table) throws IOException {
         Files.createDirectories(outputPath.getParent());
         try (BufferedWriter writer = Files.newBufferedWriter(
@@ -40,10 +51,23 @@ public final class DatasetArffWriter {
         }
     }
 
+    /**
+     * Resolves the ARFF attribute type for a dataset column.
+     *
+     * @param column dataset column name
+     * @return ARFF attribute type
+     */
     private String attributeType(String column) {
         return DatasetColumns.isNominalColumn(column) ? "{yes,no}" : "numeric";
     }
 
+    /**
+     * Formats one cell value for ARFF output.
+     *
+     * @param column dataset column name
+     * @param value raw cell value
+     * @return ARFF cell value or {@code ?} for missing values
+     */
     private String formatValue(String column, String value) {
         if (value == null || value.isBlank()) {
             return "?";
@@ -51,6 +75,12 @@ public final class DatasetArffWriter {
         return DatasetColumns.isNominalColumn(column) ? value : value.trim();
     }
 
+    /**
+     * Escapes single quotes in ARFF identifiers.
+     *
+     * @param value identifier to escape
+     * @return escaped ARFF identifier
+     */
     private String escape(String value) {
         return value.replace("'", "\\'");
     }

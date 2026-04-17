@@ -12,8 +12,14 @@ import java.nio.charset.StandardCharsets;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Tests for the interactive {@link ProjectSelectionPrompt}.
+ */
 class ProjectSelectionPromptTest {
 
+    /**
+     * Verifies that the prompt returns the configured project selected by menu index.
+     */
     @Test
     void selectsConfiguredProjectByIndex() throws IOException {
         ProjectConfig[] configs = new ProjectConfig[] {
@@ -28,6 +34,9 @@ class ProjectSelectionPromptTest {
         assertEquals("AVRO", selected.jiraProjectKey());
     }
 
+    /**
+     * Verifies that the prompt supports manual entry of a custom repository.
+     */
     @Test
     void supportsCustomRepositoryEntry() throws IOException {
         ProjectSelectionPrompt prompt = newPrompt(String.join("\n",
@@ -44,6 +53,9 @@ class ProjectSelectionPromptTest {
         assertEquals(33, selected.percentage());
     }
 
+    /**
+     * Verifies that the prompt retries after an invalid menu selection.
+     */
     @Test
     void retriesAfterInvalidMenuChoice() throws IOException {
         ProjectConfig[] configs = new ProjectConfig[] {
@@ -61,6 +73,12 @@ class ProjectSelectionPromptTest {
         assertTrue(output.toString(StandardCharsets.UTF_8).contains("Scelta non valida"));
     }
 
+    /**
+     * Creates a prompt instance backed by in-memory streams.
+     *
+     * @param input simulated CLI input
+     * @return prompt configured for tests
+     */
     private ProjectSelectionPrompt newPrompt(String input) {
         return new ProjectSelectionPrompt(
                 new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)),

@@ -6,7 +6,10 @@ package com.mantimetrics.csv;
 public class CsvWriteException extends Exception {
 
     /**
-     * Create a new exception with the given message.
+     * Creates a new exception describing a CSV write failure.
+     *
+     * @param message human-readable error message
+     * @param cause original failure that prevented the CSV operation
      */
     public CsvWriteException(String message, Throwable cause) {
         super(message, cause);

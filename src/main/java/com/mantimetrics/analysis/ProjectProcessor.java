@@ -36,6 +36,17 @@ public final class ProjectProcessor {
     private final DatasetArtifactService datasetArtifactService;
     private final MilestoneAuditService milestoneAuditService;
 
+    /**
+     * Creates the project processor with all collaborators needed to execute the full release pipeline.
+     *
+     * @param releasePlanner planner that resolves the common release timeline
+     * @param releaseExecutionService service that executes one prepared release
+     * @param gitService Git service used to preload release commit data
+     * @param csvWriter CSV writer used to open per-granularity output files
+     * @param pmdAnalyzer PMD analyzer reused across releases
+     * @param datasetArtifactService service that generates derived dataset artifacts
+     * @param milestoneAuditService service that writes the milestone audit JSON
+     */
     public ProjectProcessor(
             ProjectReleasePlanner releasePlanner,
             ReleaseExecutionService releaseExecutionService,
@@ -54,6 +65,14 @@ public final class ProjectProcessor {
         this.milestoneAuditService = milestoneAuditService;
     }
 
+    /**
+     * Executes the end-to-end analysis for one project and all requested granularities.
+     *
+     * @param config project configuration to analyze
+     * @param granularities dataset granularities to generate
+     * @throws JiraClientException when Jira metadata cannot be loaded
+     * @throws CsvWriteException when a dataset CSV file cannot be written or closed
+     */
     public void process(ProjectConfig config, List<Granularity> granularities)
             throws JiraClientException, CsvWriteException {
         ProjectReleasePlan plan = releasePlanner.plan(config);
@@ -145,6 +164,13 @@ public final class ProjectProcessor {
         return history;
     }
 
+    /**
+     * Generates the derived artifacts and audit file for every produced raw dataset.
+     *
+     * @param csvPaths raw dataset paths grouped by granularity
+     * @param plan release plan associated with the project
+     * @param labelIndex historical bug-label index used during labeling
+     */
     private void generateArtifacts(
             Map<Granularity, Path> csvPaths,
             ProjectReleasePlan plan,
@@ -165,6 +191,12 @@ public final class ProjectProcessor {
         }
     }
 
+    /**
+     * Closes every open CSV writer, aggregating the first close failure when needed.
+     *
+     * @param contexts project contexts holding the open writers
+     * @throws CsvWriteException when at least one writer cannot be closed
+     */
     private void closeContexts(List<ProjectContext> contexts) throws CsvWriteException {
         CsvWriteException failure = null;
         for (ProjectContext context : contexts) {

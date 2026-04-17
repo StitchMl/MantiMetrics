@@ -10,8 +10,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Tests for CLI granularity parsing.
+ */
 class GranularityTest {
 
+    /**
+     * Verifies that the internal granularity parser accepts supported names and aliases.
+     */
     @Test
     void parsesSupportedGranularitiesAndAliases() {
         assertEquals(Granularity.METHOD, Granularity.fromCli("method"));
@@ -20,6 +26,9 @@ class GranularityTest {
         assertEquals(Granularity.CLASS, Granularity.fromCli(" c "));
     }
 
+    /**
+     * Verifies that the CLI execution options include the combined class-and-method mode.
+     */
     @Test
     void parsesExecutionOptionsIncludingBoth() {
         assertEquals(GranularityOption.CLASS, GranularityOption.fromCli("class"));
@@ -28,6 +37,9 @@ class GranularityTest {
         assertEquals(List.of(Granularity.CLASS, Granularity.METHOD), GranularityOption.BOTH.granularities());
     }
 
+    /**
+     * Verifies that unsupported internal granularities are rejected.
+     */
     @Test
     void rejectsUnsupportedGranularity() {
         IllegalArgumentException ex = assertThrows(
@@ -37,6 +49,9 @@ class GranularityTest {
         assertTrue(ex.getMessage().contains("method|class"));
     }
 
+    /**
+     * Verifies that unsupported CLI execution options are rejected.
+     */
     @Test
     void rejectsUnsupportedExecutionOption() {
         IllegalArgumentException ex = assertThrows(

@@ -22,10 +22,24 @@ public final class MilestoneAuditService {
 
     private final DatasetCsvTableReader tableReader;
 
+    /**
+     * Creates an audit writer that can inspect the generated raw CSV datasets.
+     *
+     * @param tableReader reader used to load CSV datasets into tabular form
+     */
     public MilestoneAuditService(DatasetCsvTableReader tableReader) {
         this.tableReader = tableReader;
     }
 
+    /**
+     * Writes the milestone-1 audit JSON next to the dataset-derived artifacts.
+     *
+     * @param rawCsvPath raw dataset CSV path
+     * @param timelineReleaseCount number of releases in the full historical timeline
+     * @param selectedReleaseCount number of releases kept for dataset generation
+     * @param labelingSummary summary of the historical labeling strategy
+     * @throws IOException when the audit file cannot be written
+     */
     public void write(
             Path rawCsvPath,
             int timelineReleaseCount,
@@ -63,6 +77,12 @@ public final class MilestoneAuditService {
         JSON.writeValue(outputPath.toFile(), audit);
     }
 
+    /**
+     * Converts the labeling summary into a JSON-friendly ordered map.
+     *
+     * @param labelingSummary historical labeling summary
+     * @return ordered map ready to be embedded in the audit document
+     */
     @NotNull
     private static Map<String, Object> getStringObjectMap(HistoricalBugLabelIndex.Summary labelingSummary) {
         Map<String, Object> labeling = new LinkedHashMap<>();
@@ -75,12 +95,24 @@ public final class MilestoneAuditService {
         return labeling;
     }
 
+    /**
+     * Resolves the audit file location associated with a raw dataset CSV.
+     *
+     * @param rawCsvPath raw dataset CSV path
+     * @return output path for the milestone audit JSON
+     */
     private Path resolveAuditPath(Path rawCsvPath) {
         String fileName = rawCsvPath.getFileName().toString();
         String baseName = fileName.endsWith(".csv") ? fileName.substring(0, fileName.length() - 4) : fileName;
         return rawCsvPath.getParent().resolve(baseName + "_artifacts").resolve("milestone1-audit.json");
     }
 
+    /**
+     * Detects which entity column is present in the dataset.
+     *
+     * @param table loaded dataset table
+     * @return {@code Class}, {@code Method} or {@code Unknown}
+     */
     private String entityColumn(DatasetTable table) {
         if (table.header().contains("Class")) {
             return "Class";
@@ -91,6 +123,12 @@ public final class MilestoneAuditService {
         return "Unknown";
     }
 
+    /**
+     * Counts the feature columns excluding identifiers and the target label.
+     *
+     * @param table loaded dataset table
+     * @return number of feature columns
+     */
     private int featureCount(DatasetTable table) {
         return (int) table.header().stream()
                 .filter(column -> !DatasetColumns.identifierColumns().contains(column))
@@ -98,6 +136,13 @@ public final class MilestoneAuditService {
                 .count();
     }
 
+    /**
+     * Counts the distinct non-blank values for a dataset column.
+     *
+     * @param table loaded dataset table
+     * @param column column to inspect
+     * @return number of distinct non-blank values
+     */
     @SuppressWarnings("SameParameterValue")
     private long distinctCount(DatasetTable table, String column) {
         return table.rows().stream()
@@ -107,6 +152,14 @@ public final class MilestoneAuditService {
                 .size();
     }
 
+    /**
+     * Counts the rows whose column value matches the expected text ignoring case.
+     *
+     * @param table loaded dataset table
+     * @param column column to inspect
+     * @param expected expected text value
+     * @return number of matching rows
+     */
     @SuppressWarnings("SameParameterValue")
     private long countEquals(DatasetTable table, String column, String expected) {
         return table.rows().stream()
@@ -114,6 +167,13 @@ public final class MilestoneAuditService {
                 .count();
     }
 
+    /**
+     * Counts the rows whose numeric column value is greater than zero.
+     *
+     * @param table loaded dataset table
+     * @param column column to inspect
+     * @return number of rows whose parsed value is positive
+     */
     @SuppressWarnings("SameParameterValue")
     private long countGreaterThanZero(DatasetTable table, String column) {
         return table.rows().stream()
@@ -121,6 +181,12 @@ public final class MilestoneAuditService {
                 .count();
     }
 
+    /**
+     * Parses an integer value treating blank values as zero.
+     *
+     * @param value textual numeric value
+     * @return parsed integer, or {@code 0} when the value is blank
+     */
     private int parseInt(String value) {
         return value == null || value.isBlank() ? 0 : Integer.parseInt(value.trim());
     }

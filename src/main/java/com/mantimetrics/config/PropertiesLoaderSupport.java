@@ -8,8 +8,20 @@ import java.nio.file.Paths;
 import java.util.Objects;
 import java.util.Properties;
 
+/**
+ * Shared helper for loading, merging and validating Java {@link Properties} sources.
+ */
 public final class PropertiesLoaderSupport {
 
+    /**
+     * Loads properties from a filesystem path when present, otherwise from a classpath resource.
+     *
+     * @param resourceOwner class used to resolve classpath resources
+     * @param path filesystem or classpath location to load
+     * @param missingMessage base error message used when the resource cannot be found
+     * @return loaded properties
+     * @throws IOException when the properties cannot be loaded
+     */
     public Properties loadResourceOrFile(Class<?> resourceOwner, String path, String missingMessage) throws IOException {
         Path filePath = Paths.get(path);
         if (Files.isRegularFile(filePath)) {
@@ -31,6 +43,13 @@ public final class PropertiesLoaderSupport {
         }
     }
 
+    /**
+     * Merges properties from an optional override file into the provided base properties.
+     *
+     * @param properties target properties to update
+     * @param overridePath optional override file path
+     * @throws IOException when the override file exists but cannot be read
+     */
     public void mergeOptionalFile(Properties properties, String overridePath) throws IOException {
         if (overridePath == null || overridePath.isBlank()) {
             return;
@@ -49,6 +68,14 @@ public final class PropertiesLoaderSupport {
         }
     }
 
+    /**
+     * Overrides a property with runtime values, preferring a system property over an environment variable.
+     *
+     * @param properties target properties to update
+     * @param propertyKey property key to override
+     * @param systemPropertyName system property checked first
+     * @param environmentVariableName environment variable checked when the system property is absent
+     */
     public void overrideWithSystemOrEnv(
             Properties properties,
             String propertyKey,
@@ -64,6 +91,15 @@ public final class PropertiesLoaderSupport {
         }
     }
 
+    /**
+     * Returns a required non-blank property value.
+     *
+     * @param properties property source to inspect
+     * @param propertyKey property key to resolve
+     * @param message exception message used when the property is blank or missing
+     * @return trimmed non-blank property value
+     * @throws IOException when the property is blank or missing
+     */
     public String requireNonBlank(Properties properties, String propertyKey, String message) throws IOException {
         String value = properties.getProperty(propertyKey, "").trim();
         if (!hasText(value)) {
@@ -72,6 +108,12 @@ public final class PropertiesLoaderSupport {
         return value;
     }
 
+    /**
+     * Checks whether the supplied string contains non-blank text.
+     *
+     * @param value value to inspect
+     * @return {@code true} when the value is not {@code null} and not blank
+     */
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }

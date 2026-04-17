@@ -5,8 +5,14 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Tests for {@link GitHubRepositoryClient}.
+ */
 class GitHubRepositoryClientTest {
 
+    /**
+     * Verifies that tag dates are cached across repeated comparisons.
+     */
     @Test
     void cachesTagDatesAcrossComparisons() throws Exception {
         TestGitApiClient apiClient = new TestGitApiClient();

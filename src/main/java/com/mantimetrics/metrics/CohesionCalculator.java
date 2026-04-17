@@ -14,8 +14,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.IntStream;
 
+/**
+ * Computes cohesion metrics for type declarations.
+ */
 public final class CohesionCalculator {
 
+    /**
+     * Computes the LCOM4 cohesion metric for a type declaration.
+     *
+     * @param type type declaration to analyze
+     * @return LCOM4 component count
+     */
     public int calculateLcom4(TypeDeclaration<?> type) {
         List<MethodDeclaration> methods = JavaTypeUtils.directMethods(type);
         List<FieldDeclaration> fields = JavaTypeUtils.directFields(type);
@@ -55,11 +64,27 @@ public final class CohesionCalculator {
         return components.size();
     }
 
+    /**
+     * Union-find structure used to compute connected components between methods and fields.
+     *
+     * @param parent parent array for the disjoint-set forest
+     */
     private record DisjointSet(int[] parent) {
+            /**
+             * Creates a disjoint set with one singleton component per index.
+             *
+             * @param parent number of singleton elements to create
+             */
             private DisjointSet(int parent) {
                 this(IntStream.range(0, parent).toArray());
             }
 
+            /**
+             * Finds the representative of one element with path compression.
+             *
+             * @param index element index
+             * @return representative index
+             */
             private int find(int index) {
                 if (parent[index] != index) {
                     parent[index] = find(parent[index]);
@@ -67,6 +92,12 @@ public final class CohesionCalculator {
                 return parent[index];
             }
 
+            /**
+             * Merges the components containing the two elements.
+             *
+             * @param left left element index
+             * @param right right element index
+             */
             private void union(int left, int right) {
                 int parentLeft = find(left);
                 int parentRight = find(right);

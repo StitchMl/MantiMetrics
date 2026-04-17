@@ -13,6 +13,9 @@ import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Low-level GitHub API client with retry and rate-limit handling.
+ */
 class GitApiClient {
     private static final int MAX_R = 5;
     private static final Logger LOG = LoggerFactory.getLogger(GitApiClient.class);
@@ -21,6 +24,11 @@ class GitApiClient {
     private final ObjectMapper json = new ObjectMapper();
     private final String token;
 
+    /**
+     * Creates a GitHub API client configured with the provided personal access token.
+     *
+     * @param token GitHub personal access token
+     */
     GitApiClient(String token) {
         this.token = token;
         this.http = new OkHttpClient.Builder()
@@ -32,6 +40,14 @@ class GitApiClient {
                 .build();
     }
 
+    /**
+     * Performs a GitHub API GET request and parses the JSON response.
+     *
+     * @param path fully qualified GitHub API URL
+     * @return parsed JSON response
+     * @throws IOException when the request fails permanently or returns a non-retriable error
+     * @throws InterruptedException when the thread is interrupted while waiting to retry
+     */
     JsonNode getApi(String path) throws IOException, InterruptedException {
         for (int attempt = 0; attempt < MAX_R; attempt++) {
             Request request = new Request.Builder()
@@ -62,11 +78,24 @@ class GitApiClient {
         throw new IOException("Retries exhausted for " + path);
     }
 
+    /**
+     * Reports whether an HTTP status code should trigger a retry.
+     *
+     * @param statusCode HTTP status code returned by GitHub
+     * @return {@code true} when the request should be retried
+     */
     private boolean isRetriable(int statusCode) {
         return statusCode == 403 || statusCode == 429
                 || statusCode == 502 || statusCode == 503 || statusCode == 504;
     }
 
+    /**
+     * Computes the next retry delay using the GitHub rate-limit reset header when available.
+     *
+     * @param response HTTP response that triggered the retry
+     * @param attempt zero-based retry attempt index
+     * @return backoff delay in milliseconds
+     */
     private static long backoff(Response response, int attempt) {
         if (response != null) {
             String reset = response.header("X-RateLimit-Reset");

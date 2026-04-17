@@ -19,6 +19,15 @@ import java.util.Set;
  */
 public final class HistoricalBugLabelIndexBuilder {
 
+    /**
+     * Builds the historical bug-label index from the full release history and resolved Jira tickets.
+     *
+     * @param timeline complete release timeline shared by Git and Jira
+     * @param datasetTags releases selected for dataset generation
+     * @param resolvedTickets resolved bug tickets fetched from Jira
+     * @param releaseHistory preloaded release snapshots containing commit-range metadata
+     * @return historical bug-label index plus audit summary
+     */
     public HistoricalBugLabelIndex build(
             ReleaseTimeline timeline,
             List<String> datasetTags,
@@ -81,6 +90,12 @@ public final class HistoricalBugLabelIndexBuilder {
         );
     }
 
+    /**
+     * Indexes bug tickets by key for quick lookups during labeling.
+     *
+     * @param tickets resolved bug tickets
+     * @return ticket index keyed by Jira issue key
+     */
     private Map<String, JiraBugTicket> indexTickets(List<JiraBugTicket> tickets) {
         Map<String, JiraBugTicket> index = new HashMap<>();
         for (JiraBugTicket ticket : tickets) {
@@ -89,6 +104,15 @@ public final class HistoricalBugLabelIndexBuilder {
         return index;
     }
 
+    /**
+     * Scans the complete release history to identify the earliest fixing release and touched paths for each ticket.
+     *
+     * @param releaseHistory preloaded release snapshots
+     * @param timeline complete release timeline
+     * @param knownBugKeys Jira issue keys that represent resolved bug tickets
+     * @param fixReleaseByTicket output map receiving the earliest fixing release index per ticket
+     * @param touchedPathsByTicket output map receiving the paths touched by each ticket
+     */
     private void collectFixHistory(
             List<ReleaseSnapshot> releaseHistory,
             ReleaseTimeline timeline,
@@ -115,6 +139,14 @@ public final class HistoricalBugLabelIndexBuilder {
         }
     }
 
+    /**
+     * Resolves the injected version index for a ticket using affected versions when they are consistent.
+     *
+     * @param ticket resolved bug ticket being labeled
+     * @param timeline complete release timeline
+     * @param fixIndex release index where the fix was observed
+     * @return injected release index, or {@code 0} when the fallback Total strategy is required
+     */
     private int resolveInjectedVersionIndex(JiraBugTicket ticket, ReleaseTimeline timeline, int fixIndex) {
         List<Integer> candidates = new ArrayList<>();
         for (String affectedVersion : ticket.affectedVersions()) {
@@ -129,6 +161,12 @@ public final class HistoricalBugLabelIndexBuilder {
         return 0;
     }
 
+    /**
+     * Copies a map of mutable sets into an immutable equivalent.
+     *
+     * @param source source map containing mutable set values
+     * @return immutable map with immutable set values
+     */
     private Map<String, Set<String>> immutableSetValues(Map<String, Set<String>> source) {
         Map<String, Set<String>> copy = new HashMap<>();
         source.forEach((key, value) -> copy.put(key, Set.copyOf(value)));

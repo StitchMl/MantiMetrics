@@ -9,10 +9,23 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Writes metadata describing the derived dataset artifacts.
+ */
 public final class DatasetMetadataWriter {
     private static final ObjectMapper JSON = new ObjectMapper()
             .enable(SerializationFeature.INDENT_OUTPUT);
 
+    /**
+     * Writes the metadata JSON associated with the derived datasets.
+     *
+     * @param outputPath metadata output path
+     * @param rawCsvPath raw dataset CSV path
+     * @param datasets derived dataset variants
+     * @param csvArtifacts CSV artifact paths by split name
+     * @param arffArtifacts ARFF artifact paths by split name
+     * @throws IOException when the metadata file cannot be written
+     */
     @SuppressWarnings("ClassEscapesDefinedScope")
     public void write(
             Path outputPath,
@@ -42,6 +55,14 @@ public final class DatasetMetadataWriter {
         JSON.writeValue(outputPath.toFile(), metadata);
     }
 
+    /**
+     * Builds one metadata entry describing a derived artifact pair.
+     *
+     * @param csvPath CSV artifact path
+     * @param arffPath ARFF artifact path
+     * @param rowCount number of rows contained in the split
+     * @return ordered metadata entry
+     */
     private Map<String, Object> artifactEntry(Path csvPath, Path arffPath, int rowCount) {
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("csv", csvPath.toString());

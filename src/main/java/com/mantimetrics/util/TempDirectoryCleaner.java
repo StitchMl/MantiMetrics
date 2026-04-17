@@ -9,13 +9,24 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
 
+/**
+ * Deletes temporary directories created during source-download and analysis phases.
+ */
 public final class TempDirectoryCleaner {
     private static final Logger LOG = LoggerFactory.getLogger(TempDirectoryCleaner.class);
 
+    /**
+     * Prevents instantiation of the static utility class.
+     */
     private TempDirectoryCleaner() {
         throw new AssertionError("Do not instantiate TempDirectoryCleaner");
     }
 
+    /**
+     * Recursively deletes each supplied directory and logs best-effort cleanup failures.
+     *
+     * @param directories temporary directories to delete
+     */
     public static void cleanup(List<Path> directories) {
         for (Path directory : directories) {
             try (Stream<Path> paths = Files.walk(directory)) {

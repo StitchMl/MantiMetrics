@@ -10,6 +10,7 @@ public class CodeParserException extends Exception {
      * Constructs a new CodeParserException with the specified detail message.
      *
      * @param message the detail message
+     * @param cause original failure that caused the parser exception
      */
     public CodeParserException(String message, Throwable cause) {
         super(message, cause);

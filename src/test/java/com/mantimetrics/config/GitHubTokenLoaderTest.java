@@ -10,11 +10,17 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+/**
+ * Tests for {@link GitHubTokenLoader}.
+ */
 class GitHubTokenLoaderTest {
 
     @TempDir
     Path tempDir;
 
+    /**
+     * Verifies that the loader reads the token from the local override file when present.
+     */
     @Test
     void loadsTokenFromIgnoredLocalOverrideFile() throws Exception {
         Path overrideFile = tempDir.resolve("github.local.properties");
@@ -35,6 +41,12 @@ class GitHubTokenLoaderTest {
         }
     }
 
+    /**
+     * Restores a system property to its previous value after a test.
+     *
+     * @param key property name
+     * @param value previous property value, or {@code null} to clear it
+     */
     private void restoreProperty(String key, String value) {
         if (value == null) {
             System.clearProperty(key);

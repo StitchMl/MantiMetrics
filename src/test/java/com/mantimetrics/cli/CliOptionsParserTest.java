@@ -7,9 +7,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Tests for {@link CliOptionsParser}.
+ */
 class CliOptionsParserTest {
     private final CliOptionsParser parser = new CliOptionsParser();
 
+    /**
+     * Verifies that class granularity is used when the CLI omits the option.
+     */
     @Test
     void defaultsGranularityToClassWhenMissing() {
         CliOptions options = parser.parse(new String[0]);
@@ -18,6 +24,9 @@ class CliOptionsParserTest {
         assertFalse(options.hasCliProject());
     }
 
+    /**
+     * Verifies that repository-specific CLI arguments produce a single explicit project configuration.
+     */
     @Test
     void buildsSingleProjectFromRepoUrlAndJiraKey() {
         CliOptions options = parser.parse(new String[] {
@@ -33,6 +42,9 @@ class CliOptionsParserTest {
         assertEquals(33, options.cliProject().percentage());
     }
 
+    /**
+     * Verifies that a repository URL without a Jira key is rejected.
+     */
     @Test
     void rejectsRepoUrlWithoutJiraKey() {
         IllegalArgumentException exception = assertThrows(
@@ -42,6 +54,9 @@ class CliOptionsParserTest {
         assertTrue(exception.getMessage().contains("--jira-key"));
     }
 
+    /**
+     * Verifies that project-specific options cannot be used without a repository URL.
+     */
     @Test
     void rejectsProjectSpecificOptionsWithoutRepoUrl() {
         IllegalArgumentException exception = assertThrows(

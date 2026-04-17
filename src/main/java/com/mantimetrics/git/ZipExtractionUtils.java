@@ -11,12 +11,18 @@ import java.nio.file.StandardOpenOption;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+/**
+ * Defensive helpers for safely reading ZIP archives obtained from GitHub.
+ */
 class ZipExtractionUtils {
     private static final Logger LOG                 = LoggerFactory.getLogger(ZipExtractionUtils.class);
     private static final int    MAX_ENTRIES         = 20_000;
     private static final long   MAX_TOTAL_BYTES     = 2L  * 1024 * 1024 * 1024;
     private static final double MAX_INFLATION_RATIO = 200.0;
 
+    /**
+     * Prevents instantiation of the static utility class.
+     */
     private ZipExtractionUtils() {}
 
     /**
@@ -25,7 +31,11 @@ class ZipExtractionUtils {
      *
      * <p>Filters entries with dangerous name (Zip-Slip, absolute path,
      * NUL characters, etc.) and with negative compressed size,
-     * continuing to search until it finds a valid entry.</p>.
+     * continuing to search until it finds a valid entry.</p>
+     *
+     * @param zis ZIP stream to read from
+     * @return next safe entry, or {@code null} when the archive is exhausted
+     * @throws IOException when the ZIP stream cannot be read or contains invalid metadata
      */
     static ZipEntry safeNextEntry(ZipInputStream zis) throws IOException {
         ZipEntry ze;
@@ -51,6 +61,12 @@ class ZipExtractionUtils {
         return null;
     }
 
+    /**
+     * Validates an entry name against common ZIP traversal and path spoofing attacks.
+     *
+     * @param name entry name to validate
+     * @return {@code true} when the entry name is unsafe
+     */
     private static boolean nameValidation(String name) {
         if (name.isBlank()) {
             LOG.warn("Skipping entry: blank name");
@@ -84,12 +100,24 @@ class ZipExtractionUtils {
         return false;
     }
 
-    /** Validates the number of entries in the ZIP file. */
+    /**
+     * Validates the number of processed ZIP entries against the configured quota.
+     *
+     * @param count number of processed entries
+     * @throws IOException when the quota is exceeded
+     */
     static void validateEntry(int count) throws IOException {
         if (count > MAX_ENTRIES) throw new IOException("Too many entries: " + count);
     }
 
-    /** Verifies that the path is within the root directory. */
+    /**
+     * Resolves an extraction target and verifies that it stays inside the root directory.
+     *
+     * @param root extraction root directory
+     * @param name entry name to resolve
+     * @return normalized extraction target path
+     * @throws IOException when the entry attempts path traversal
+     */
     @SuppressWarnings("unused")
     static Path safeTarget(Path root, String name) throws IOException {
         /* normalized path + traversal control */
@@ -101,7 +129,14 @@ class ZipExtractionUtils {
         return out;
     }
 
-    /** Extracts the ZIP entry to the given path. */
+    /**
+     * Extracts the current ZIP entry to a filesystem path.
+     *
+     * @param zis ZIP stream positioned at the desired entry
+     * @param target output path for the extracted file
+     * @return number of written bytes
+     * @throws IOException when extraction fails
+     */
     @SuppressWarnings("unused")
     static long extractFile(ZipInputStream zis, Path target) throws IOException {
         // creates parent directories if they are missing
@@ -121,7 +156,15 @@ class ZipExtractionUtils {
         return written;
     }
 
-    /** Updates the total size and checks the inflation ratio. */
+    /**
+     * Updates the cumulative uncompressed size and validates archive inflation quotas.
+     *
+     * @param tot bytes extracted so far
+     * @param add bytes extracted for the current entry
+     * @param comp compressed size reported for the current entry
+     * @return updated cumulative extracted size
+     * @throws IOException when size or inflation quotas are exceeded
+     */
     static long checkQuotas(long tot, long add, long comp) throws IOException {
         long newTot = tot + add;
         if (newTot > MAX_TOTAL_BYTES) throw new IOException("Uncompressed too large");
@@ -130,6 +173,13 @@ class ZipExtractionUtils {
         return newTot;
     }
 
+    /**
+     * Reports whether a ZIP entry should be kept as a production Java source file.
+     *
+     * @param name ZIP entry name
+     * @param directory whether the entry is a directory
+     * @return {@code true} when the entry is a production Java source file
+     */
     static boolean shouldMaterialize(String name, boolean directory) {
         if (directory) {
             return false;

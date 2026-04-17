@@ -4,8 +4,14 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+/**
+ * Tests for {@link MethodMetrics}.
+ */
 class MethodMetricsTest {
 
+    /**
+     * Verifies that the builder produces a stable value object with record-style equality semantics.
+     */
     @Test
     void builderProducesValueObjectWithStableEquality() {
         MethodMetrics left = MethodMetrics.builder()

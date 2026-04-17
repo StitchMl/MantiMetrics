@@ -11,10 +11,23 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Builds class-level dataset rows from parsed Java source files.
+ */
 final class TypeDataFactory {
     private static final Logger LOG = LoggerFactory.getLogger(TypeDataFactory.class);
     private final JavaCompilationUnitLoader loader = new JavaCompilationUnitLoader();
 
+    /**
+     * Collects class rows from one parsed source file.
+     *
+     * @param cloneCacheKey clone-cache key prepared for the release
+     * @param sourceFile parsed source file
+     * @param repo project name
+     * @param tag release identifier
+     * @param calculator metrics calculator
+     * @return class rows extracted from the file
+     */
     List<ClassData> collect(
             String cloneCacheKey,
             ParsedSourceFile sourceFile,
@@ -28,6 +41,17 @@ final class TypeDataFactory {
         return types;
     }
 
+    /**
+     * Collects class rows from a parsed compilation unit and appends them to the sink list.
+     *
+     * @param unit parsed compilation unit
+     * @param cloneCacheKey clone-cache key prepared for the release
+     * @param sourceFile parsed source file
+     * @param repo project name
+     * @param tag release identifier
+     * @param calculator metrics calculator
+     * @param sink output list receiving the collected rows
+     */
     private void collectTypes(
             CompilationUnit unit,
             String cloneCacheKey,
