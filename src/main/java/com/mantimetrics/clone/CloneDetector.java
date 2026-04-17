@@ -39,7 +39,7 @@ public class CloneDetector {
      * @return cache key associated with the prepared clone map
      * @throws IOException when CPD analysis fails
      */
-    @SuppressWarnings({"UnusedAssignment", "MismatchedJavadocCode"})
+    @SuppressWarnings({"UnusedAssignment"})
     public static String prepareCloneMap(SourceScanResult sourceSet) throws IOException {
         String cacheKey = sourceSet.id();
         Map<String, List<LineSpan>> cloneMap = CACHE.get(cacheKey);
