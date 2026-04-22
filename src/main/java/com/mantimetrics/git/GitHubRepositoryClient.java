@@ -90,7 +90,7 @@ final class GitHubRepositoryClient {
      * @param tag tag to inspect
      * @return commit date of the tag
      */
-    private Instant fetchTagDate(String owner, String repo, String tag) {
+    Instant fetchTagDate(String owner, String repo, String tag) {
         String key = owner + '/' + repo + '@' + tag;
         return tagDateCache.computeIfAbsent(key, ignored -> {
             JsonNode node = callApi(API + REPOS + owner + "/" + repo + "/commits/" + tag);

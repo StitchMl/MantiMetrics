@@ -7,6 +7,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -114,7 +117,7 @@ final class JiraProjectReader {
         try {
             while (true) {
                 URI uri = new URIBuilder(session.searchBase())
-                        .addParameter("fields", "key,versions")
+                        .addParameter("fields", "key,versions,created")
                         .addParameter("startAt", String.valueOf(startAt))
                         .addParameter("maxResults", String.valueOf(PAGE_SIZE))
                         .build();
@@ -151,6 +154,9 @@ final class JiraProjectReader {
         }
     }
 
+    private static final DateTimeFormatter JIRA_DATE_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+
     /**
      * Extracts the minimal bug-ticket information needed by the labeling flow.
      *
@@ -164,6 +170,11 @@ final class JiraProjectReader {
                 continue;
             }
 
+            String createdRaw = issue.path("fields").path("created").asText(null);
+            Instant createdDate = (createdRaw != null && !createdRaw.isBlank())
+                    ? OffsetDateTime.parse(createdRaw, JIRA_DATE_FORMAT).toInstant()
+                    : Instant.EPOCH;
+
             Set<String> affectedVersions = new LinkedHashSet<>();
             JsonNode versionNodes = issue.path("fields").path("versions");
             if (versionNodes.isArray()) {
@@ -175,7 +186,7 @@ final class JiraProjectReader {
                 });
             }
 
-            tickets.add(new JiraBugTicket(key, List.copyOf(affectedVersions)));
+            tickets.add(new JiraBugTicket(key, createdDate, List.copyOf(affectedVersions)));
         }
     }
 }

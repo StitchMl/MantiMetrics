@@ -14,7 +14,7 @@ public final class DatasetColumns {
             "Project", "Path", "Method", "Class", "ReleaseId"
     );
     private static final List<String> ACTIONABLE_COLUMNS = List.of(
-            "CodeSmells", NSMELLS, "isLongMethod", "isGodClass", "isFeatureEnvy", "isDuplicatedCode"
+            "CodeSmells", NSMELLS, "SmellDensity", "isLongMethod", "isGodClass", "isFeatureEnvy", "isDuplicatedCode"
     );
     private static final Set<String> IDENTIFIER_COLUMN_SET = Set.copyOf(IDENTIFIER_COLUMNS);
     private static final Set<String> NOMINAL_COLUMNS = Set.of("prevBuggy", BUGGY);
