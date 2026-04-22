@@ -47,6 +47,7 @@ final class DatasetCsvFormatter {
                 .add(binaryFlag(data.metrics().isDuplicatedCode()))
                 .add(String.valueOf(data.codeSmells()))
                 .add(String.valueOf(data.nSmells()))
+                .add(String.format(java.util.Locale.ROOT, "%.4f", data.nSmells() / (double) Math.max(data.metrics().getLoc(), 1)))
                 .add(String.valueOf(data.touches()))
                 .add(String.valueOf(data.totalTouches()))
                 .add(String.valueOf(data.issueTouches()))

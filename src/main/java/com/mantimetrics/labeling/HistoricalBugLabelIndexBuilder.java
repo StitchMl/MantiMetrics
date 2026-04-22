@@ -15,7 +15,9 @@ import java.util.Set;
 /**
  * Builds the historical labeling oracle used by the milestone-1 dataset.
  * The implementation prefers affected versions when they are consistent and falls back to
- * the simplified "Total" strategy endorsed by the assignment when JIRA metadata is incomplete.
+ * the Proportion algorithm (Predicted_IV = FV - (FV - OV) * P) when JIRA metadata is incomplete.
+ * P is calibrated from tickets that do have affected versions; defaults to 1.0 when no training
+ * data is available (equivalent to IV = OV).
  */
 public final class HistoricalBugLabelIndexBuilder {
 
@@ -44,9 +46,11 @@ public final class HistoricalBugLabelIndexBuilder {
         Map<String, Set<String>> touchedPathsByTicket = new HashMap<>();
         collectFixHistory(releaseHistory, timeline, ticketsByKey.keySet(), fixReleaseByTicket, touchedPathsByTicket);
 
+        double proportionP = computeProportionP(ticketsByKey, fixReleaseByTicket, timeline);
+
         Map<String, Set<String>> buggyPathsByRelease = new HashMap<>();
         int withAffectedVersions = 0;
-        int withTotalFallback = 0;
+        int withProportionFallback = 0;
 
         for (Map.Entry<String, Integer> entry : fixReleaseByTicket.entrySet()) {
             JiraBugTicket ticket = ticketsByKey.get(entry.getKey());
@@ -55,11 +59,13 @@ public final class HistoricalBugLabelIndexBuilder {
             }
 
             int fixIndex = entry.getValue();
-            int injectedIndex = resolveInjectedVersionIndex(ticket, timeline, fixIndex);
-            if (ticket.hasAffectedVersions() && injectedIndex < fixIndex) {
+            boolean hadAffectedVersions = ticket.hasAffectedVersions();
+            int injectedIndex = resolveInjectedVersionIndex(ticket, timeline, fixIndex, proportionP);
+
+            if (hadAffectedVersions && injectedIndex < fixIndex) {
                 withAffectedVersions++;
-            } else {
-                withTotalFallback++;
+            } else if (!hadAffectedVersions && injectedIndex < fixIndex) {
+                withProportionFallback++;
             }
 
             if (injectedIndex >= fixIndex) {
@@ -76,16 +82,17 @@ public final class HistoricalBugLabelIndexBuilder {
         return new HistoricalBugLabelIndex(
                 immutableSetValues(buggyPathsByRelease),
                 new HistoricalBugLabelIndex.Summary(
-                        "affected-versions-else-total",
+                        "proportion-fallback",
                         resolvedTickets.size(),
                         fixReleaseByTicket.size(),
                         withAffectedVersions,
-                        withTotalFallback,
+                        withProportionFallback,
                         timeline.size(),
                         datasetTags.size(),
-                        "The oracle uses the full release history available today. When Jira affected versions are missing "
-                                + "or inconsistent, the injected version falls back to the first release in the timeline "
-                                + "to match the simplified Total policy allowed by the assignment."
+                        "The oracle uses affected versions when available. When absent, the injected version "
+                                + "is predicted via the Proportion algorithm (mean P="
+                                + String.format("%.4f", proportionP)
+                                + "). When no calibration data exists, P defaults to 1.0 (IV=OV)."
                 )
         );
     }
@@ -140,14 +147,75 @@ public final class HistoricalBugLabelIndexBuilder {
     }
 
     /**
-     * Resolves the injected version index for a ticket using affected versions when they are consistent.
+     * Computes the mean proportion P = mean((FV - IV) / (FV - OV)) calibrated from tickets
+     * that have known affected versions. Returns 1.0 when no training data is available,
+     * which causes the Proportion formula to predict IV = OV (conservative fallback).
+     *
+     * @param ticketsByKey ticket index
+     * @param fixReleaseByTicket earliest fixing release index per ticket
+     * @param timeline complete release timeline with optional tag dates
+     * @return calibrated proportion P in [0, 1]
+     */
+    private double computeProportionP(
+            Map<String, JiraBugTicket> ticketsByKey,
+            Map<String, Integer> fixReleaseByTicket,
+            ReleaseTimeline timeline
+    ) {
+        double sum = 0.0;
+        int count = 0;
+
+        for (Map.Entry<String, Integer> entry : fixReleaseByTicket.entrySet()) {
+            JiraBugTicket ticket = ticketsByKey.get(entry.getKey());
+            if (ticket == null || !ticket.hasAffectedVersions()) {
+                continue;
+            }
+
+            int fv = entry.getValue();
+            int ov = timeline.findOpeningVersionIndex(ticket.createdDate());
+
+            List<Integer> candidates = new ArrayList<>();
+            for (String av : ticket.affectedVersions()) {
+                OptionalInt idx = timeline.findIndex(av);
+                if (idx.isPresent() && idx.getAsInt() < fv) {
+                    candidates.add(idx.getAsInt());
+                }
+            }
+            if (candidates.isEmpty()) {
+                continue;
+            }
+            int iv = candidates.stream().min(Integer::compareTo).orElseThrow();
+
+            int denominator = fv - ov;
+            if (denominator <= 0) {
+                continue;
+            }
+
+            double p = (double) (fv - iv) / denominator;
+            p = Math.min(1.0, Math.max(0.0, p));
+            sum += p;
+            count++;
+        }
+
+        return count == 0 ? 1.0 : sum / count;
+    }
+
+    /**
+     * Resolves the injected version index for a ticket.
+     * Uses JIRA affected versions when they are consistent, otherwise applies the Proportion algorithm.
      *
      * @param ticket resolved bug ticket being labeled
      * @param timeline complete release timeline
      * @param fixIndex release index where the fix was observed
-     * @return injected release index, or {@code 0} when the fallback Total strategy is required
+     * @param proportionP calibrated proportion P used when affected versions are absent
+     * @return injected release index; returns {@code fixIndex} when no valid range can be determined
      */
-    private int resolveInjectedVersionIndex(JiraBugTicket ticket, ReleaseTimeline timeline, int fixIndex) {
+    private int resolveInjectedVersionIndex(
+            JiraBugTicket ticket,
+            ReleaseTimeline timeline,
+            int fixIndex,
+            double proportionP
+    ) {
+        // Preferred path: use JIRA affected versions
         List<Integer> candidates = new ArrayList<>();
         for (String affectedVersion : ticket.affectedVersions()) {
             OptionalInt index = timeline.findIndex(affectedVersion);
@@ -158,7 +226,14 @@ public final class HistoricalBugLabelIndexBuilder {
         if (!candidates.isEmpty()) {
             return candidates.stream().min(Integer::compareTo).orElse(0);
         }
-        return 0;
+
+        // Proportion fallback: Predicted_IV = FV - (FV - OV) * P
+        int ov = timeline.findOpeningVersionIndex(ticket.createdDate());
+        if (ov >= fixIndex) {
+            return fixIndex;  // no valid range; ticket opened after its fix release
+        }
+        int predicted = (int) Math.round(fixIndex - (fixIndex - ov) * proportionP);
+        return Math.max(ov, Math.min(predicted, fixIndex - 1));
     }
 
     /**

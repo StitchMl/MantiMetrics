@@ -11,8 +11,11 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -64,7 +67,13 @@ public final class ProjectReleasePlanner {
         LOG.info("{} - {} historical releases available for snoring/labeling", repo, chronologicalTags.size());
         LOG.info("Found {} resolved bug tickets", resolvedTickets.size());
 
-        return new ProjectReleasePlan(owner, repo, new ReleaseTimeline(chronologicalTags), selectedTags, resolvedTickets);
+        Map<String, Instant> tagDates = new LinkedHashMap<>();
+        for (String tag : chronologicalTags) {
+            tagDates.put(tag, gitService.getTagDate(owner, repo, tag));
+        }
+        return new ProjectReleasePlan(owner, repo,
+                new ReleaseTimeline(chronologicalTags, tagDates),
+                selectedTags, resolvedTickets);
     }
 
     /**

@@ -4,6 +4,7 @@ import com.mantimetrics.parser.SourceScanResult;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -47,6 +48,18 @@ public final class GitService {
      */
     public List<String> listTags(String owner, String repo) {
         return repositoryClient.listTags(owner, repo);
+    }
+
+    /**
+     * Returns the commit date associated with a tag, using the cached value when available.
+     *
+     * @param owner repository owner
+     * @param repo repository name
+     * @param tag tag to inspect
+     * @return commit date of the tag
+     */
+    public Instant getTagDate(String owner, String repo, String tag) {
+        return repositoryClient.fetchTagDate(owner, repo, tag);
     }
 
     /**
