@@ -44,7 +44,7 @@ class DatasetRowModelTest {
                 .build();
 
         assertEquals(
-                "repo,/src/main/java/com/acme/Foo.java/,\"void run(String value)\",v1,10,4,3,2,5,6,7,8,9.0,10.0,11.0,12.0,13.0,2,1,0,1,0,2,4,0.4000,3,5,1,2,1,2,10,4,14,20,1,2,no,yes",
+                "repo,/src/main/java/com/acme/Foo.java/,\"void run(String value)\",v1,10,4,3,2,5,6,7,8,9.0,10.0,11.0,12.0,13.0,2,1,0,1,0,2,4,0.4000,0,0,0,0,3,5,1,2,1,2,10,4,14,20,1,2,no,yes",
                 method.toCsvLine());
     }
 
@@ -80,7 +80,7 @@ class DatasetRowModelTest {
                 .build();
 
         assertEquals(
-                "repo,/src/main/java/com/acme/Foo.java/,\"com.acme.Foo\",v1,10,4,3,2,5,6,7,8,9.0,10.0,11.0,12.0,13.0,2,1,0,1,0,4,6,0.6000,5,8,2,3,1,2,9,1,10,15,2,3,yes,no",
+                "repo,/src/main/java/com/acme/Foo.java/,\"com.acme.Foo\",v1,10,4,3,2,5,6,7,8,9.0,10.0,11.0,12.0,13.0,2,1,0,1,0,4,6,0.6000,0,0,0,0,5,8,2,3,1,2,9,1,10,15,2,3,yes,no",
                 type.toCsvLine());
     }
 

@@ -38,13 +38,15 @@ public final class MilestoneAuditService {
      * @param timelineReleaseCount number of releases in the full historical timeline
      * @param selectedReleaseCount number of releases kept for dataset generation
      * @param labelingSummary summary of the historical labeling strategy
+     * @param linkageRate proportion of commits linked to a Jira ticket (issueLinked / total)
      * @throws IOException when the audit file cannot be written
      */
     public void write(
             Path rawCsvPath,
             int timelineReleaseCount,
             int selectedReleaseCount,
-            HistoricalBugLabelIndex.Summary labelingSummary
+            HistoricalBugLabelIndex.Summary labelingSummary,
+            double linkageRate
     ) throws IOException {
         DatasetTable table = tableReader.read(rawCsvPath);
         Map<String, Object> audit = new LinkedHashMap<>();
@@ -58,6 +60,10 @@ public final class MilestoneAuditService {
         audit.put("smellyRows", countGreaterThanZero(table, DatasetColumns.NSMELLS));
         audit.put("requiredSmellColumnsPresent",
                 table.header().contains("CodeSmells") && table.header().contains(DatasetColumns.NSMELLS));
+        audit.put("linkageRate", String.format(java.util.Locale.ROOT, "%.4f", linkageRate));
+        audit.put("linkageRateNote",
+                "Proportion of commits touching Java files that carry at least one Jira issue key. "
+                        + "Values below 0.20 indicate poor traceability and reduced label reliability.");
 
         Map<String, Object> snoring = new LinkedHashMap<>();
         snoring.put("timelineReleaseCount", timelineReleaseCount);

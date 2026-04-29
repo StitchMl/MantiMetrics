@@ -38,7 +38,9 @@ public final class CSVWriter {
                 "TotalOperators", "TotalOperands",
                 "Vocabulary", "Length", "Volume", "Difficulty", "Effort",
                 "MaxNestingDepth", "isLongMethod", "isGodClass", "isFeatureEnvy",
-                "isDuplicatedCode", "CodeSmells", "NSmells", "SmellDensity", "Touches", "TotalTouches",
+                "isDuplicatedCode", "CodeSmells", "NSmells", "SmellDensity",
+                "maxLOC", "maxCyclomatic", "maxCognitive", "maxNSmells",
+                "Touches", "TotalTouches",
                 "IssueTouches", "TotalIssueTouches", "Authors", "TotalAuthors",
                 "AddedLines", "DeletedLines", "Churn", "TotalChurn", "prevCodeSmells", "AgeInReleases",
                 "prevBuggy", "Buggy"

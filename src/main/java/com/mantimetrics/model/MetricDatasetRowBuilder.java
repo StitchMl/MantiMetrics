@@ -34,6 +34,10 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
     protected int ageInReleases;
     protected int startLine;
     protected int endLine;
+    protected int maxLoc;
+    protected int maxCyclomatic;
+    protected int maxCognitive;
+    protected int maxNSmells;
 
     /**
      * Sets the analyzed project name.
@@ -305,7 +309,11 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
                 .prevBuggy(data.prevBuggy())
                 .ageInReleases(data.ageInReleases())
                 .startLine(data.startLine())
-                .endLine(data.endLine());
+                .endLine(data.endLine())
+                .maxLoc(data.maxLoc())
+                .maxCyclomatic(data.maxCyclomatic())
+                .maxCognitive(data.maxCognitive())
+                .maxNSmells(data.maxNSmells());
     }
 
     /**
@@ -337,7 +345,11 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
                 prevBuggy,
                 ageInReleases,
                 startLine,
-                endLine);
+                endLine,
+                maxLoc,
+                maxCyclomatic,
+                maxCognitive,
+                maxNSmells);
     }
 
     /**
@@ -349,6 +361,50 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
         Objects.requireNonNull(releaseId, "releaseId missing");
         Objects.requireNonNull(metrics, "metrics missing");
         Objects.requireNonNull(commitHashes, "commitHashes missing");
+    }
+
+    /**
+     * Sets the maximum LOC seen across all releases (asterisk feature).
+     *
+     * @param value max LOC
+     * @return current builder
+     */
+    public final T maxLoc(int value) {
+        this.maxLoc = value;
+        return self();
+    }
+
+    /**
+     * Sets the maximum cyclomatic complexity seen across all releases (asterisk feature).
+     *
+     * @param value max cyclomatic
+     * @return current builder
+     */
+    public final T maxCyclomatic(int value) {
+        this.maxCyclomatic = value;
+        return self();
+    }
+
+    /**
+     * Sets the maximum cognitive complexity seen across all releases (asterisk feature).
+     *
+     * @param value max cognitive
+     * @return current builder
+     */
+    public final T maxCognitive(int value) {
+        this.maxCognitive = value;
+        return self();
+    }
+
+    /**
+     * Sets the maximum total smell count seen across all releases (asterisk feature).
+     *
+     * @param value max nSmells
+     * @return current builder
+     */
+    public final T maxNSmells(int value) {
+        this.maxNSmells = value;
+        return self();
     }
 
     /**
