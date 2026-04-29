@@ -132,7 +132,9 @@ class HistoricalBugLabelIndexBuilderTest {
                 fileToIssueKeys,
                 Map.of(),
                 Map.of(),
-                Map.of()
+                Map.of(),
+                0,
+                0
         ));
     }
 }

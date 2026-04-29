@@ -27,6 +27,8 @@ final class ReleaseCommitDataBuilder {
         Map<String, List<String>> authorMap = new HashMap<>();
         Map<String, Integer> additionsMap = new HashMap<>();
         Map<String, Integer> deletionsMap = new HashMap<>();
+        Set<String> javaCommitShas = new LinkedHashSet<>();
+        Set<String> issueLinkedJavaCommitShas = new LinkedHashSet<>();
 
         for (ReleaseCommitSnapshot commit : commits) {
             Set<ReleaseCommitFile> javaFiles = commit.files().stream()
@@ -36,6 +38,8 @@ final class ReleaseCommitDataBuilder {
             if (javaFiles.isEmpty()) {
                 continue;
             }
+
+            javaCommitShas.add(commit.sha());
 
             Set<String> javaPaths = javaFiles.stream()
                     .map(ReleaseCommitFile::path)
@@ -52,6 +56,7 @@ final class ReleaseCommitDataBuilder {
 
             List<String> issueKeys = IssueKeySupport.extractKeys(commit.message());
             if (!issueKeys.isEmpty()) {
+                issueLinkedJavaCommitShas.add(commit.sha());
                 for (String file : javaPaths) {
                     issueTouchMap.computeIfAbsent(file, ignored -> new ArrayList<>()).add(commit.sha());
                 }
@@ -65,7 +70,9 @@ final class ReleaseCommitDataBuilder {
                 immutableCopy(fileToIssueKeys),
                 immutableCopy(authorMap),
                 Map.copyOf(additionsMap),
-                Map.copyOf(deletionsMap)
+                Map.copyOf(deletionsMap),
+                javaCommitShas.size(),
+                issueLinkedJavaCommitShas.size()
         );
     }
 

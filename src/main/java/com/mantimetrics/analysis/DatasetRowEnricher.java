@@ -1,6 +1,7 @@
 package com.mantimetrics.analysis;
 
 import com.mantimetrics.history.RowHistoryState;
+import com.mantimetrics.metrics.MethodMetrics;
 import com.mantimetrics.model.ClassData;
 import com.mantimetrics.model.DatasetRow;
 import com.mantimetrics.model.MethodData;
@@ -31,11 +32,13 @@ final class DatasetRowEnricher {
         for (MethodData row : rows) {
             String relativePath = normalizedPath(row);
             List<String> commits = request.commitData().touchesFor(relativePath);
-            RowHistoryState historyState = updateHistory(row.getUniqueKey(), relativePath, request);
+            int currentCodeSmells = codeSmellsForRow(row, violationIndex);
+            RowHistoryState historyState = updateHistory(
+                    row.getUniqueKey(), relativePath, request, row.getMetrics(), currentCodeSmells);
             MethodData previous = request.previousRows().get(row.getUniqueKey()) instanceof MethodData method ? method : null;
             result.add(row.toBuilder()
                     .commitHashes(commits)
-                    .codeSmells(codeSmellsForRow(row, violationIndex))
+                    .codeSmells(currentCodeSmells)
                     .issueTouches(request.commitData().issueTouchesFor(relativePath).size())
                     .totalIssueTouches(historyState.totalIssueTouches())
                     .touches(commits.size())
@@ -50,6 +53,10 @@ final class DatasetRowEnricher {
                     .ageInReleases(historyState.ageInReleases())
                     .buggy(isBuggyRow(request.tag(), relativePath, request))
                     .prevBuggy(previous != null && previous.isBuggy())
+                    .maxLoc(historyState.maxLoc())
+                    .maxCyclomatic(historyState.maxCyclomatic())
+                    .maxCognitive(historyState.maxCognitive())
+                    .maxNSmells(historyState.maxNSmells())
                     .build());
         }
         return result;
@@ -72,11 +79,13 @@ final class DatasetRowEnricher {
         for (ClassData row : rows) {
             String relativePath = normalizedPath(row);
             List<String> commits = request.commitData().touchesFor(relativePath);
-            RowHistoryState historyState = updateHistory(row.getUniqueKey(), relativePath, request);
+            int currentCodeSmells = codeSmellsForRow(row, violationIndex);
+            RowHistoryState historyState = updateHistory(
+                    row.getUniqueKey(), relativePath, request, row.getMetrics(), currentCodeSmells);
             ClassData previous = request.previousRows().get(row.getUniqueKey()) instanceof ClassData type ? type : null;
             result.add(row.toBuilder()
                     .commitHashes(commits)
-                    .codeSmells(codeSmellsForRow(row, violationIndex))
+                    .codeSmells(currentCodeSmells)
                     .issueTouches(request.commitData().issueTouchesFor(relativePath).size())
                     .totalIssueTouches(historyState.totalIssueTouches())
                     .touches(commits.size())
@@ -91,6 +100,10 @@ final class DatasetRowEnricher {
                     .ageInReleases(historyState.ageInReleases())
                     .buggy(isBuggyRow(request.tag(), relativePath, request))
                     .prevBuggy(previous != null && previous.isBuggy())
+                    .maxLoc(historyState.maxLoc())
+                    .maxCyclomatic(historyState.maxCyclomatic())
+                    .maxCognitive(historyState.maxCognitive())
+                    .maxNSmells(historyState.maxNSmells())
                     .build());
         }
         return result;
@@ -98,13 +111,22 @@ final class DatasetRowEnricher {
 
     /**
      * Updates the cumulative history state associated with a dataset row and returns the refreshed value.
+     * Computes the current nSmells internally from the provided metrics and codeSmells count.
      *
      * @param uniqueKey stable dataset identifier for the row
      * @param relativePath normalized relative source path
      * @param request immutable release request carrying commit history and the mutable store
+     * @param metrics current-release static metrics for the entity
+     * @param currentCodeSmells PMD violation count for the entity in the current release
      * @return updated history state after processing the current release
      */
-    private RowHistoryState updateHistory(String uniqueKey, String relativePath, ReleaseDatasetRequest request) {
+    private RowHistoryState updateHistory(
+            String uniqueKey,
+            String relativePath,
+            ReleaseDatasetRequest request,
+            MethodMetrics metrics,
+            int currentCodeSmells
+    ) {
         RowHistoryState previous = request.historyStore().get(uniqueKey);
         List<String> currentAuthors = distinctAuthors(request.commitData().authorsFor(relativePath));
         List<String> totalAuthors = new ArrayList<>();
@@ -115,12 +137,22 @@ final class DatasetRowEnricher {
                 .filter(author -> !totalAuthors.contains(author))
                 .forEach(totalAuthors::add);
 
+        int binarySmells = (metrics.isLongMethod() ? 1 : 0)
+                + (metrics.isGodClass() ? 1 : 0)
+                + (metrics.isFeatureEnvy() ? 1 : 0)
+                + (metrics.isDuplicatedCode() ? 1 : 0);
+        int currentNSmells = currentCodeSmells + binarySmells;
+
         RowHistoryState updated = new RowHistoryState(
                 (previous != null ? previous.totalTouches() : 0) + request.commitData().touchesFor(relativePath).size(),
                 (previous != null ? previous.totalIssueTouches() : 0) + request.commitData().issueTouchesFor(relativePath).size(),
                 (previous != null ? previous.totalChurn() : 0) + request.commitData().churnFor(relativePath),
                 totalAuthors,
-                previous != null ? previous.ageInReleases() + 1 : 1
+                previous != null ? previous.ageInReleases() + 1 : 1,
+                Math.max(previous != null ? previous.maxLoc() : 0, metrics.getLoc()),
+                Math.max(previous != null ? previous.maxCyclomatic() : 0, metrics.getCyclomatic()),
+                Math.max(previous != null ? previous.maxCognitive() : 0, metrics.getCognitive()),
+                Math.max(previous != null ? previous.maxNSmells() : 0, currentNSmells)
         );
         request.historyStore().put(uniqueKey, updated);
         return updated;

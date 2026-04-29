@@ -96,7 +96,7 @@ public final class ProjectProcessor {
             closeContexts(contexts);
         }
 
-        generateArtifacts(csvPaths, plan, labelIndex);
+        generateArtifacts(csvPaths, plan, labelIndex, releaseHistory);
     }
 
     /**
@@ -174,8 +174,10 @@ public final class ProjectProcessor {
     private void generateArtifacts(
             Map<Granularity, Path> csvPaths,
             ProjectReleasePlan plan,
-            HistoricalBugLabelIndex labelIndex
+            HistoricalBugLabelIndex labelIndex,
+            List<ReleaseSnapshot> releaseHistory
     ) {
+        double linkageRate = computeLinkageRate(releaseHistory);
         for (Path csvPath : csvPaths.values()) {
             try {
                 datasetArtifactService.generate(csvPath);
@@ -183,12 +185,30 @@ public final class ProjectProcessor {
                         csvPath,
                         plan.timeline().size(),
                         plan.selectedTags().size(),
-                        labelIndex.summary()
+                        labelIndex.summary(),
+                        linkageRate
                 );
             } catch (IOException exception) {
                 throw new ReleaseProcessingException("I/O error when generating derived dataset artifacts", exception);
             }
         }
+    }
+
+    /**
+     * Computes the project-level linkage rate as the proportion of unique commits (touching at least one
+     * Java file) that carry a Jira issue key, aggregated across the full release history.
+     *
+     * @param releaseHistory complete list of preloaded release snapshots
+     * @return linkage rate in [0.0, 1.0], or 0.0 when no Java commits are found
+     */
+    private double computeLinkageRate(List<ReleaseSnapshot> releaseHistory) {
+        long totalJava = releaseHistory.stream()
+                .mapToLong(s -> s.commitData().totalJavaCommits())
+                .sum();
+        long linkedJava = releaseHistory.stream()
+                .mapToLong(s -> s.commitData().issueLinkedJavaCommits())
+                .sum();
+        return totalJava == 0 ? 0.0 : (double) linkedJava / totalJava;
     }
 
     /**

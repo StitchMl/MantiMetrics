@@ -12,6 +12,8 @@ import java.util.Map;
  * @param authorMap authors touching each file
  * @param additionsMap added lines per file
  * @param deletionsMap deleted lines per file
+ * @param totalJavaCommits total number of unique commits that touched at least one Java file
+ * @param issueLinkedJavaCommits number of unique commits with a Jira key that touched at least one Java file
  */
 public record ReleaseCommitData(
         Map<String, List<String>> touchMap,
@@ -19,7 +21,9 @@ public record ReleaseCommitData(
         Map<String, List<String>> fileToIssueKeys,
         Map<String, List<String>> authorMap,
         Map<String, Integer> additionsMap,
-        Map<String, Integer> deletionsMap
+        Map<String, Integer> deletionsMap,
+        int totalJavaCommits,
+        int issueLinkedJavaCommits
 ) {
     /**
      * Returns the commit SHAs touching a file in the current release range.

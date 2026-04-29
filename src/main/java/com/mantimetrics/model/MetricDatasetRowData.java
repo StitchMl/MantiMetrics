@@ -29,37 +29,19 @@ import java.util.List;
  * @param ageInReleases number of analyzed releases in which the entity exists
  * @param startLine inclusive start line of the entity
  * @param endLine inclusive end line of the entity
+ * @param maxLoc maximum LOC seen across all releases up to the current one (asterisk feature)
+ * @param maxCyclomatic maximum cyclomatic complexity seen across all releases (asterisk feature)
+ * @param maxCognitive maximum cognitive complexity seen across all releases (asterisk feature)
+ * @param maxNSmells maximum total smell count seen across all releases (asterisk feature)
  */
 record MetricDatasetRowData(String projectName, String path, String releaseId, MethodMetrics metrics,
                             List<String> commitHashes, boolean buggy, int codeSmells, int touches, int totalTouches,
                             int issueTouches, int totalIssueTouches, int authors, int totalAuthors, int addedLines,
                             int deletedLines, int churn, int totalChurn, int prevCodeSmells, boolean prevBuggy,
-                            int ageInReleases, int startLine, int endLine) {
+                            int ageInReleases, int startLine, int endLine,
+                            int maxLoc, int maxCyclomatic, int maxCognitive, int maxNSmells) {
     /**
      * Creates an immutable shared dataset payload, copying the commit hash list defensively.
-     *
-     * @param projectName analyzed project name
-     * @param path normalized relative source path
-     * @param releaseId release identifier
-     * @param metrics static metrics computed for the entity
-     * @param commitHashes commits touching the entity in the current release range
-     * @param buggy whether the entity is historically labeled as buggy in the current release
-     * @param codeSmells PMD code smell count for the entity
-     * @param touches commits touching the entity in the current release
-     * @param totalTouches cumulative touches across releases
-     * @param issueTouches issue-linked touches in the current release
-     * @param totalIssueTouches cumulative issue-linked touches across releases
-     * @param authors distinct authors in the current release
-     * @param totalAuthors cumulative distinct authors across releases
-     * @param addedLines lines added in the current release
-     * @param deletedLines lines deleted in the current release
-     * @param churn sum of added and deleted lines in the current release
-     * @param totalChurn cumulative churn across releases
-     * @param prevCodeSmells code smell count observed in the previous release
-     * @param prevBuggy whether the entity was buggy in the previous release
-     * @param ageInReleases number of analyzed releases in which the entity exists
-     * @param startLine inclusive start line of the entity
-     * @param endLine inclusive end line of the entity
      */
     MetricDatasetRowData(
             String projectName,
@@ -83,7 +65,11 @@ record MetricDatasetRowData(String projectName, String path, String releaseId, M
             boolean prevBuggy,
             int ageInReleases,
             int startLine,
-            int endLine
+            int endLine,
+            int maxLoc,
+            int maxCyclomatic,
+            int maxCognitive,
+            int maxNSmells
     ) {
         this.projectName = projectName;
         this.path = path;
@@ -107,6 +93,10 @@ record MetricDatasetRowData(String projectName, String path, String releaseId, M
         this.ageInReleases = ageInReleases;
         this.startLine = startLine;
         this.endLine = endLine;
+        this.maxLoc = maxLoc;
+        this.maxCyclomatic = maxCyclomatic;
+        this.maxCognitive = maxCognitive;
+        this.maxNSmells = maxNSmells;
     }
 
     /**
