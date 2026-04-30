@@ -57,6 +57,23 @@ final class DatasetRowEnricher {
                     .maxCyclomatic(historyState.maxCyclomatic())
                     .maxCognitive(historyState.maxCognitive())
                     .maxNSmells(historyState.maxNSmells())
+                    .maxStmtCount(historyState.maxStmtCount())
+                    .maxDistinctOperators(historyState.maxDistinctOperators())
+                    .maxDistinctOperands(historyState.maxDistinctOperands())
+                    .maxTotalOperators(historyState.maxTotalOperators())
+                    .maxTotalOperands(historyState.maxTotalOperands())
+                    .maxVocabulary(historyState.maxVocabulary())
+                    .maxLength(historyState.maxLength())
+                    .maxVolume(historyState.maxVolume())
+                    .maxDifficulty(historyState.maxDifficulty())
+                    .maxEffort(historyState.maxEffort())
+                    .maxNestingDepth(historyState.maxNestingDepth())
+                    .everLongMethod(historyState.everLongMethod())
+                    .everGodClass(historyState.everGodClass())
+                    .everFeatureEnvy(historyState.everFeatureEnvy())
+                    .everDuplicatedCode(historyState.everDuplicatedCode())
+                    .maxCodeSmells(historyState.maxCodeSmells())
+                    .maxSmellDensity(historyState.maxSmellDensity())
                     .build());
         }
         return result;
@@ -104,6 +121,23 @@ final class DatasetRowEnricher {
                     .maxCyclomatic(historyState.maxCyclomatic())
                     .maxCognitive(historyState.maxCognitive())
                     .maxNSmells(historyState.maxNSmells())
+                    .maxStmtCount(historyState.maxStmtCount())
+                    .maxDistinctOperators(historyState.maxDistinctOperators())
+                    .maxDistinctOperands(historyState.maxDistinctOperands())
+                    .maxTotalOperators(historyState.maxTotalOperators())
+                    .maxTotalOperands(historyState.maxTotalOperands())
+                    .maxVocabulary(historyState.maxVocabulary())
+                    .maxLength(historyState.maxLength())
+                    .maxVolume(historyState.maxVolume())
+                    .maxDifficulty(historyState.maxDifficulty())
+                    .maxEffort(historyState.maxEffort())
+                    .maxNestingDepth(historyState.maxNestingDepth())
+                    .everLongMethod(historyState.everLongMethod())
+                    .everGodClass(historyState.everGodClass())
+                    .everFeatureEnvy(historyState.everFeatureEnvy())
+                    .everDuplicatedCode(historyState.everDuplicatedCode())
+                    .maxCodeSmells(historyState.maxCodeSmells())
+                    .maxSmellDensity(historyState.maxSmellDensity())
                     .build());
         }
         return result;
@@ -142,6 +176,7 @@ final class DatasetRowEnricher {
                 + (metrics.isFeatureEnvy() ? 1 : 0)
                 + (metrics.isDuplicatedCode() ? 1 : 0);
         int currentNSmells = currentCodeSmells + binarySmells;
+        double currentSmellDensity = currentNSmells / (double) Math.max(metrics.getLoc(), 1);
 
         RowHistoryState updated = new RowHistoryState(
                 (previous != null ? previous.totalTouches() : 0) + request.commitData().touchesFor(relativePath).size(),
@@ -152,7 +187,24 @@ final class DatasetRowEnricher {
                 Math.max(previous != null ? previous.maxLoc() : 0, metrics.getLoc()),
                 Math.max(previous != null ? previous.maxCyclomatic() : 0, metrics.getCyclomatic()),
                 Math.max(previous != null ? previous.maxCognitive() : 0, metrics.getCognitive()),
-                Math.max(previous != null ? previous.maxNSmells() : 0, currentNSmells)
+                Math.max(previous != null ? previous.maxNSmells() : 0, currentNSmells),
+                Math.max(previous != null ? previous.maxStmtCount() : 0, metrics.getStmtCount()),
+                Math.max(previous != null ? previous.maxDistinctOperators() : 0, metrics.getDistinctOperators()),
+                Math.max(previous != null ? previous.maxDistinctOperands() : 0, metrics.getDistinctOperands()),
+                Math.max(previous != null ? previous.maxTotalOperators() : 0, metrics.getTotalOperators()),
+                Math.max(previous != null ? previous.maxTotalOperands() : 0, metrics.getTotalOperands()),
+                Math.max(previous != null ? previous.maxVocabulary() : 0.0, metrics.getVocabulary()),
+                Math.max(previous != null ? previous.maxLength() : 0.0, metrics.getLength()),
+                Math.max(previous != null ? previous.maxVolume() : 0.0, metrics.getVolume()),
+                Math.max(previous != null ? previous.maxDifficulty() : 0.0, metrics.getDifficulty()),
+                Math.max(previous != null ? previous.maxEffort() : 0.0, metrics.getEffort()),
+                Math.max(previous != null ? previous.maxNestingDepth() : 0, metrics.getMaxNestingDepth()),
+                (previous != null && previous.everLongMethod()) || metrics.isLongMethod(),
+                (previous != null && previous.everGodClass()) || metrics.isGodClass(),
+                (previous != null && previous.everFeatureEnvy()) || metrics.isFeatureEnvy(),
+                (previous != null && previous.everDuplicatedCode()) || metrics.isDuplicatedCode(),
+                Math.max(previous != null ? previous.maxCodeSmells() : 0, currentCodeSmells),
+                Math.max(previous != null ? previous.maxSmellDensity() : 0.0, currentSmellDensity)
         );
         request.historyStore().put(uniqueKey, updated);
         return updated;

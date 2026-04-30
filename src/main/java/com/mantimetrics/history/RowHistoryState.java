@@ -16,6 +16,23 @@ import java.util.Objects;
  * @param maxCyclomatic maximum cyclomatic complexity observed across all releases
  * @param maxCognitive maximum cognitive complexity observed across all releases
  * @param maxNSmells maximum total smell count (PMD + binary detectors) observed across all releases
+ * @param maxStmtCount maximum statement count observed across all releases
+ * @param maxDistinctOperators maximum distinct Halstead operators observed across all releases
+ * @param maxDistinctOperands maximum distinct Halstead operands observed across all releases
+ * @param maxTotalOperators maximum total Halstead operators observed across all releases
+ * @param maxTotalOperands maximum total Halstead operands observed across all releases
+ * @param maxVocabulary maximum Halstead vocabulary observed across all releases
+ * @param maxLength maximum Halstead length observed across all releases
+ * @param maxVolume maximum Halstead volume observed across all releases
+ * @param maxDifficulty maximum Halstead difficulty observed across all releases
+ * @param maxEffort maximum Halstead effort observed across all releases
+ * @param maxNestingDepth maximum nesting depth observed across all releases
+ * @param everLongMethod whether the entity was ever flagged as long method
+ * @param everGodClass whether the entity was ever flagged as God Class
+ * @param everFeatureEnvy whether the entity was ever flagged as Feature Envy
+ * @param everDuplicatedCode whether the entity was ever flagged as duplicated code
+ * @param maxCodeSmells maximum PMD violation count observed across all releases
+ * @param maxSmellDensity maximum smell density (NSmells/LOC) observed across all releases
  */
 public record RowHistoryState(
         int totalTouches,
@@ -26,20 +43,27 @@ public record RowHistoryState(
         int maxLoc,
         int maxCyclomatic,
         int maxCognitive,
-        int maxNSmells
+        int maxNSmells,
+        int maxStmtCount,
+        int maxDistinctOperators,
+        int maxDistinctOperands,
+        int maxTotalOperators,
+        int maxTotalOperands,
+        double maxVocabulary,
+        double maxLength,
+        double maxVolume,
+        double maxDifficulty,
+        double maxEffort,
+        int maxNestingDepth,
+        boolean everLongMethod,
+        boolean everGodClass,
+        boolean everFeatureEnvy,
+        boolean everDuplicatedCode,
+        int maxCodeSmells,
+        double maxSmellDensity
 ) {
     /**
      * Normalizes the author list to a distinct, immutable encounter-ordered collection.
-     *
-     * @param totalTouches total number of touches accumulated so far
-     * @param totalIssueTouches total number of issue-linked touches accumulated so far
-     * @param totalChurn total churn accumulated so far
-     * @param authors distinct authors seen so far
-     * @param ageInReleases release age of the entity
-     * @param maxLoc maximum LOC seen so far
-     * @param maxCyclomatic maximum cyclomatic complexity seen so far
-     * @param maxCognitive maximum cognitive complexity seen so far
-     * @param maxNSmells maximum total smell count seen so far
      */
     public RowHistoryState {
         authors = List.copyOf(new LinkedHashSet<>(Objects.requireNonNull(authors, "authors")));

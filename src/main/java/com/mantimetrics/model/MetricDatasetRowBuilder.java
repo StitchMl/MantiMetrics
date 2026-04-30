@@ -38,6 +38,23 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
     protected int maxCyclomatic;
     protected int maxCognitive;
     protected int maxNSmells;
+    protected int maxStmtCount;
+    protected int maxDistinctOperators;
+    protected int maxDistinctOperands;
+    protected int maxTotalOperators;
+    protected int maxTotalOperands;
+    protected double maxVocabulary;
+    protected double maxLength;
+    protected double maxVolume;
+    protected double maxDifficulty;
+    protected double maxEffort;
+    protected int maxNestingDepth;
+    protected boolean everLongMethod;
+    protected boolean everGodClass;
+    protected boolean everFeatureEnvy;
+    protected boolean everDuplicatedCode;
+    protected int maxCodeSmells;
+    protected double maxSmellDensity;
 
     /**
      * Sets the analyzed project name.
@@ -313,7 +330,24 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
                 .maxLoc(data.maxLoc())
                 .maxCyclomatic(data.maxCyclomatic())
                 .maxCognitive(data.maxCognitive())
-                .maxNSmells(data.maxNSmells());
+                .maxNSmells(data.maxNSmells())
+                .maxStmtCount(data.maxStmtCount())
+                .maxDistinctOperators(data.maxDistinctOperators())
+                .maxDistinctOperands(data.maxDistinctOperands())
+                .maxTotalOperators(data.maxTotalOperators())
+                .maxTotalOperands(data.maxTotalOperands())
+                .maxVocabulary(data.maxVocabulary())
+                .maxLength(data.maxLength())
+                .maxVolume(data.maxVolume())
+                .maxDifficulty(data.maxDifficulty())
+                .maxEffort(data.maxEffort())
+                .maxNestingDepth(data.maxNestingDepth())
+                .everLongMethod(data.everLongMethod())
+                .everGodClass(data.everGodClass())
+                .everFeatureEnvy(data.everFeatureEnvy())
+                .everDuplicatedCode(data.everDuplicatedCode())
+                .maxCodeSmells(data.maxCodeSmells())
+                .maxSmellDensity(data.maxSmellDensity());
     }
 
     /**
@@ -349,7 +383,24 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
                 maxLoc,
                 maxCyclomatic,
                 maxCognitive,
-                maxNSmells);
+                maxNSmells,
+                maxStmtCount,
+                maxDistinctOperators,
+                maxDistinctOperands,
+                maxTotalOperators,
+                maxTotalOperands,
+                maxVocabulary,
+                maxLength,
+                maxVolume,
+                maxDifficulty,
+                maxEffort,
+                maxNestingDepth,
+                everLongMethod,
+                everGodClass,
+                everFeatureEnvy,
+                everDuplicatedCode,
+                maxCodeSmells,
+                maxSmellDensity);
     }
 
     /**
@@ -406,6 +457,41 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
         this.maxNSmells = value;
         return self();
     }
+
+    /** @return current builder */
+    public final T maxStmtCount(int value) { this.maxStmtCount = value; return self(); }
+    /** @return current builder */
+    public final T maxDistinctOperators(int value) { this.maxDistinctOperators = value; return self(); }
+    /** @return current builder */
+    public final T maxDistinctOperands(int value) { this.maxDistinctOperands = value; return self(); }
+    /** @return current builder */
+    public final T maxTotalOperators(int value) { this.maxTotalOperators = value; return self(); }
+    /** @return current builder */
+    public final T maxTotalOperands(int value) { this.maxTotalOperands = value; return self(); }
+    /** @return current builder */
+    public final T maxVocabulary(double value) { this.maxVocabulary = value; return self(); }
+    /** @return current builder */
+    public final T maxLength(double value) { this.maxLength = value; return self(); }
+    /** @return current builder */
+    public final T maxVolume(double value) { this.maxVolume = value; return self(); }
+    /** @return current builder */
+    public final T maxDifficulty(double value) { this.maxDifficulty = value; return self(); }
+    /** @return current builder */
+    public final T maxEffort(double value) { this.maxEffort = value; return self(); }
+    /** @return current builder */
+    public final T maxNestingDepth(int value) { this.maxNestingDepth = value; return self(); }
+    /** @return current builder */
+    public final T everLongMethod(boolean value) { this.everLongMethod = value; return self(); }
+    /** @return current builder */
+    public final T everGodClass(boolean value) { this.everGodClass = value; return self(); }
+    /** @return current builder */
+    public final T everFeatureEnvy(boolean value) { this.everFeatureEnvy = value; return self(); }
+    /** @return current builder */
+    public final T everDuplicatedCode(boolean value) { this.everDuplicatedCode = value; return self(); }
+    /** @return current builder */
+    public final T maxCodeSmells(int value) { this.maxCodeSmells = value; return self(); }
+    /** @return current builder */
+    public final T maxSmellDensity(double value) { this.maxSmellDensity = value; return self(); }
 
     /**
      * Returns the concrete builder instance for fluent chaining.
