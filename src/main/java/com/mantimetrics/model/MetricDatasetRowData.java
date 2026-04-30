@@ -29,17 +29,41 @@ import java.util.List;
  * @param ageInReleases number of analyzed releases in which the entity exists
  * @param startLine inclusive start line of the entity
  * @param endLine inclusive end line of the entity
- * @param maxLoc maximum LOC seen across all releases up to the current one (asterisk feature)
+ * @param maxLoc maximum LOC seen across all releases (asterisk feature)
  * @param maxCyclomatic maximum cyclomatic complexity seen across all releases (asterisk feature)
  * @param maxCognitive maximum cognitive complexity seen across all releases (asterisk feature)
  * @param maxNSmells maximum total smell count seen across all releases (asterisk feature)
+ * @param maxStmtCount maximum statement count seen across all releases
+ * @param maxDistinctOperators maximum distinct Halstead operators seen across all releases
+ * @param maxDistinctOperands maximum distinct Halstead operands seen across all releases
+ * @param maxTotalOperators maximum total Halstead operators seen across all releases
+ * @param maxTotalOperands maximum total Halstead operands seen across all releases
+ * @param maxVocabulary maximum Halstead vocabulary seen across all releases
+ * @param maxLength maximum Halstead length seen across all releases
+ * @param maxVolume maximum Halstead volume seen across all releases
+ * @param maxDifficulty maximum Halstead difficulty seen across all releases
+ * @param maxEffort maximum Halstead effort seen across all releases
+ * @param maxNestingDepth maximum nesting depth seen across all releases
+ * @param everLongMethod whether the entity was ever flagged as long method
+ * @param everGodClass whether the entity was ever flagged as God Class
+ * @param everFeatureEnvy whether the entity was ever flagged as Feature Envy
+ * @param everDuplicatedCode whether the entity was ever flagged as duplicated code
+ * @param maxCodeSmells maximum PMD violation count seen across all releases
+ * @param maxSmellDensity maximum smell density seen across all releases
  */
 record MetricDatasetRowData(String projectName, String path, String releaseId, MethodMetrics metrics,
                             List<String> commitHashes, boolean buggy, int codeSmells, int touches, int totalTouches,
                             int issueTouches, int totalIssueTouches, int authors, int totalAuthors, int addedLines,
                             int deletedLines, int churn, int totalChurn, int prevCodeSmells, boolean prevBuggy,
                             int ageInReleases, int startLine, int endLine,
-                            int maxLoc, int maxCyclomatic, int maxCognitive, int maxNSmells) {
+                            int maxLoc, int maxCyclomatic, int maxCognitive, int maxNSmells,
+                            int maxStmtCount, int maxDistinctOperators, int maxDistinctOperands,
+                            int maxTotalOperators, int maxTotalOperands,
+                            double maxVocabulary, double maxLength, double maxVolume,
+                            double maxDifficulty, double maxEffort, int maxNestingDepth,
+                            boolean everLongMethod, boolean everGodClass,
+                            boolean everFeatureEnvy, boolean everDuplicatedCode,
+                            int maxCodeSmells, double maxSmellDensity) {
     /**
      * Creates an immutable shared dataset payload, copying the commit hash list defensively.
      */
@@ -69,7 +93,24 @@ record MetricDatasetRowData(String projectName, String path, String releaseId, M
             int maxLoc,
             int maxCyclomatic,
             int maxCognitive,
-            int maxNSmells
+            int maxNSmells,
+            int maxStmtCount,
+            int maxDistinctOperators,
+            int maxDistinctOperands,
+            int maxTotalOperators,
+            int maxTotalOperands,
+            double maxVocabulary,
+            double maxLength,
+            double maxVolume,
+            double maxDifficulty,
+            double maxEffort,
+            int maxNestingDepth,
+            boolean everLongMethod,
+            boolean everGodClass,
+            boolean everFeatureEnvy,
+            boolean everDuplicatedCode,
+            int maxCodeSmells,
+            double maxSmellDensity
     ) {
         this.projectName = projectName;
         this.path = path;
@@ -97,6 +138,23 @@ record MetricDatasetRowData(String projectName, String path, String releaseId, M
         this.maxCyclomatic = maxCyclomatic;
         this.maxCognitive = maxCognitive;
         this.maxNSmells = maxNSmells;
+        this.maxStmtCount = maxStmtCount;
+        this.maxDistinctOperators = maxDistinctOperators;
+        this.maxDistinctOperands = maxDistinctOperands;
+        this.maxTotalOperators = maxTotalOperators;
+        this.maxTotalOperands = maxTotalOperands;
+        this.maxVocabulary = maxVocabulary;
+        this.maxLength = maxLength;
+        this.maxVolume = maxVolume;
+        this.maxDifficulty = maxDifficulty;
+        this.maxEffort = maxEffort;
+        this.maxNestingDepth = maxNestingDepth;
+        this.everLongMethod = everLongMethod;
+        this.everGodClass = everGodClass;
+        this.everFeatureEnvy = everFeatureEnvy;
+        this.everDuplicatedCode = everDuplicatedCode;
+        this.maxCodeSmells = maxCodeSmells;
+        this.maxSmellDensity = maxSmellDensity;
     }
 
     /**
