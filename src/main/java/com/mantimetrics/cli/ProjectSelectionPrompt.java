@@ -88,7 +88,7 @@ public final class ProjectSelectionPrompt {
         String jiraKey = readRequiredValue("JIRA key");
         String percentageRaw = readOptionalValue("Percentage release da analizzare [default 33]");
         Integer percentage = percentageRaw.isBlank() ? DEFAULT_PERCENTAGE : parsePercentage(percentageRaw);
-        return new ProjectConfig(null, null, repoUrl, percentage, jiraKey);
+        return new ProjectConfig(null, null, repoUrl, percentage, jiraKey, null);
     }
 
     /**

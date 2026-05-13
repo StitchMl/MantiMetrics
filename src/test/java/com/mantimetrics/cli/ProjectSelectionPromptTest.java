@@ -23,8 +23,8 @@ class ProjectSelectionPromptTest {
     @Test
     void selectsConfiguredProjectByIndex() throws IOException {
         ProjectConfig[] configs = new ProjectConfig[] {
-                new ProjectConfig("apache", "bookkeeper", "https://github.com/apache/bookkeeper.git", 33, "BOOKKEEPER"),
-                new ProjectConfig("apache", "avro", "https://github.com/apache/avro.git", 33, "AVRO")
+                new ProjectConfig("apache", "bookkeeper", "https://github.com/apache/bookkeeper.git", 33, "BOOKKEEPER", null),
+                new ProjectConfig("apache", "avro", "https://github.com/apache/avro.git", 33, "AVRO", null)
         };
         ProjectSelectionPrompt prompt = newPrompt("2\n");
 
@@ -59,7 +59,7 @@ class ProjectSelectionPromptTest {
     @Test
     void retriesAfterInvalidMenuChoice() throws IOException {
         ProjectConfig[] configs = new ProjectConfig[] {
-                new ProjectConfig("apache", "bookkeeper", "https://github.com/apache/bookkeeper.git", 33, "BOOKKEEPER")
+                new ProjectConfig("apache", "bookkeeper", "https://github.com/apache/bookkeeper.git", 33, "BOOKKEEPER", null)
         };
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         ProjectSelectionPrompt prompt = new ProjectSelectionPrompt(

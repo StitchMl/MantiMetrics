@@ -12,9 +12,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * @param repoUrl optional repository URL used to derive owner and name when absent
  * @param percentage percentage of releases to analyze
  * @param jiraProjectKey Jira project key associated with the repository
+ * @param sonarProjectKey SonarCloud project key; {@code null} when SonarCloud is not configured
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ProjectConfig(String owner, String name, String repoUrl, Integer percentage, String jiraProjectKey) {
+public record ProjectConfig(String owner, String name, String repoUrl, Integer percentage,
+        String jiraProjectKey, String sonarProjectKey) {
 
     /**
      * Creates a project configuration while resolving owner and repository name from the URL when needed.
@@ -24,6 +26,7 @@ public record ProjectConfig(String owner, String name, String repoUrl, Integer p
      * @param repoUrl optional repository URL used to derive owner and name
      * @param percentage optional percentage of releases to analyze
      * @param jiraProjectKey Jira project key associated with the repository
+     * @param sonarProjectKey SonarCloud project key; may be {@code null}
      */
     @JsonCreator
     public ProjectConfig(
@@ -31,7 +34,8 @@ public record ProjectConfig(String owner, String name, String repoUrl, Integer p
             @JsonProperty("name") String name,
             @JsonProperty("repoUrl") String repoUrl,
             @JsonProperty("percentage") Integer percentage,
-            @JsonProperty("jiraKey") String jiraProjectKey
+            @JsonProperty("jiraKey") String jiraProjectKey,
+            @JsonProperty("sonarKey") String sonarProjectKey
     ) {
         RepositoryCoordinates coordinates = RepositoryUrlParser.resolve(owner, name, repoUrl);
         this.owner = coordinates.owner();
@@ -39,10 +43,11 @@ public record ProjectConfig(String owner, String name, String repoUrl, Integer p
         this.repoUrl = repoUrl;
         this.percentage = percentage;
         this.jiraProjectKey = jiraProjectKey;
+        this.sonarProjectKey = sonarProjectKey;
     }
 
     /**
-     * Creates a project configuration without an explicit repository URL.
+     * Creates a project configuration without an explicit repository URL or SonarCloud key.
      *
      * @param owner repository owner
      * @param name repository name
@@ -50,7 +55,7 @@ public record ProjectConfig(String owner, String name, String repoUrl, Integer p
      * @param jiraProjectKey Jira project key associated with the repository
      */
     public ProjectConfig(String owner, String name, Integer percentage, String jiraProjectKey) {
-        this(owner, name, null, percentage, jiraProjectKey);
+        this(owner, name, null, percentage, jiraProjectKey, null);
     }
 
     /**

@@ -21,6 +21,7 @@ import java.util.Map;
  * @param historyStore cumulative history state shared across releases for this granularity
  * @param labelIndex historical bug labels available for the project timeline
  * @param writer buffered writer bound to the output CSV file
+ * @param sonarSmellsByTag SonarCloud file-smell counts keyed by release tag; empty map when unavailable
  */
 public record ProjectContext(
         String owner,
@@ -31,6 +32,7 @@ public record ProjectContext(
         Map<String, DatasetRow> prevData,
         RowHistoryStore historyStore,
         HistoricalBugLabelIndex labelIndex,
-        BufferedWriter writer
+        BufferedWriter writer,
+        Map<String, Map<String, Integer>> sonarSmellsByTag
 ) {
 }

@@ -95,6 +95,8 @@ public final class ReleaseExecutionService {
     private void processPreparedRelease(String tag, ProjectContext context, PreparedRelease prepared) {
         LOG.info("Processing {}@{} [{}]", context.repo(), tag, context.granularity());
         try {
+            Map<String, Integer> sonarSmells =
+                    context.sonarSmellsByTag().getOrDefault(tag, Map.of());
             ReleaseDatasetRequest request = new ReleaseDatasetRequest(
                     prepared.releaseSources(),
                     context.repo(),
@@ -104,7 +106,8 @@ public final class ReleaseExecutionService {
                     context.prevData(),
                     context.historyStore(),
                     prepared.violations(),
-                    context.labelIndex()
+                    context.labelIndex(),
+                    sonarSmells
             );
             List<? extends DatasetRow> rows = context.granularity() == Granularity.CLASS
                     ? datasetCollector.collectClassRows(request)

@@ -67,13 +67,32 @@ public final class ProjectReleasePlanner {
         LOG.info("{} - {} historical releases available for snoring/labeling", repo, chronologicalTags.size());
         LOG.info("Found {} resolved bug tickets", resolvedTickets.size());
 
+        Map<String, Instant> jiraDates = fetchJiraVersionDates(config);
         Map<String, Instant> tagDates = new LinkedHashMap<>();
         for (String tag : chronologicalTags) {
-            tagDates.put(tag, gitService.getTagDate(owner, repo, tag));
+            Instant jiraDate = jiraDates.get(JiraClient.normalize(tag));
+            tagDates.put(tag, jiraDate != null ? jiraDate : gitService.getTagDate(owner, repo, tag));
         }
         return new ProjectReleasePlan(owner, repo,
                 new ReleaseTimeline(chronologicalTags, tagDates),
                 selectedTags, resolvedTickets);
+    }
+
+    /**
+     * Fetches JIRA release dates for the project, returning an empty map on any failure so that
+     * the Git tag-date fallback is used seamlessly.
+     *
+     * @param config project configuration
+     * @return map of normalized version name to release date, possibly empty
+     */
+    private Map<String, Instant> fetchJiraVersionDates(ProjectConfig config) {
+        try {
+            return jiraClient.fetchProjectVersionDates(config.jiraProjectKey());
+        } catch (JiraClientException e) {
+            LOG.warn("Could not fetch JIRA version dates for {}: {}. Using Git tag dates.",
+                    config.jiraProjectKey(), e.getMessage());
+            return Map.of();
+        }
     }
 
     /**

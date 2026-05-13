@@ -35,7 +35,7 @@ class ProjectConfigTest {
     @Test
     void derivesOwnerAndNameFromRepositoryUrlWhenNeeded() {
         ProjectConfig cfg = new ProjectConfig(null, null,
-                "https://github.com/apache/avro.git", 33, "AVRO");
+                "https://github.com/apache/avro.git", 33, "AVRO", null);
 
         assertEquals("apache", cfg.owner());
         assertEquals("avro", cfg.name());
