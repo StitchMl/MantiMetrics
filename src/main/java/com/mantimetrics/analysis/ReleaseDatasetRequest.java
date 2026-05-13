@@ -22,6 +22,7 @@ import java.util.Map;
  * @param historyStore cumulative history state for the same granularity
  * @param violations PMD rule violations found in the release
  * @param labelIndex historical bug labels used to mark buggy rows
+ * @param sonarSmellsByFile SonarCloud file-level code-smell counts; empty map when unavailable
  */
 public record ReleaseDatasetRequest(
  SourceScanResult releaseSources,
@@ -32,6 +33,7 @@ public record ReleaseDatasetRequest(
  Map<String, DatasetRow> previousRows,
  RowHistoryStore historyStore,
  List<RuleViolation> violations,
- HistoricalBugLabelIndex labelIndex
+ HistoricalBugLabelIndex labelIndex,
+ Map<String, Integer> sonarSmellsByFile
 ) {
 }

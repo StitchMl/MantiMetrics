@@ -7,7 +7,9 @@ import org.apache.http.impl.client.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Thin JIRA facade responsible for authentication, pagination setup and project-scoped queries.
@@ -82,6 +84,17 @@ public class JiraClient {
  */
  public List<String> fetchProjectVersions(String projectKey) throws JiraClientException {
  return projectReader.fetchProjectVersions(requireSession(), projectKey);
+ }
+
+ /**
+ * Fetches the release dates for all JIRA versions that carry a {@code releaseDate} field.
+ *
+ * @param projectKey Jira project key
+ * @return map of normalized version name to release date instant
+ * @throws JiraClientException when the session is missing or Jira cannot be queried
+ */
+ public Map<String, Instant> fetchProjectVersionDates(String projectKey) throws JiraClientException {
+ return projectReader.fetchVersionDates(requireSession(), projectKey);
  }
 
  /**

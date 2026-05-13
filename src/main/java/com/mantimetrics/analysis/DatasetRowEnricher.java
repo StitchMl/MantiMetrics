@@ -9,6 +9,7 @@ import com.mantimetrics.util.AnalysisPathUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -32,7 +33,7 @@ final class DatasetRowEnricher {
  for (MethodData row : rows) {
  String relativePath = normalizedPath(row);
  List<String> commits = request.commitData().touchesFor(relativePath);
- int currentCodeSmells = codeSmellsForRow(row, violationIndex);
+ int currentCodeSmells = codeSmellsForRow(row, violationIndex, request.sonarSmellsByFile());
  RowHistoryState historyState = updateHistory(
  row.getUniqueKey(), relativePath, request, row.getMetrics(), currentCodeSmells);
  MethodData previous = request.previousRows().get(row.getUniqueKey()) instanceof MethodData method ? method : null;
@@ -96,7 +97,7 @@ final class DatasetRowEnricher {
  for (ClassData row : rows) {
  String relativePath = normalizedPath(row);
  List<String> commits = request.commitData().touchesFor(relativePath);
- int currentCodeSmells = codeSmellsForRow(row, violationIndex);
+ int currentCodeSmells = codeSmellsForRow(row, violationIndex, request.sonarSmellsByFile());
  RowHistoryState historyState = updateHistory(
  row.getUniqueKey(), relativePath, request, row.getMetrics(), currentCodeSmells);
  ClassData previous = request.previousRows().get(row.getUniqueKey()) instanceof ClassData type ? type : null;
@@ -211,14 +212,24 @@ final class DatasetRowEnricher {
  }
 
  /**
- * Counts the PMD violations that fall inside the row source range.
+ * Returns the code smell count for a row, preferring the SonarCloud file-level count when
+ * available and falling back to the PMD violation count otherwise.
  *
  * @param row dataset row being enriched
  * @param violationIndex indexed PMD violations for the current release
- * @return number of violations associated with the row range
+ * @param sonarSmells SonarCloud file-level smell counts; empty map when unavailable
+ * @return code smell count for the row
  */
- private int codeSmellsForRow(DatasetRow row, ReleaseViolationIndex violationIndex) {
- return violationIndex.countViolations(normalizedPath(row), row.getStartLine(), row.getEndLine());
+ private int codeSmellsForRow(DatasetRow row, ReleaseViolationIndex violationIndex,
+ Map<String, Integer> sonarSmells) {
+ String path = normalizedPath(row);
+ if (!sonarSmells.isEmpty()) {
+ Integer sonarCount = sonarSmells.get(path);
+ if (sonarCount != null) {
+ return sonarCount;
+ }
+ }
+ return violationIndex.countViolations(path, row.getStartLine(), row.getEndLine());
  }
 
  /**

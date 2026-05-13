@@ -10,10 +10,14 @@ import java.net.URI;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -100,6 +104,43 @@ final class JiraProjectReader {
  throw new JiraClientException("I/O error fetching project versions", exception);
  } catch (Exception exception) {
  throw new JiraClientException("fetchProjectVersions error", exception);
+ }
+ }
+
+ /**
+ * Fetches a map of normalized version name → JIRA release date for a project.
+ * Only versions that carry a {@code releaseDate} field are included.
+ *
+ * @param session initialized Jira project session
+ * @param projectKey Jira project key
+ * @return map of normalized version name to release date instant
+ * @throws JiraClientException when Jira cannot be queried
+ */
+ Map<String, Instant> fetchVersionDates(JiraProjectSession session, String projectKey)
+ throws JiraClientException {
+ try {
+ URI uri = new URIBuilder(session.baseUrl() + "/rest/api/2/project/" + projectKey + "/versions")
+ .build();
+ JsonNode versions = jsonClient.get(uri, session.authHeader());
+ Map<String, Instant> dates = new LinkedHashMap<>();
+ versions.forEach(version -> {
+ String name = version.path("name").asText(null);
+ String dateStr = version.path("releaseDate").asText(null);
+ if (name != null && !name.isBlank() && dateStr != null && !dateStr.isBlank()) {
+ try {
+ Instant date = LocalDate.parse(dateStr).atStartOfDay(ZoneOffset.UTC).toInstant();
+ dates.put(JiraProjectSession.normalize(name), date);
+ } catch (Exception parseException) {
+ LOG.warn("Unparseable JIRA releaseDate '{}' for version '{}'", dateStr, name);
+ }
+ }
+ });
+ LOG.debug("JIRA project {} - {} version dates fetched", projectKey, dates.size());
+ return dates;
+ } catch (IOException exception) {
+ throw new JiraClientException("I/O error fetching version dates", exception);
+ } catch (Exception exception) {
+ throw new JiraClientException("fetchVersionDates error", exception);
  }
  }
 

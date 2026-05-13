@@ -87,7 +87,8 @@ public final class CliOptionsParser {
  null,
  repoUrl,
  percentage != null ? percentage : DEFAULT_CLI_PERCENTAGE,
- jiraKey
+ jiraKey,
+ null
  );
  }
 

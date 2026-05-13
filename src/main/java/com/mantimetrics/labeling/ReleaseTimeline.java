@@ -52,6 +52,15 @@ public final class ReleaseTimeline {
  }
 
  /**
+ * Returns the per-tag date map used by the Proportion algorithm and the SonarCloud index.
+ *
+ * @return immutable map of raw tag name to release date instant
+ */
+ public Map<String, Instant> tagDates() {
+ return tagDates;
+ }
+
+ /**
  * Returns the number of releases in the timeline.
  *
  * @return release count

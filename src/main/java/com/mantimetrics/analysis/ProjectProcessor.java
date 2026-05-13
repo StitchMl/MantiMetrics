@@ -12,6 +12,9 @@ import com.mantimetrics.labeling.HistoricalBugLabelIndexBuilder;
 import com.mantimetrics.audit.MilestoneAuditService;
 import com.mantimetrics.pmd.PmdAnalyzer;
 import com.mantimetrics.release.ReleaseProcessingException;
+import com.mantimetrics.sonar.SonarCloudClient;
+import com.mantimetrics.sonar.SonarCloudException;
+import com.mantimetrics.sonar.SonarSmellIndex;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -28,6 +31,9 @@ import java.util.Map;
  * then writes one raw dataset per requested granularity.
  */
 public final class ProjectProcessor {
+ private static final org.slf4j.Logger LOG =
+ org.slf4j.LoggerFactory.getLogger(ProjectProcessor.class);
+
  private final ProjectReleasePlanner releasePlanner;
  private final ReleaseExecutionService releaseExecutionService;
  private final GitService gitService;
@@ -35,6 +41,7 @@ public final class ProjectProcessor {
  private final PmdAnalyzer pmdAnalyzer;
  private final DatasetArtifactService datasetArtifactService;
  private final MilestoneAuditService milestoneAuditService;
+ private final SonarCloudClient sonarCloudClient = new SonarCloudClient();
 
  /**
  * Creates the project processor with all collaborators needed to execute the full release pipeline.
@@ -83,8 +90,10 @@ public final class ProjectProcessor {
  List<ReleaseSnapshot> releaseHistory = buildReleaseHistory(plan);
  HistoricalBugLabelIndex labelIndex = new HistoricalBugLabelIndexBuilder()
  .build(plan.timeline(), plan.selectedTags(), plan.resolvedTickets(), releaseHistory);
+ Map<String, Map<String, Integer>> sonarSmellsByTag = buildSonarSmellsByTag(plan, config);
  Map<Granularity, Path> csvPaths = new LinkedHashMap<>();
- List<ProjectContext> contexts = openContexts(plan, granularities, csvPaths, labelIndex);
+ List<ProjectContext> contexts = openContexts(plan, granularities, csvPaths, labelIndex,
+ sonarSmellsByTag);
  try {
  for (ReleaseSnapshot snapshot : releaseHistory) {
  if (!plan.selectedTags().contains(snapshot.tag())) {
@@ -100,6 +109,33 @@ public final class ProjectProcessor {
  }
 
  /**
+ * Builds the per-tag SonarCloud file-smell maps. Returns an empty map gracefully when SonarCloud
+ * is not configured or when the API is unavailable.
+ *
+ * @param plan release plan providing the tag timeline
+ * @param config project configuration carrying the optional SonarCloud key
+ * @return map of release tag to file-path → smell-count map
+ */
+ private Map<String, Map<String, Integer>> buildSonarSmellsByTag(
+ ProjectReleasePlan plan, ProjectConfig config) {
+ SonarSmellIndex sonarIndex = SonarSmellIndex.EMPTY;
+ if (config.sonarProjectKey() != null && !config.sonarProjectKey().isBlank()) {
+ try {
+ sonarIndex = SonarSmellIndex.build(sonarCloudClient, config.sonarProjectKey());
+ } catch (SonarCloudException e) {
+ LOG.warn("SonarCloud unavailable for {}: {}. Falling back to PMD.",
+ config.sonarProjectKey(), e.getMessage());
+ }
+ }
+ Map<String, Map<String, Integer>> byTag = new LinkedHashMap<>();
+ for (String tag : plan.timeline().orderedTags()) {
+ java.time.Instant tagDate = plan.timeline().tagDates().get(tag);
+ byTag.put(tag, tagDate != null ? sonarIndex.getSmellsForDate(tagDate) : Map.of());
+ }
+ return byTag;
+ }
+
+ /**
  * Opens one CSV writer and one independent history state per granularity so class-level and method-level
  * analyses can coexist without sharing mutable state.
  */
@@ -107,7 +143,8 @@ public final class ProjectProcessor {
  ProjectReleasePlan plan,
  List<Granularity> granularities,
  Map<Granularity, Path> csvPaths,
- HistoricalBugLabelIndex labelIndex
+ HistoricalBugLabelIndex labelIndex,
+ Map<String, Map<String, Integer>> sonarSmellsByTag
  ) throws CsvWriteException {
  List<ProjectContext> contexts = new ArrayList<>();
  try {
@@ -124,7 +161,8 @@ public final class ProjectProcessor {
  new HashMap<>(),
  new RowHistoryStore(),
  labelIndex,
- writer
+ writer,
+ sonarSmellsByTag
  ));
  }
  return contexts;
