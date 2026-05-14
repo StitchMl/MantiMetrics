@@ -23,6 +23,8 @@ import com.mantimetrics.jira.JiraClient;
 import com.mantimetrics.metrics.MetricsCalculator;
 import com.mantimetrics.parser.CodeParser;
 import com.mantimetrics.release.ReleaseSelector;
+import com.mantimetrics.sonar.SonarCloudClient;
+import com.mantimetrics.sonar.SonarPreScanService;
 import com.mantimetrics.util.TempDirectoryCleaner;
 
 import java.io.IOException;
@@ -64,6 +66,7 @@ public final class ApplicationBootstrap {
     private ProjectProcessor createProcessor(GitService gitService) {
         JiraClient jiraClient = new JiraClient();
         CodeParser codeParser = new CodeParser(gitService);
+        SonarCloudClient sonarClient = new SonarCloudClient();
 
         return new ProjectProcessor(
                 new ProjectReleasePlanner(gitService, new ReleaseSelector(), jiraClient),
@@ -71,6 +74,7 @@ public final class ApplicationBootstrap {
                         new ReleaseDatasetCollector(codeParser, new MetricsCalculator())),
                 gitService,
                 new CSVWriter(),
+                new SonarPreScanService(codeParser, sonarClient),
                 new DatasetArtifactService(
                         new DatasetCsvTableReader(),
                         new DatasetTableWriter(),

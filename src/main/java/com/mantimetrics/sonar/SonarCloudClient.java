@@ -76,10 +76,11 @@ public final class SonarCloudClient implements AutoCloseable {
                     break;
                 }
                 for (JsonNode a : analysesNode) {
-                    String key = a.path("key").asText(null);
+                    String key     = a.path("key").asText(null);
                     String dateStr = a.path("date").asText(null);
                     if (key != null && dateStr != null) {
-                        analyses.add(new SonarAnalysis(key, Instant.parse(dateStr)));
+                        String version = a.path("projectVersion").asText(null);
+                        analyses.add(new SonarAnalysis(key, Instant.parse(dateStr), version));
                     }
                 }
                 int total = response.path("paging").path("total").asInt(0);
