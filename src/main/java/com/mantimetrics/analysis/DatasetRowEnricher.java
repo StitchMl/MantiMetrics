@@ -9,7 +9,6 @@ import com.mantimetrics.util.AnalysisPathUtils;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -21,19 +20,17 @@ final class DatasetRowEnricher {
  *
  * @param rows parsed method rows for the current release
  * @param request immutable release request carrying history and labels
- * @param violationIndex PMD violations indexed by relative path
  * @return enriched method rows ready for serialization
  */
  List<MethodData> enrichMethods(
  List<MethodData> rows,
- ReleaseDatasetRequest request,
- ReleaseViolationIndex violationIndex
+ ReleaseDatasetRequest request
  ) {
  List<MethodData> result = new ArrayList<>();
  for (MethodData row : rows) {
  String relativePath = normalizedPath(row);
  List<String> commits = request.commitData().touchesFor(relativePath);
- int currentCodeSmells = codeSmellsForRow(row, violationIndex, request.sonarSmellsByFile());
+ int currentCodeSmells = codeSmellsForRow(row, request.sonarSmellsByFile());
  RowHistoryState historyState = updateHistory(
  row.getUniqueKey(), relativePath, request, row.getMetrics(), currentCodeSmells);
  MethodData previous = request.previousRows().get(row.getUniqueKey()) instanceof MethodData method ? method : null;
@@ -85,19 +82,17 @@ final class DatasetRowEnricher {
  *
  * @param rows parsed class rows for the current release
  * @param request immutable release request carrying history and labels
- * @param violationIndex PMD violations indexed by relative path
  * @return enriched class rows ready for serialization
  */
  List<ClassData> enrichClasses(
  List<ClassData> rows,
- ReleaseDatasetRequest request,
- ReleaseViolationIndex violationIndex
+ ReleaseDatasetRequest request
  ) {
  List<ClassData> result = new ArrayList<>();
  for (ClassData row : rows) {
  String relativePath = normalizedPath(row);
  List<String> commits = request.commitData().touchesFor(relativePath);
- int currentCodeSmells = codeSmellsForRow(row, violationIndex, request.sonarSmellsByFile());
+ int currentCodeSmells = codeSmellsForRow(row, request.sonarSmellsByFile());
  RowHistoryState historyState = updateHistory(
  row.getUniqueKey(), relativePath, request, row.getMetrics(), currentCodeSmells);
  ClassData previous = request.previousRows().get(row.getUniqueKey()) instanceof ClassData type ? type : null;
@@ -212,24 +207,16 @@ final class DatasetRowEnricher {
  }
 
  /**
- * Returns the code smell count for a row, preferring the SonarCloud file-level count when
- * available and falling back to the PMD violation count otherwise.
+ * Returns the SonarCloud code-smell count for a row.
+ * SonarCloud is the sole source of code-smell data; rows whose file is absent from the map
+ * receive a count of zero (project not configured on SonarCloud, or file not analysed).
  *
  * @param row dataset row being enriched
- * @param violationIndex indexed PMD violations for the current release
- * @param sonarSmells SonarCloud file-level smell counts; empty map when unavailable
- * @return code smell count for the row
+ * @param sonarSmells SonarCloud file-level smell counts keyed by normalized path
+ * @return code smell count for the row, or 0 when the file is not in the SonarCloud index
  */
- private int codeSmellsForRow(DatasetRow row, ReleaseViolationIndex violationIndex,
- Map<String, Integer> sonarSmells) {
- String path = normalizedPath(row);
- if (!sonarSmells.isEmpty()) {
- Integer sonarCount = sonarSmells.get(path);
- if (sonarCount != null) {
- return sonarCount;
- }
- }
- return violationIndex.countViolations(path, row.getStartLine(), row.getEndLine());
+ private int codeSmellsForRow(DatasetRow row, java.util.Map<String, Integer> sonarSmells) {
+ return sonarSmells.getOrDefault(normalizedPath(row), 0);
  }
 
  /**

@@ -22,7 +22,6 @@ import com.mantimetrics.git.ProjectConfig;
 import com.mantimetrics.jira.JiraClient;
 import com.mantimetrics.metrics.MetricsCalculator;
 import com.mantimetrics.parser.CodeParser;
-import com.mantimetrics.pmd.PmdAnalyzer;
 import com.mantimetrics.release.ReleaseSelector;
 import com.mantimetrics.util.TempDirectoryCleaner;
 
@@ -72,7 +71,6 @@ public final class ApplicationBootstrap {
  new ReleaseDatasetCollector(codeParser, new MetricsCalculator())),
  gitService,
  new CSVWriter(),
- new PmdAnalyzer(),
  new DatasetArtifactService(
  new DatasetCsvTableReader(),
  new DatasetTableWriter(),

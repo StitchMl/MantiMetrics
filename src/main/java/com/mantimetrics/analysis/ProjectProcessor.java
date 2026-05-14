@@ -10,7 +10,6 @@ import com.mantimetrics.jira.JiraClientException;
 import com.mantimetrics.labeling.HistoricalBugLabelIndex;
 import com.mantimetrics.labeling.HistoricalBugLabelIndexBuilder;
 import com.mantimetrics.audit.MilestoneAuditService;
-import com.mantimetrics.pmd.PmdAnalyzer;
 import com.mantimetrics.release.ReleaseProcessingException;
 import com.mantimetrics.sonar.SonarCloudClient;
 import com.mantimetrics.sonar.SonarCloudException;
@@ -39,7 +38,6 @@ public final class ProjectProcessor {
  private final ReleaseExecutionService releaseExecutionService;
  private final GitService gitService;
  private final CSVWriter csvWriter;
- private final PmdAnalyzer pmdAnalyzer;
  private final DatasetArtifactService datasetArtifactService;
  private final MilestoneAuditService milestoneAuditService;
  private final SonarCloudClient sonarCloudClient = new SonarCloudClient();
@@ -51,7 +49,6 @@ public final class ProjectProcessor {
  * @param releaseExecutionService service that executes one prepared release
  * @param gitService Git service used to preload release commit data
  * @param csvWriter CSV writer used to open per-granularity output files
- * @param pmdAnalyzer PMD analyzer reused across releases
  * @param datasetArtifactService service that generates derived dataset artifacts
  * @param milestoneAuditService service that writes the milestone audit JSON
  */
@@ -60,7 +57,6 @@ public final class ProjectProcessor {
  ReleaseExecutionService releaseExecutionService,
  GitService gitService,
  CSVWriter csvWriter,
- PmdAnalyzer pmdAnalyzer,
  DatasetArtifactService datasetArtifactService,
  MilestoneAuditService milestoneAuditService
  ) {
@@ -68,7 +64,6 @@ public final class ProjectProcessor {
  this.releaseExecutionService = releaseExecutionService;
  this.gitService = gitService;
  this.csvWriter = csvWriter;
- this.pmdAnalyzer = pmdAnalyzer;
  this.datasetArtifactService = datasetArtifactService;
  this.milestoneAuditService = milestoneAuditService;
  }
@@ -199,7 +194,6 @@ public final class ProjectProcessor {
  plan.owner(),
  plan.repo(),
  granularity,
- pmdAnalyzer,
  csvWriter,
  new HashMap<>(),
  new RowHistoryStore(),

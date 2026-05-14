@@ -45,7 +45,7 @@ public final class ReleaseDatasetCollector {
  calculator,
  request.commitData().fileToIssueKeys()
  );
- return rowEnricher.enrichMethods(uniqueByKey(methods), request, ReleaseViolationIndex.from(request.violations()));
+ return rowEnricher.enrichMethods(uniqueByKey(methods), request);
  }
 
  /**
@@ -64,7 +64,7 @@ public final class ReleaseDatasetCollector {
  calculator,
  request.commitData().fileToIssueKeys()
  );
- return rowEnricher.enrichClasses(uniqueByKey(classes), request, ReleaseViolationIndex.from(request.violations()));
+ return rowEnricher.enrichClasses(uniqueByKey(classes), request);
  }
 
  /**
