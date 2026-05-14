@@ -450,7 +450,7 @@ abstract class MetricDatasetRowBuilder<T extends MetricDatasetRowBuilder<T>> {
     /**
      * Sets the maximum total smell count seen across all releases (asterisk feature).
      *
-     * @param value max nSmells
+     * @param value max nsmells
      * @return current builder
      */
     public final T maxNSmells(int value) {

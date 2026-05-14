@@ -42,7 +42,7 @@ class HistoricalBugLabelIndexBuilderTest {
     /**
      * Verifies that the builder falls back to the Proportion strategy when affected versions are absent.
      * With no tag dates in the timeline, OV defaults to 0 and P defaults to 1.0, giving IV = OV = 0,
-     * so the behaviour is identical to the former Total strategy.
+     * so the behavior is identical to the former Total strategy.
      */
     @Test
     void fallsBackToProportionWhenAffectedVersionsAreMissing() {
