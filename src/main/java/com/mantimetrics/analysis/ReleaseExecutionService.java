@@ -7,8 +7,6 @@ import com.mantimetrics.parser.CodeParser;
 import com.mantimetrics.parser.CodeParserException;
 import com.mantimetrics.parser.SourceScanResult;
 import com.mantimetrics.release.ReleaseProcessingException;
-import net.sourceforge.pmd.reporting.Report;
-import net.sourceforge.pmd.reporting.RuleViolation;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +17,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Executes the expensive work for a single release: source download, PMD scan and dataset row generation.
+ * Executes the expensive work for a single release: source download and dataset row generation.
+ * Code-smell counts come exclusively from the SonarCloud index built in {@link ProjectProcessor}.
  */
 public final class ReleaseExecutionService {
     private static final Logger LOG = LoggerFactory.getLogger(ReleaseExecutionService.class);
@@ -63,14 +62,8 @@ public final class ReleaseExecutionService {
 
             SourceScanResult releaseSources = codeParser.loadReleaseSources(baseContext.owner(), baseContext.repo(), tag);
             String cloneCacheKey = CloneDetector.prepareCloneMap(releaseSources);
-            Report report = baseContext.pmd().analyze(releaseSources);
-            List<RuleViolation> violations = report.getViolations();
-            if (violations.isEmpty()) {
-                LOG.warn("{}@{} - no PMD violation found on release sources",
-                        baseContext.repo(), tag);
-            }
 
-            PreparedRelease prepared = new PreparedRelease(releaseSources, cloneCacheKey, violations, snapshot.commitData());
+            PreparedRelease prepared = new PreparedRelease(releaseSources, cloneCacheKey, snapshot.commitData());
             try {
                 for (ProjectContext context : contexts) {
                     processPreparedRelease(tag, context, prepared);
@@ -105,7 +98,6 @@ public final class ReleaseExecutionService {
                     prepared.commitData(),
                     context.prevData(),
                     context.historyStore(),
-                    prepared.violations(),
                     context.labelIndex(),
                     sonarSmells
             );
@@ -113,8 +105,7 @@ public final class ReleaseExecutionService {
                     ? datasetCollector.collectClassRows(request)
                     : datasetCollector.collectMethodRows(request);
 
-            LOG.info("{}@{} - finalRows={} (violationsThisRelease={})",
-                    context.repo(), tag, rows.size(), prepared.violations().size());
+            LOG.info("{}@{} - finalRows={}", context.repo(), tag, rows.size());
 
             updatePreviousData(context.prevData(), rows);
             context.csvOut().append(context.writer(), rows);
@@ -147,13 +138,11 @@ public final class ReleaseExecutionService {
      *
      * @param releaseSources extracted source tree for the release
      * @param cloneCacheKey key used to access the cached clone map
-     * @param violations PMD rule violations found in the release
      * @param commitData commit-range metadata for the release
      */
     private record PreparedRelease(
             SourceScanResult releaseSources,
             String cloneCacheKey,
-            List<RuleViolation> violations,
             com.mantimetrics.git.ReleaseCommitData commitData
     ) {
     }
