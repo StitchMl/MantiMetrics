@@ -14,6 +14,8 @@ import com.mantimetrics.config.GitHubTokenLoader;
 import com.mantimetrics.config.ProjectConfigLoader;
 import com.mantimetrics.config.SonarTokenLoader;
 import com.mantimetrics.csv.CSVWriter;
+import com.mantimetrics.csv.CsvWriteException;
+import com.mantimetrics.jira.JiraClientException;
 import com.mantimetrics.dataset.DatasetArffWriter;
 import com.mantimetrics.dataset.DatasetArtifactService;
 import com.mantimetrics.dataset.DatasetCsvTableReader;
@@ -49,7 +51,7 @@ public final class ApplicationBootstrap {
      * @param cliOptions command-line options resolved at startup
      * @throws Exception when configuration loading or project processing fails
      */
-    public void run(CliOptions cliOptions) throws Exception {
+    public void run(CliOptions cliOptions) throws IOException, ConfigurationException, JiraClientException, CsvWriteException {
         GitService gitService = new GitService(loadGithubToken());
         try {
             ProjectProcessor processor = createProcessor(gitService);

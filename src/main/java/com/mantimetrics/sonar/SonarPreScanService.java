@@ -37,6 +37,9 @@ import java.util.stream.Stream;
 public final class SonarPreScanService {
     private static final Logger LOG = LoggerFactory.getLogger(SonarPreScanService.class);
 
+    /** File name of the Maven project descriptor. */
+    private static final String POM_XML = "pom.xml";
+
     /** Seconds between polls when waiting for an analysis to appear on SonarCloud. */
     private static final int POLL_INTERVAL_SEC = 20;
     /** Maximum seconds to wait for one analysis to be indexed after Maven exits. */
@@ -112,11 +115,7 @@ public final class SonarPreScanService {
         int newScans = 0;
         boolean autoAnalysisBlocked = false;
         for (String tag : tags) {
-            if (alreadyScanned.contains(tag)) {
-                bar.step(tag);
-                continue;
-            }
-            if (autoAnalysisBlocked) {
+            if (alreadyScanned.contains(tag) || autoAnalysisBlocked) {
                 bar.step(tag);
                 continue;
             }
@@ -159,9 +158,12 @@ public final class SonarPreScanService {
         String safeName = tag.replaceAll("[^a-zA-Z0-9._-]", "_");
         @SuppressWarnings("java:S5443")
         Path tempDir = Files.createTempDirectory("sonar-" + safeName + "-");
-        tempDir.toFile().setReadable(true, true);
-        tempDir.toFile().setWritable(true, true);
-        tempDir.toFile().setExecutable(true, true);
+        boolean r = tempDir.toFile().setReadable(true, true);
+        boolean w = tempDir.toFile().setWritable(true, true);
+        boolean x = tempDir.toFile().setExecutable(true, true);
+        if (!r || !w || !x) {
+            LOG.debug("Could not set all permissions on temp directory: {}", tempDir);
+        }
         try {
             gitService.extractReleaseFull(owner, repo, tag, tempDir);
 
@@ -195,7 +197,7 @@ public final class SonarPreScanService {
      */
     private static Optional<Path> findJavaPom(Path root) throws IOException {
         // 1) Root pom.xml with src/main/java present → straightforward Java project
-        if (Files.isRegularFile(root.resolve("pom.xml"))
+        if (Files.isRegularFile(root.resolve(POM_XML))
                 && Files.isDirectory(root.resolve("src/main/java"))) {
             return Optional.of(root);
         }
@@ -203,7 +205,7 @@ public final class SonarPreScanService {
         // 2) Look for a pom.xml inside a directory named "java" (multi-language layouts)
         try (Stream<Path> walk = Files.walk(root, 5)) {
             Optional<Path> javaDirPom = walk
-                    .filter(p -> "pom.xml".equals(p.getFileName() != null ? p.getFileName().toString() : "")
+                    .filter(p -> POM_XML.equals(p.getFileName() != null ? p.getFileName().toString() : "")
                             && Files.isRegularFile(p))
                     .filter(p -> hasJavaSegment(root.relativize(p)))
                     .filter(p -> !isNoisyPath(root.relativize(p)))
@@ -215,14 +217,14 @@ public final class SonarPreScanService {
         }
 
         // 3) Root pom.xml exists (aggregator without src/main/java) → still valid
-        if (Files.isRegularFile(root.resolve("pom.xml"))) {
+        if (Files.isRegularFile(root.resolve(POM_XML))) {
             return Optional.of(root);
         }
 
         // 4) Shallowest non-noisy pom.xml anywhere in the tree
         try (Stream<Path> walk = Files.walk(root)) {
             return walk
-                    .filter(p -> "pom.xml".equals(p.getFileName() != null ? p.getFileName().toString() : "")
+                    .filter(p -> POM_XML.equals(p.getFileName() != null ? p.getFileName().toString() : "")
                             && Files.isRegularFile(p))
                     .filter(p -> !isNoisyPath(root.relativize(p)))
                     .min(Comparator.comparingInt(Path::getNameCount))
