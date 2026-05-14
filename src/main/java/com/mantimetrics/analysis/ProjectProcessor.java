@@ -13,6 +13,7 @@ import com.mantimetrics.audit.MilestoneAuditService;
 import com.mantimetrics.release.ReleaseProcessingException;
 import com.mantimetrics.sonar.SonarCloudClient;
 import com.mantimetrics.sonar.SonarCloudException;
+import com.mantimetrics.sonar.SonarPreScanService;
 import com.mantimetrics.sonar.SonarSmellIndex;
 import com.mantimetrics.util.ProgressBar;
 
@@ -41,6 +42,7 @@ public final class ProjectProcessor {
  private final DatasetArtifactService datasetArtifactService;
  private final MilestoneAuditService milestoneAuditService;
  private final SonarCloudClient sonarCloudClient = new SonarCloudClient();
+ private final SonarPreScanService sonarPreScanService;
 
  /**
  * Creates the project processor with all collaborators needed to execute the full release pipeline.
@@ -49,6 +51,7 @@ public final class ProjectProcessor {
  * @param releaseExecutionService service that executes one prepared release
  * @param gitService Git service used to preload release commit data
  * @param csvWriter CSV writer used to open per-granularity output files
+ * @param sonarPreScanService service that runs sonar-scanner for missing releases
  * @param datasetArtifactService service that generates derived dataset artifacts
  * @param milestoneAuditService service that writes the milestone audit JSON
  */
@@ -57,6 +60,7 @@ public final class ProjectProcessor {
  ReleaseExecutionService releaseExecutionService,
  GitService gitService,
  CSVWriter csvWriter,
+ SonarPreScanService sonarPreScanService,
  DatasetArtifactService datasetArtifactService,
  MilestoneAuditService milestoneAuditService
  ) {
@@ -64,6 +68,7 @@ public final class ProjectProcessor {
  this.releaseExecutionService = releaseExecutionService;
  this.gitService = gitService;
  this.csvWriter = csvWriter;
+ this.sonarPreScanService = sonarPreScanService;
  this.datasetArtifactService = datasetArtifactService;
  this.milestoneAuditService = milestoneAuditService;
  }
@@ -91,36 +96,51 @@ public final class ProjectProcessor {
  LOG.info("└─────────────────────────────────────────────────────────────────────");
 
  // ── Phase 1: Git commit history ──────────────────────────────────────
- LOG.info("[1/4] Preloading Git commit history ({} releases)…", plan.timeline().size());
+ LOG.info("[1/5] Preloading Git commit history ({} releases)…", plan.timeline().size());
  List<ReleaseSnapshot> releaseHistory;
  try (ProgressBar bar = new ProgressBar("Git history", plan.timeline().size())) {
  releaseHistory = buildReleaseHistory(plan, bar);
  }
- LOG.info("[1/4] done — {} snapshots loaded", releaseHistory.size());
+ LOG.info("[1/5] done — {} snapshots loaded", releaseHistory.size());
 
  // ── Phase 2: Bug-label oracle (sub-bars managed inside the builder) ──
- LOG.info("[2/4] Building bug-label oracle ({} tickets, Proportion-Total)…",
+ LOG.info("[2/5] Building bug-label oracle ({} tickets, Proportion-Total)…",
  plan.resolvedTickets().size());
  HistoricalBugLabelIndex labelIndex = new HistoricalBugLabelIndexBuilder()
  .build(plan.timeline(), plan.selectedTags(), plan.resolvedTickets(), releaseHistory);
- LOG.info("[2/4] done — linked={}, IV-JIRA={}, Proportion-fallback={}",
+ LOG.info("[2/5] done — linked={}, IV-JIRA={}, Proportion-fallback={}",
  labelIndex.summary().ticketsWithFixCommit(),
  labelIndex.summary().ticketsUsingAffectedVersions(),
  labelIndex.summary().ticketsUsingTotalFallback());
 
- // ── Phase 3: SonarCloud smell index ──────────────────────────────────
+ // ── Phase 3a: SonarCloud per-release pre-scan ─────────────────────────
+ if (config.sonarProjectKey() != null) {
+ int total = plan.timeline().size();
+ LOG.info("[3a/5] SonarCloud pre-scan — {} releases (skips already-scanned)…", total);
+ try (ProgressBar bar = new ProgressBar("Sonar pre-scan", total)) {
+ int newScans = sonarPreScanService.scanMissingReleases(
+ plan.owner(), plan.repo(),
+ plan.timeline().orderedTags(),
+ config.sonarProjectKey(), bar);
+ LOG.info("[3a/5] done — {} new releases scanned", newScans);
+ } catch (SonarCloudException e) {
+ LOG.warn("[3a/5] SonarCloud pre-scan skipped: {}", e.getMessage());
+ }
+ }
+
+ // ── Phase 3b: Build SonarCloud smell index ────────────────────────────
  String sonarLabel = config.sonarProjectKey() != null
- ? config.sonarProjectKey() : "n/a (PMD fallback)";
- LOG.info("[3/4] Fetching SonarCloud smell index — {}…", sonarLabel);
+ ? config.sonarProjectKey() : "n/a";
+ LOG.info("[3b/5] Building SonarCloud smell index — {}…", sonarLabel);
  Map<String, Map<String, Integer>> sonarSmellsByTag;
  try (ProgressBar bar = new ProgressBar("Sonar index", plan.timeline().size())) {
  sonarSmellsByTag = buildSonarSmellsByTag(plan, config, bar);
  }
- LOG.info("[3/4] done");
+ LOG.info("[3b/5] done");
 
  // ── Phase 4: Dataset generation ───────────────────────────────────────
  int releasesTotal = plan.selectedTags().size();
- LOG.info("[4/4] Generating dataset — {} releases…", releasesTotal);
+ LOG.info("[5/5] Generating dataset — {} releases…", releasesTotal);
  Map<Granularity, Path> csvPaths = new LinkedHashMap<>();
  List<ProjectContext> contexts = openContexts(plan, granularities, csvPaths, labelIndex,
  sonarSmellsByTag);
@@ -133,7 +153,7 @@ public final class ProjectProcessor {
  }
  releasesDone++;
  bar.step(snapshot.tag());
- LOG.info("[4/4] Release [{}/{}] {}", releasesDone, releasesTotal, snapshot.tag());
+ LOG.info("[5/5] Release [{}/{}] {}", releasesDone, releasesTotal, snapshot.tag());
  releaseExecutionService.processRelease(snapshot, contexts);
  }
  } finally {
@@ -146,12 +166,19 @@ public final class ProjectProcessor {
  }
 
  /**
- * Builds the per-tag SonarCloud file-smell maps. Returns an empty map gracefully when SonarCloud
- * is not configured or when the API is unavailable.
+ * Builds the per-tag SonarCloud file-smell maps.
+ *
+ * <p>For each tag the lookup strategy is:
+ * <ol>
+ * <li>Exact version match ({@code sonar.projectVersion == tag}) — populated by the pre-scan phase.</li>
+ * <li>Date-based fallback — latest analysis whose date ≤ release date, or earliest available proxy.</li>
+ * </ol>
+ * Returns an empty map gracefully when SonarCloud is not configured or the API is unavailable.
  *
  * @param plan release plan providing the tag timeline
  * @param config project configuration carrying the optional SonarCloud key
- * @return map of release tag to file-path → smell-count map
+ * @param bar progress bar stepped once per tag
+ * @return map of release tag → (file-path → smell-count)
  */
  private Map<String, Map<String, Integer>> buildSonarSmellsByTag(
  ProjectReleasePlan plan, ProjectConfig config, ProgressBar bar) {
@@ -160,14 +187,19 @@ public final class ProjectProcessor {
  try {
  sonarIndex = SonarSmellIndex.build(sonarCloudClient, config.sonarProjectKey());
  } catch (SonarCloudException e) {
- LOG.warn("SonarCloud unavailable for {}: {}. Falling back to PMD.",
- config.sonarProjectKey(), e.getMessage());
+ LOG.warn("SonarCloud unavailable for {}: {}", config.sonarProjectKey(), e.getMessage());
  }
  }
  Map<String, Map<String, Integer>> byTag = new LinkedHashMap<>();
  for (String tag : plan.timeline().orderedTags()) {
+ // 1) Try exact version match (requires pre-scan to have run)
+ Map<String, Integer> smells = sonarIndex.getSmellsForTag(tag);
+ // 2) Fall back to nearest-by-date analysis
+ if (smells.isEmpty()) {
  java.time.Instant tagDate = plan.timeline().tagDates().get(tag);
- byTag.put(tag, tagDate != null ? sonarIndex.getSmellsForDate(tagDate) : Map.of());
+ smells = tagDate != null ? sonarIndex.getSmellsForDate(tagDate) : Map.of();
+ }
+ byTag.put(tag, smells);
  bar.step(tag);
  }
  return byTag;
