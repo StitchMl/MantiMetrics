@@ -43,6 +43,15 @@ public final class SonarCloudClient implements AutoCloseable {
     }
 
     /**
+     * Creates a client using the supplied token directly (may be {@code null} for public projects).
+     *
+     * @param token optional Bearer token; may be {@code null} for public projects
+     */
+    public SonarCloudClient(String token) {
+        this(buildHttpClient(), token);
+    }
+
+    /**
      * Creates a client with injectable collaborators, mainly for testing.
      *
      * @param httpClient HTTP client to use

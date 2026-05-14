@@ -1,9 +1,6 @@
 package com.mantimetrics.sonar;
 
-import com.mantimetrics.parser.CodeParser;
-import com.mantimetrics.parser.CodeParserException;
-import com.mantimetrics.parser.ParsedSourceFile;
-import com.mantimetrics.parser.SourceScanResult;
+import com.mantimetrics.git.GitService;
 import com.mantimetrics.util.ProgressBar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +19,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Runs {@code sonar-scanner} for every release tag that has not yet been analysed on SonarCloud.
+ * Runs {@code mvn sonar:sonar} for every release tag that has not yet been analysed on SonarCloud.
  *
  * <p>Each scan sets {@code sonar.projectVersion} to the release tag so that
  * {@link SonarSmellIndex#getSmellsForTag(String)} can later look up the exact snapshot.
@@ -30,8 +27,8 @@ import java.util.concurrent.TimeUnit;
  * <p>The service is a no-op when:
  * <ul>
  *   <li>{@code SONAR_TOKEN} environment variable is absent, or</li>
- *   <li>the {@code sonar-scanner} binary cannot be found on {@code PATH} or
- *       {@code SONAR_SCANNER_HOME}.</li>
+ *   <li>no Maven executable ({@code mvn} / {@code mvn.cmd}) can be found via
+ *       {@code MAVEN_HOME}, {@code M2_HOME} or {@code PATH}.</li>
  * </ul>
  * In both cases a warning is logged and the caller continues with whatever analyses already exist.
  */
@@ -40,25 +37,26 @@ public final class SonarPreScanService {
 
     /** Seconds between polls when waiting for an analysis to appear on SonarCloud. */
     private static final int POLL_INTERVAL_SEC = 20;
-    /** Maximum seconds to wait for one analysis to be indexed after the scanner exits. */
+    /** Maximum seconds to wait for one analysis to be indexed after Maven exits. */
     private static final int POLL_TIMEOUT_SEC  = 300;
-    /** Maximum minutes allowed for one sonar-scanner process. */
-    private static final int SCANNER_TIMEOUT_MIN = 15;
+    /** Maximum minutes allowed for one {@code mvn sonar:sonar} process. */
+    private static final int MVN_TIMEOUT_MIN   = 20;
 
-    private final CodeParser        codeParser;
+    private final GitService        gitService;
     private final SonarCloudClient  sonarClient;
     private final String            sonarToken;
 
     /**
      * Creates the service.
      *
-     * @param codeParser   parser used to download release sources
+     * @param gitService   Git service used to download and fully extract release ZIPs
      * @param sonarClient  SonarCloud REST client used to check existing analyses
+     * @param sonarToken   SonarCloud authentication token (may be {@code null} — pre-scan is skipped)
      */
-    public SonarPreScanService(CodeParser codeParser, SonarCloudClient sonarClient) {
-        this.codeParser  = codeParser;
+    public SonarPreScanService(GitService gitService, SonarCloudClient sonarClient, String sonarToken) {
+        this.gitService  = gitService;
         this.sonarClient = sonarClient;
-        this.sonarToken  = System.getenv("SONAR_TOKEN");
+        this.sonarToken  = sonarToken;
     }
 
     /**
@@ -82,15 +80,15 @@ public final class SonarPreScanService {
         if (sonarToken == null || sonarToken.isBlank()) {
             LOG.warn("SONAR_TOKEN not set — skipping SonarCloud pre-scan. " +
                      "Set the env variable and re-run to get per-release smell counts.");
-            tags.forEach(t -> bar.step(t));
+            tags.forEach(bar::step);
             return 0;
         }
 
-        String scanner = findScannerBinary();
-        if (scanner == null) {
-            LOG.warn("sonar-scanner binary not found (set SONAR_SCANNER_HOME or add to PATH) — " +
+        String mvn = findMavenExecutable();
+        if (mvn == null) {
+            LOG.warn("Maven executable not found (set MAVEN_HOME/M2_HOME or add mvn to PATH) — " +
                      "skipping per-release pre-scan.");
-            tags.forEach(t -> bar.step(t));
+            tags.forEach(bar::step);
             return 0;
         }
 
@@ -116,7 +114,7 @@ public final class SonarPreScanService {
                 continue;
             }
             try {
-                scanRelease(owner, repo, tag, projectKey, organization, scanner);
+                scanRelease(owner, repo, tag, projectKey, organization, mvn);
                 newScans++;
             } catch (Exception e) {
                 LOG.warn("SonarCloud pre-scan failed for {} — skipping: {}", tag, e.getMessage());
@@ -129,23 +127,22 @@ public final class SonarPreScanService {
     // ── private ──────────────────────────────────────────────────────────────
 
     /**
-     * Downloads the release sources, writes them to a temporary directory, runs
-     * {@code sonar-scanner}, and waits until the analysis appears on SonarCloud.
+     * Fully extracts the release ZIP, runs {@code mvn sonar:sonar} and waits until the
+     * analysis appears on SonarCloud.
      */
     private void scanRelease(
             String owner, String repo, String tag,
-            String projectKey, String organization, String scanner
-    ) throws CodeParserException, IOException, InterruptedException, SonarCloudException {
+            String projectKey, String organization, String mvn
+    ) throws IOException, InterruptedException, SonarCloudException {
 
         LOG.info("SonarCloud pre-scan: scanning {}...", tag);
-        SourceScanResult sources = codeParser.loadReleaseSources(owner, repo, tag);
 
         // Sanitize tag for use in directory name (remove characters invalid on Windows)
         String safeName = tag.replaceAll("[^a-zA-Z0-9._-]", "_");
         Path tempDir = Files.createTempDirectory("sonar-" + safeName + "-");
         try {
-            writeSourcesToDisk(sources, tempDir);
-            runScanner(scanner, tempDir, projectKey, organization, tag);
+            gitService.extractReleaseFull(owner, repo, tag, tempDir);
+            runMavenSonar(mvn, tempDir, projectKey, organization, tag);
             waitForAnalysis(projectKey, tag);
             LOG.info("SonarCloud pre-scan: {} ✓", tag);
         } finally {
@@ -153,33 +150,30 @@ public final class SonarPreScanService {
         }
     }
 
-    /** Writes all Java files from the in-memory source set to {@code targetDir}. */
-    private void writeSourcesToDisk(SourceScanResult sources, Path targetDir) throws IOException {
-        for (ParsedSourceFile f : sources.includedFiles()) {
-            String relative = f.relativePath().replace('\\', '/');
-            Path dest = targetDir.resolve(relative);
-            Files.createDirectories(dest.getParent());
-            Files.writeString(dest, f.source(), StandardCharsets.UTF_8);
-        }
-    }
-
-    /** Builds and executes the sonar-scanner command, waiting for it to exit. */
-    private void runScanner(
-            String scanner, Path workDir,
+    /**
+     * Builds and executes {@code mvn sonar:sonar}, waiting for the process to exit.
+     * Tests are skipped so the scan is fast; SCM is disabled to avoid Git access issues inside
+     * the extracted temp directory.
+     */
+    private void runMavenSonar(
+            String mvn, Path workDir,
             String projectKey, String organization, String tag
     ) throws IOException, InterruptedException {
 
         List<String> cmd = new ArrayList<>();
-        cmd.add(scanner);
+        cmd.add(mvn);
+        cmd.add("sonar:sonar");
         cmd.add("-Dsonar.projectKey="    + projectKey);
         cmd.add("-Dsonar.organization="  + organization);
-        cmd.add("-Dsonar.sources=.");
         cmd.add("-Dsonar.projectVersion=" + tag);
         cmd.add("-Dsonar.host.url=https://sonarcloud.io");
         cmd.add("-Dsonar.token="         + sonarToken);
-        cmd.add("-Dsonar.java.source=8");
-        cmd.add("-Dsonar.sourceEncoding=UTF-8");
         cmd.add("-Dsonar.scm.disabled=true");
+        cmd.add("-DskipTests=true");
+        cmd.add("-Dmaven.test.skip=true");
+        // Suppress most Maven output — sonar goal is still verbose but this keeps it manageable
+        cmd.add("--batch-mode");
+        cmd.add("--no-transfer-progress");
 
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.directory(workDir.toFile());
@@ -196,14 +190,14 @@ public final class SonarPreScanService {
             }
         }
 
-        boolean finished = proc.waitFor(SCANNER_TIMEOUT_MIN, TimeUnit.MINUTES);
+        boolean finished = proc.waitFor(MVN_TIMEOUT_MIN, TimeUnit.MINUTES);
         if (!finished) {
             proc.destroyForcibly();
-            throw new IOException("sonar-scanner timed out after " + SCANNER_TIMEOUT_MIN + " min for " + tag);
+            throw new IOException("mvn sonar:sonar timed out after " + MVN_TIMEOUT_MIN + " min for " + tag);
         }
         if (proc.exitValue() != 0) {
-            LOG.debug("sonar-scanner output for {}:\n{}", tag, output);
-            throw new IOException("sonar-scanner exited with code " + proc.exitValue() + " for " + tag);
+            LOG.debug("mvn sonar:sonar output for {}:\n{}", tag, output);
+            throw new IOException("mvn sonar:sonar exited with code " + proc.exitValue() + " for " + tag);
         }
     }
 
@@ -225,27 +219,30 @@ public final class SonarPreScanService {
     }
 
     /**
-     * Locates the sonar-scanner binary.
-     * Checks {@code SONAR_SCANNER_HOME/bin/sonar-scanner[.bat]} first, then falls back to PATH.
+     * Locates the Maven executable.
+     * Checks {@code MAVEN_HOME/bin/mvn[.cmd]} and {@code M2_HOME/bin/mvn[.cmd]} first,
+     * then falls back to PATH.
      *
      * @return absolute path string, or {@code null} when not found
      */
-    static String findScannerBinary() {
+    static String findMavenExecutable() {
         boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        String suffix = windows ? "\\bin\\mvn.cmd" : "/bin/mvn";
+        String binaryName = windows ? "mvn.cmd" : "mvn";
 
-        // 1) SONAR_SCANNER_HOME environment variable
-        String home = System.getenv("SONAR_SCANNER_HOME");
-        if (home != null && !home.isBlank()) {
-            String suffix = windows ? "\\bin\\sonar-scanner.bat" : "/bin/sonar-scanner";
-            Path bin = Path.of(home + suffix);
-            if (Files.isRegularFile(bin)) {
-                LOG.debug("sonar-scanner found via SONAR_SCANNER_HOME: {}", bin);
-                return bin.toString();
+        // 1) MAVEN_HOME / M2_HOME environment variable
+        for (String envVar : new String[]{"MAVEN_HOME", "M2_HOME"}) {
+            String home = System.getenv(envVar);
+            if (home != null && !home.isBlank()) {
+                Path bin = Path.of(home + suffix);
+                if (Files.isRegularFile(bin)) {
+                    LOG.debug("Maven found via {}: {}", envVar, bin);
+                    return bin.toString();
+                }
             }
         }
 
         // 2) Assume it's on PATH — try a quick version check
-        String binaryName = windows ? "sonar-scanner.bat" : "sonar-scanner";
         try {
             Process probe = new ProcessBuilder(binaryName, "--version")
                     .redirectErrorStream(true)
@@ -255,7 +252,7 @@ public final class SonarPreScanService {
                 is.transferTo(OutputStream.nullOutputStream());
             }
             if (probe.waitFor(10, TimeUnit.SECONDS)) {
-                LOG.debug("sonar-scanner found on PATH");
+                LOG.debug("Maven found on PATH");
                 return binaryName;
             }
         } catch (IOException | InterruptedException ignored) {
