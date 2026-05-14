@@ -45,9 +45,14 @@ public final class SonarSmellIndex {
     }
 
     /**
-     * Returns the file-level code-smell counts from the latest SonarCloud analysis that predates
-     * (or equals) the given release date. Returns an empty map when no matching analysis is found
-     * or when the index is empty.
+     * Returns the file-level code-smell counts from the best matching SonarCloud analysis.
+     *
+     * <p>Selection strategy (analyses are sorted oldest → newest):
+     * <ol>
+     *   <li>Prefer the <em>latest</em> analysis whose date is ≤ {@code releaseDate} — exact historical match.</li>
+     *   <li>If no such analysis exists (e.g. SonarCloud was set up after all release dates), fall back
+     *       to the <em>earliest</em> available analysis as a proxy for the project's smell profile.</li>
+     * </ol>
      *
      * @param releaseDate release tag date used to pick the correct analysis snapshot
      * @return map of normalized relative path → code smell count, possibly empty
@@ -56,6 +61,7 @@ public final class SonarSmellIndex {
         if (analyses.isEmpty() || client == null) {
             return Map.of();
         }
+
         SonarAnalysis best = null;
         for (SonarAnalysis analysis : analyses) {
             if (!analysis.date().isAfter(releaseDate)) {
@@ -64,9 +70,15 @@ public final class SonarSmellIndex {
                 break;
             }
         }
+
+        // Fallback: SonarCloud was set up after all historical release dates.
+        // Use the oldest available analysis as the best available proxy.
         if (best == null) {
-            return Map.of();
+            best = analyses.get(0);
+            LOG.debug("SonarCloud {}: no analysis predates {} — using earliest analysis {} as proxy",
+                    projectKey, releaseDate, best.date());
         }
+
         final String analysisKey = best.key();
         return cache.computeIfAbsent(analysisKey, key -> {
             try {
