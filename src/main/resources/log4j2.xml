@@ -1,12 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="WARN">
+<!--
+  packages="com.mantimetrics.util" tells Log4j2 to scan that package for @Plugin classes,
+  which is how it discovers ProgressBarAppender.
+-->
+<Configuration status="WARN" packages="com.mantimetrics.util">
     <Appenders>
-        <Console name="Console" target="SYSTEM_ERR">
+        <!--
+          ProgressBarAppender writes to System.out and holds ProgressBar.CONSOLE_LOCK
+          around each log line, so log messages and progress bars never share a terminal line.
+        -->
+        <ProgressBarAppender name="Console">
             <PatternLayout disableAnsi="false">
                 <!-- %highlight applies ANSI colors based on level -->
                 <Pattern>%d{HH:mm:ss} %highlight{%-5level}{FATAL=bg_red, ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=blue} %style{%class{0}}{bold} - %msg%n</Pattern>
             </PatternLayout>
-        </Console>
+        </ProgressBarAppender>
     </Appenders>
 
     <Loggers>
@@ -28,7 +36,7 @@
             <AppenderRef ref="Console"/>
         </Logger>
 
-        <!-- 2) NEW loggers to be silenced -->
+        <!-- 4) Suppress noisy third-party loggers -->
         <Logger name="com.github.javaparser.ast.resolution.AsmSymbolResolver" level="off" additivity="false">
             <AppenderRef ref="Console"/>
         </Logger>
