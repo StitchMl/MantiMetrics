@@ -15,6 +15,7 @@ import com.mantimetrics.release.ReleaseProcessingException;
 import com.mantimetrics.sonar.SonarCloudClient;
 import com.mantimetrics.sonar.SonarCloudException;
 import com.mantimetrics.sonar.SonarSmellIndex;
+import com.mantimetrics.util.ProgressBar;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -94,38 +95,55 @@ public final class ProjectProcessor {
                 config.percentage(), plan.resolvedTickets().size());
         LOG.info("└─────────────────────────────────────────────────────────────────────");
 
+        // ── Phase 1: Git commit history ──────────────────────────────────────
         LOG.info("[1/4] Preloading Git commit history ({} releases)…", plan.timeline().size());
-        List<ReleaseSnapshot> releaseHistory = buildReleaseHistory(plan);
-        LOG.info("[1/4] done — {} release snapshots loaded", releaseHistory.size());
+        List<ReleaseSnapshot> releaseHistory;
+        try (ProgressBar bar = new ProgressBar("Git history", plan.timeline().size())) {
+            releaseHistory = buildReleaseHistory(plan, bar);
+        }
+        LOG.info("[1/4] done — {} snapshots loaded", releaseHistory.size());
 
+        // ── Phase 2: Bug-label oracle (sub-bars managed inside the builder) ──
         LOG.info("[2/4] Building bug-label oracle ({} tickets, Proportion-Total)…",
                 plan.resolvedTickets().size());
         HistoricalBugLabelIndex labelIndex = new HistoricalBugLabelIndexBuilder()
                 .build(plan.timeline(), plan.selectedTags(), plan.resolvedTickets(), releaseHistory);
-        LOG.info("[2/4] done — {}", labelIndex.summary().notes());
+        LOG.info("[2/4] done — linked={}, IV-JIRA={}, Proportion-fallback={}",
+                labelIndex.summary().ticketsWithFixCommit(),
+                labelIndex.summary().ticketsUsingAffectedVersions(),
+                labelIndex.summary().ticketsUsingTotalFallback());
 
-        LOG.info("[3/4] Fetching SonarCloud smell index for {}…",
-                config.sonarProjectKey() != null ? config.sonarProjectKey() : "n/a (fallback to PMD)");
-        Map<String, Map<String, Integer>> sonarSmellsByTag = buildSonarSmellsByTag(plan, config);
+        // ── Phase 3: SonarCloud smell index ──────────────────────────────────
+        String sonarLabel = config.sonarProjectKey() != null
+                ? config.sonarProjectKey() : "n/a (PMD fallback)";
+        LOG.info("[3/4] Fetching SonarCloud smell index — {}…", sonarLabel);
+        Map<String, Map<String, Integer>> sonarSmellsByTag;
+        try (ProgressBar bar = new ProgressBar("Sonar index", plan.timeline().size())) {
+            sonarSmellsByTag = buildSonarSmellsByTag(plan, config, bar);
+        }
         LOG.info("[3/4] done");
 
-        LOG.info("[4/4] Generating dataset — {} releases to analyse…", plan.selectedTags().size());
+        // ── Phase 4: Dataset generation ───────────────────────────────────────
+        int releasesTotal = plan.selectedTags().size();
+        LOG.info("[4/4] Generating dataset — {} releases…", releasesTotal);
         Map<Granularity, Path> csvPaths = new LinkedHashMap<>();
         List<ProjectContext> contexts = openContexts(plan, granularities, csvPaths, labelIndex,
                 sonarSmellsByTag);
-        int releasesDone = 0;
-        int releasesTotal = plan.selectedTags().size();
-        try {
-            for (ReleaseSnapshot snapshot : releaseHistory) {
-                if (!plan.selectedTags().contains(snapshot.tag())) {
-                    continue;
+        try (ProgressBar bar = new ProgressBar("Dataset", releasesTotal)) {
+            int releasesDone = 0;
+            try {
+                for (ReleaseSnapshot snapshot : releaseHistory) {
+                    if (!plan.selectedTags().contains(snapshot.tag())) {
+                        continue;
+                    }
+                    releasesDone++;
+                    bar.step(snapshot.tag());
+                    LOG.info("[4/4] Release [{}/{}] {}", releasesDone, releasesTotal, snapshot.tag());
+                    releaseExecutionService.processRelease(snapshot, contexts);
                 }
-                releasesDone++;
-                LOG.info("[4/4] Release [{}/{}] {}", releasesDone, releasesTotal, snapshot.tag());
-                releaseExecutionService.processRelease(snapshot, contexts);
+            } finally {
+                closeContexts(contexts);
             }
-        } finally {
-            closeContexts(contexts);
         }
 
         generateArtifacts(csvPaths, plan, labelIndex, releaseHistory);
@@ -141,7 +159,7 @@ public final class ProjectProcessor {
      * @return map of release tag to file-path → smell-count map
      */
     private Map<String, Map<String, Integer>> buildSonarSmellsByTag(
-            ProjectReleasePlan plan, ProjectConfig config) {
+            ProjectReleasePlan plan, ProjectConfig config, ProgressBar bar) {
         SonarSmellIndex sonarIndex = SonarSmellIndex.EMPTY;
         if (config.sonarProjectKey() != null && !config.sonarProjectKey().isBlank()) {
             try {
@@ -155,6 +173,7 @@ public final class ProjectProcessor {
         for (String tag : plan.timeline().orderedTags()) {
             java.time.Instant tagDate = plan.timeline().tagDates().get(tag);
             byTag.put(tag, tagDate != null ? sonarIndex.getSmellsForDate(tagDate) : Map.of());
+            bar.step(tag);
         }
         return byTag;
     }
@@ -204,20 +223,20 @@ public final class ProjectProcessor {
      * Preloads the complete release history, including the releases excluded by snoring, because those future
      * fix commits are still needed to label the older dataset rows.
      */
-    private List<ReleaseSnapshot> buildReleaseHistory(ProjectReleasePlan plan) {
+    private List<ReleaseSnapshot> buildReleaseHistory(ProjectReleasePlan plan, ProgressBar bar) {
         List<ReleaseSnapshot> history = new ArrayList<>();
         List<String> timelineTags = plan.timeline().orderedTags();
         int total = timelineTags.size();
         for (int index = 0; index < total; index++) {
             String tag = timelineTags.get(index);
             String previousTag = index > 0 ? timelineTags.get(index - 1) : null;
-            LOG.info("  Git history [{}/{}] {}", index + 1, total, tag);
             try {
                 history.add(new ReleaseSnapshot(
                         tag,
                         previousTag,
                         gitService.buildReleaseCommitData(plan.owner(), plan.repo(), previousTag, tag)
                 ));
+                bar.step(tag);
             } catch (IOException exception) {
                 throw new ReleaseProcessingException("I/O error while preloading commit history for " + tag, exception);
             } catch (InterruptedException exception) {

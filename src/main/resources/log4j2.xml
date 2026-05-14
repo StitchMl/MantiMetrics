@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration status="WARN">
     <Appenders>
-        <Console name="Console" target="SYSTEM_OUT">
+        <Console name="Console" target="SYSTEM_ERR">
             <PatternLayout disableAnsi="false">
                 <!-- %highlight applies ANSI colors based on level -->
                 <Pattern>%d{HH:mm:ss} %highlight{%-5level}{FATAL=bg_red, ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=blue} %style{%class{0}}{bold} - %msg%n</Pattern>
@@ -40,7 +40,7 @@
         </Logger>
 
         <!-- default logger -->
-        <Root level="trace">
+        <Root level="info">
             <AppenderRef ref="Console"/>
         </Root>
     </Loggers>

@@ -2,6 +2,7 @@ package com.mantimetrics.labeling;
 
 import com.mantimetrics.analysis.ReleaseSnapshot;
 import com.mantimetrics.jira.JiraBugTicket;
+import com.mantimetrics.util.ProgressBar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,49 +49,57 @@ public final class HistoricalBugLabelIndexBuilder {
         Map<String, Integer> fixReleaseByTicket = new HashMap<>();
         Map<String, Set<String>> touchedPathsByTicket = new HashMap<>();
 
-        LOG.info("  Scanning {} releases for bug-fix commit references…", releaseHistory.size());
-        collectFixHistory(releaseHistory, timeline, ticketsByKey.keySet(), fixReleaseByTicket, touchedPathsByTicket);
+        // Sub-bar 2a — scan commit history for bug-fix references
+        try (ProgressBar bar = new ProgressBar("Scanning commits", releaseHistory.size())) {
+            collectFixHistory(releaseHistory, timeline, ticketsByKey.keySet(),
+                    fixReleaseByTicket, touchedPathsByTicket, bar);
+        }
         LOG.info("  {} tickets linked to at least one fix commit", fixReleaseByTicket.size());
 
-        long withKnownIv = ticketsByKey.values().stream().filter(JiraBugTicket::hasAffectedVersions).count();
-        LOG.info("  Computing Proportion P ({} tickets with known IV, {} will use fallback)…",
-                withKnownIv, fixReleaseByTicket.size() - withKnownIv);
-        double proportionP = computeProportionP(ticketsByKey, fixReleaseByTicket, timeline);
+        // Sub-bar 2b — compute Proportion P
+        int linkedCount = fixReleaseByTicket.size();
+        double proportionP;
+        try (ProgressBar bar = new ProgressBar("Proportion P", linkedCount)) {
+            proportionP = computeProportionP(ticketsByKey, fixReleaseByTicket, timeline, bar);
+        }
         LOG.info("  Proportion P = {}", String.format("%.4f", proportionP));
 
-        LOG.info("  Labeling releases with injected-version ranges…");
+        // Sub-bar 2c — label every ticket range
         Map<String, Set<String>> buggyPathsByRelease = new HashMap<>();
         int withAffectedVersions = 0;
         int withProportionFallback = 0;
 
-        for (Map.Entry<String, Integer> entry : fixReleaseByTicket.entrySet()) {
-            JiraBugTicket ticket = ticketsByKey.get(entry.getKey());
-            if (ticket == null) {
-                continue;
-            }
+        try (ProgressBar bar = new ProgressBar("Labeling releases", linkedCount)) {
+            for (Map.Entry<String, Integer> entry : fixReleaseByTicket.entrySet()) {
+                JiraBugTicket ticket = ticketsByKey.get(entry.getKey());
+                if (ticket == null) {
+                    bar.step();
+                    continue;
+                }
 
-            int fixIndex = entry.getValue();
-            boolean hadAffectedVersions = ticket.hasAffectedVersions();
-            int injectedIndex = resolveInjectedVersionIndex(ticket, timeline, fixIndex, proportionP);
+                int fixIndex = entry.getValue();
+                boolean hadAffectedVersions = ticket.hasAffectedVersions();
+                int injectedIndex = resolveInjectedVersionIndex(ticket, timeline, fixIndex, proportionP);
 
-            if (hadAffectedVersions && injectedIndex < fixIndex) {
-                withAffectedVersions++;
-            } else if (!hadAffectedVersions && injectedIndex < fixIndex) {
-                withProportionFallback++;
-            }
+                if (hadAffectedVersions && injectedIndex < fixIndex) {
+                    withAffectedVersions++;
+                } else if (!hadAffectedVersions && injectedIndex < fixIndex) {
+                    withProportionFallback++;
+                }
 
-            if (injectedIndex >= fixIndex) {
-                continue;
-            }
-
-            Set<String> touchedPaths = touchedPathsByTicket.getOrDefault(ticket.key(), Set.of());
-            for (int releaseIndex = injectedIndex; releaseIndex < fixIndex; releaseIndex++) {
-                String releaseTag = timeline.orderedTags().get(releaseIndex);
-                buggyPathsByRelease.computeIfAbsent(releaseTag, ignored -> new LinkedHashSet<>()).addAll(touchedPaths);
+                if (injectedIndex < fixIndex) {
+                    Set<String> touchedPaths = touchedPathsByTicket.getOrDefault(ticket.key(), Set.of());
+                    for (int releaseIndex = injectedIndex; releaseIndex < fixIndex; releaseIndex++) {
+                        String releaseTag = timeline.orderedTags().get(releaseIndex);
+                        buggyPathsByRelease.computeIfAbsent(releaseTag, ignored -> new LinkedHashSet<>())
+                                .addAll(touchedPaths);
+                    }
+                }
+                bar.step(ticket.key());
             }
         }
 
-        LOG.info("  Oracle built — {} releases with buggy paths  (IV from JIRA: {}  /  Proportion: {})",
+        LOG.info("  Oracle built — {} releases with buggy paths  (IV-JIRA: {}  /  Proportion: {})",
                 buggyPathsByRelease.size(), withAffectedVersions, withProportionFallback);
 
         return new HistoricalBugLabelIndex(
@@ -139,11 +148,13 @@ public final class HistoricalBugLabelIndexBuilder {
             ReleaseTimeline timeline,
             Set<String> knownBugKeys,
             Map<String, Integer> fixReleaseByTicket,
-            Map<String, Set<String>> touchedPathsByTicket
+            Map<String, Set<String>> touchedPathsByTicket,
+            ProgressBar bar
     ) {
         for (ReleaseSnapshot snapshot : releaseHistory) {
             OptionalInt releaseIndex = timeline.findIndex(snapshot.tag());
             if (releaseIndex.isEmpty()) {
+                bar.step(snapshot.tag());
                 continue;
             }
             int currentReleaseIndex = releaseIndex.getAsInt();
@@ -157,6 +168,7 @@ public final class HistoricalBugLabelIndexBuilder {
                     touchedPathsByTicket.computeIfAbsent(issueKey, ignored -> new LinkedHashSet<>()).add(path);
                 }
             });
+            bar.step(snapshot.tag());
         }
     }
 
@@ -173,7 +185,8 @@ public final class HistoricalBugLabelIndexBuilder {
     private double computeProportionP(
             Map<String, JiraBugTicket> ticketsByKey,
             Map<String, Integer> fixReleaseByTicket,
-            ReleaseTimeline timeline
+            ReleaseTimeline timeline,
+            ProgressBar bar
     ) {
         double sum = 0.0;
         int count = 0;
@@ -181,6 +194,7 @@ public final class HistoricalBugLabelIndexBuilder {
         for (Map.Entry<String, Integer> entry : fixReleaseByTicket.entrySet()) {
             JiraBugTicket ticket = ticketsByKey.get(entry.getKey());
             if (ticket == null || !ticket.hasAffectedVersions()) {
+                bar.step();
                 continue;
             }
 
@@ -195,12 +209,14 @@ public final class HistoricalBugLabelIndexBuilder {
                 }
             }
             if (candidates.isEmpty()) {
+                bar.step();
                 continue;
             }
             int iv = candidates.stream().min(Integer::compareTo).orElseThrow();
 
             int denominator = fv - ov;
             if (denominator <= 0) {
+                bar.step();
                 continue;
             }
 
@@ -208,6 +224,7 @@ public final class HistoricalBugLabelIndexBuilder {
             p = Math.min(1.0, Math.max(0.0, p));
             sum += p;
             count++;
+            bar.step(entry.getKey());
         }
 
         return count == 0 ? 1.0 : sum / count;
