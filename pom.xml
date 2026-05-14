@@ -58,6 +58,13 @@
  <version>${maven.core.version}</version>
  </dependency>
 
+ <!-- Log4j2 core — needed at compile time for the custom ProgressBarAppender -->
+ <dependency>
+ <groupId>org.apache.logging.log4j</groupId>
+ <artifactId>log4j-core</artifactId>
+ <version>${log4j2.version}</version>
+ </dependency>
+
  <!-- Log4j2 core + bridge Log4j‑1.2 API -->
  <dependency>
  <groupId>org.apache.logging.log4j</groupId>
