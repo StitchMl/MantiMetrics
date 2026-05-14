@@ -78,4 +78,26 @@ public final class AnalysisPathUtils {
             return Optional.empty();
         }
     }
+
+    /**
+     * Formats a millisecond duration into a human-readable string.
+     * Examples: {@code "45 s"}, {@code "21 min 15 s"}, {@code "2 h 5 min 10 s"}.
+     *
+     * @param millis duration in milliseconds
+     * @return human-readable duration string
+     */
+    public static String humanDuration(long millis) {
+        long totalSeconds = millis / 1_000;
+        long hours   = totalSeconds / 3_600;
+        long minutes = (totalSeconds % 3_600) / 60;
+        long seconds = totalSeconds % 60;
+
+        if (hours > 0) {
+            return String.format("%d h %d min %d s", hours, minutes, seconds);
+        }
+        if (minutes > 0) {
+            return String.format("%d min %d s", minutes, seconds);
+        }
+        return String.format("%d s", seconds);
+    }
 }
