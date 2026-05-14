@@ -9,6 +9,9 @@ import com.mantimetrics.util.AnalysisPathUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
+import java.util.function.ToDoubleFunction;
+import java.util.function.ToIntFunction;
 
 /**
  * Applies release-local Git history, cumulative history and historical bug labels to parsed rows.
@@ -139,6 +142,25 @@ final class DatasetRowEnricher {
  }
 
  /**
+ * Groups the per-release input values needed to compute the updated history state.
+ *
+ * @param relativePath normalized relative source path
+ * @param request immutable release request
+ * @param metrics current-release static metrics
+ * @param currentCodeSmells PMD violation count for the current release
+ * @param currentNSmells total smell count (binary + PMD) for the current release
+ * @param currentSmellDensity smell density (NSmells / max(LOC,1)) for the current release
+ */
+ private record HistoryInput(
+ String relativePath,
+ ReleaseDatasetRequest request,
+ MethodMetrics metrics,
+ int currentCodeSmells,
+ int currentNSmells,
+ double currentSmellDensity
+ ) {}
+
+ /**
  * Updates the cumulative history state associated with a dataset row and returns the refreshed value.
  * Computes the current nsmells internally from the provided metrics and codeSmells count.
  *
@@ -161,9 +183,9 @@ final class DatasetRowEnricher {
  int currentNSmells = computeNSmells(metrics, currentCodeSmells);
  double currentSmellDensity = currentNSmells / (double) Math.max(metrics.getLoc(), 1);
 
- RowHistoryState updated = buildUpdatedHistory(
- previous, relativePath, request, metrics,
- currentCodeSmells, currentNSmells, currentSmellDensity, totalAuthors);
+ HistoryInput input = new HistoryInput(relativePath, request, metrics,
+ currentCodeSmells, currentNSmells, currentSmellDensity);
+ RowHistoryState updated = buildUpdatedHistory(previous, input, totalAuthors);
  request.historyStore().put(uniqueKey, updated);
  return updated;
  }
@@ -195,46 +217,57 @@ final class DatasetRowEnricher {
 
  /**
  * Builds the updated {@link RowHistoryState} by accumulating running counters and max values.
+ * All prev-or-default lookups are delegated to {@link #prevInt}, {@link #prevDouble} and
+ * {@link #prevBool} so this method contains no branching logic itself.
  */
  private RowHistoryState buildUpdatedHistory(
- RowHistoryState previous,
- String relativePath,
- ReleaseDatasetRequest request,
- MethodMetrics metrics,
- int currentCodeSmells,
- int currentNSmells,
- double currentSmellDensity,
- List<String> totalAuthors
- ) {
- int prevAge = previous != null ? previous.ageInReleases() : 0;
+ RowHistoryState previous, HistoryInput input, List<String> totalAuthors) {
+ MethodMetrics m = input.metrics();
+ ReleaseDatasetRequest req = input.request();
+ String path = input.relativePath();
  return new RowHistoryState(
- (previous != null ? previous.totalTouches() : 0) + request.commitData().touchesFor(relativePath).size(),
- (previous != null ? previous.totalIssueTouches() : 0) + request.commitData().issueTouchesFor(relativePath).size(),
- (previous != null ? previous.totalChurn() : 0) + request.commitData().churnFor(relativePath),
+ prevInt(previous, RowHistoryState::totalTouches) + req.commitData().touchesFor(path).size(),
+ prevInt(previous, RowHistoryState::totalIssueTouches) + req.commitData().issueTouchesFor(path).size(),
+ prevInt(previous, RowHistoryState::totalChurn) + req.commitData().churnFor(path),
  totalAuthors,
- prevAge + 1,
- Math.max(previous != null ? previous.maxLoc() : 0, metrics.getLoc()),
- Math.max(previous != null ? previous.maxCyclomatic() : 0, metrics.getCyclomatic()),
- Math.max(previous != null ? previous.maxCognitive() : 0, metrics.getCognitive()),
- Math.max(previous != null ? previous.maxNSmells() : 0, currentNSmells),
- Math.max(previous != null ? previous.maxStmtCount() : 0, metrics.getStmtCount()),
- Math.max(previous != null ? previous.maxDistinctOperators() : 0, metrics.getDistinctOperators()),
- Math.max(previous != null ? previous.maxDistinctOperands() : 0, metrics.getDistinctOperands()),
- Math.max(previous != null ? previous.maxTotalOperators() : 0, metrics.getTotalOperators()),
- Math.max(previous != null ? previous.maxTotalOperands() : 0, metrics.getTotalOperands()),
- Math.max(previous != null ? previous.maxVocabulary() : 0.0, metrics.getVocabulary()),
- Math.max(previous != null ? previous.maxLength() : 0.0, metrics.getLength()),
- Math.max(previous != null ? previous.maxVolume() : 0.0, metrics.getVolume()),
- Math.max(previous != null ? previous.maxDifficulty() : 0.0, metrics.getDifficulty()),
- Math.max(previous != null ? previous.maxEffort() : 0.0, metrics.getEffort()),
- Math.max(previous != null ? previous.maxNestingDepth() : 0, metrics.getMaxNestingDepth()),
- (previous != null && previous.everLongMethod()) || metrics.isLongMethod(),
- (previous != null && previous.everGodClass()) || metrics.isGodClass(),
- (previous != null && previous.everFeatureEnvy()) || metrics.isFeatureEnvy(),
- (previous != null && previous.everDuplicatedCode()) || metrics.isDuplicatedCode(),
- Math.max(previous != null ? previous.maxCodeSmells() : 0, currentCodeSmells),
- Math.max(previous != null ? previous.maxSmellDensity() : 0.0, currentSmellDensity)
+ prevInt(previous, RowHistoryState::ageInReleases) + 1,
+ Math.max(prevInt(previous, RowHistoryState::maxLoc), m.getLoc()),
+ Math.max(prevInt(previous, RowHistoryState::maxCyclomatic), m.getCyclomatic()),
+ Math.max(prevInt(previous, RowHistoryState::maxCognitive), m.getCognitive()),
+ Math.max(prevInt(previous, RowHistoryState::maxNSmells), input.currentNSmells()),
+ Math.max(prevInt(previous, RowHistoryState::maxStmtCount), m.getStmtCount()),
+ Math.max(prevInt(previous, RowHistoryState::maxDistinctOperators),m.getDistinctOperators()),
+ Math.max(prevInt(previous, RowHistoryState::maxDistinctOperands), m.getDistinctOperands()),
+ Math.max(prevInt(previous, RowHistoryState::maxTotalOperators), m.getTotalOperators()),
+ Math.max(prevInt(previous, RowHistoryState::maxTotalOperands), m.getTotalOperands()),
+ Math.max(prevDouble(previous, RowHistoryState::maxVocabulary), m.getVocabulary()),
+ Math.max(prevDouble(previous, RowHistoryState::maxLength), m.getLength()),
+ Math.max(prevDouble(previous, RowHistoryState::maxVolume), m.getVolume()),
+ Math.max(prevDouble(previous, RowHistoryState::maxDifficulty), m.getDifficulty()),
+ Math.max(prevDouble(previous, RowHistoryState::maxEffort), m.getEffort()),
+ Math.max(prevInt(previous, RowHistoryState::maxNestingDepth), m.getMaxNestingDepth()),
+ prevBool(previous, RowHistoryState::everLongMethod) || m.isLongMethod(),
+ prevBool(previous, RowHistoryState::everGodClass) || m.isGodClass(),
+ prevBool(previous, RowHistoryState::everFeatureEnvy) || m.isFeatureEnvy(),
+ prevBool(previous, RowHistoryState::everDuplicatedCode)|| m.isDuplicatedCode(),
+ Math.max(prevInt(previous, RowHistoryState::maxCodeSmells), input.currentCodeSmells()),
+ Math.max(prevDouble(previous, RowHistoryState::maxSmellDensity), input.currentSmellDensity())
  );
+ }
+
+ /** Returns {@code fn(prev)} when {@code prev} is non-null, otherwise {@code 0}. */
+ private static int prevInt(RowHistoryState prev, ToIntFunction<RowHistoryState> fn) {
+ return prev != null ? fn.applyAsInt(prev) : 0;
+ }
+
+ /** Returns {@code fn(prev)} when {@code prev} is non-null, otherwise {@code 0.0}. */
+ private static double prevDouble(RowHistoryState prev, ToDoubleFunction<RowHistoryState> fn) {
+ return prev != null ? fn.applyAsDouble(prev) : 0.0;
+ }
+
+ /** Returns {@code fn(prev)} when {@code prev} is non-null, otherwise {@code false}. */
+ private static boolean prevBool(RowHistoryState prev, Predicate<RowHistoryState> fn) {
+ return prev != null && fn.test(prev);
  }
 
  /**

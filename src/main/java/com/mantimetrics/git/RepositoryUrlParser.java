@@ -87,7 +87,7 @@ final class RepositoryUrlParser {
  List<String> nonBlankParts = Arrays.stream(parts)
  .filter(part -> part != null && !part.isBlank())
  .toList();
- String owner = nonBlankParts.size() > 0 ? nonBlankParts.get(0) : null;
+ String owner = !nonBlankParts.isEmpty() ? nonBlankParts.get(0) : null;
  String repo = nonBlankParts.size() > 1 ? stripGitSuffix(nonBlankParts.get(1)) : null;
 
  if (!hasText(owner) || !hasText(repo)) {
