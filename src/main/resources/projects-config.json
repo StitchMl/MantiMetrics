@@ -5,7 +5,7 @@
  "percentage": 33,
  "repoUrl": "https://github.com/apache/avro.git",
  "jiraKey": "AVRO",
- "sonarKey": "apache_avro"
+ "sonarKey": "StitchMl_avro"
  },
  {
  "owner": "apache",
@@ -13,7 +13,7 @@
  "percentage": 33,
  "repoUrl": "https://github.com/apache/openjpa.git",
  "jiraKey": "OPENJPA",
- "sonarKey": "apache_openjpa"
+ "sonarKey": null
  },
  {
  "owner": "apache",
@@ -21,7 +21,7 @@
  "percentage": 33,
  "repoUrl": "https://github.com/apache/storm.git",
  "jiraKey": "STORM",
- "sonarKey": "apache_storm"
+ "sonarKey": null
  },
  {
  "owner": "apache",
@@ -29,7 +29,7 @@
  "percentage": 33,
  "repoUrl": "https://github.com/apache/zookeeper.git",
  "jiraKey": "ZOOKEEPER",
- "sonarKey": "apache_zookeeper"
+ "sonarKey": null
  },
  {
  "owner": "apache",
@@ -37,7 +37,7 @@
  "percentage": 33,
  "repoUrl": "https://github.com/apache/syncope.git",
  "jiraKey": "SYNCOPE",
- "sonarKey": "apache_syncope"
+ "sonarKey": null
  },
  {
  "owner": "apache",
@@ -45,6 +45,6 @@
  "percentage": 33,
  "repoUrl": "https://github.com/apache/tajo.git",
  "jiraKey": "TAJO",
- "sonarKey": "apache_tajo"
+ "sonarKey": null
  }
 ]
