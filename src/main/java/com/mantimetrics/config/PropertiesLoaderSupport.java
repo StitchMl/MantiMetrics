@@ -13,6 +13,9 @@ import java.util.Properties;
  */
 public final class PropertiesLoaderSupport {
 
+ /** Classpath resource path prefix (always '/' regardless of OS). */
+ private static final String RESOURCE_PREFIX = "/";
+
  /**
  * Loads properties from a filesystem path when present, otherwise from a classpath resource.
  *
@@ -32,7 +35,7 @@ public final class PropertiesLoaderSupport {
  }
  }
 
- String resourcePath = path.startsWith("/") ? path : "/" + path;
+ String resourcePath = path.startsWith(RESOURCE_PREFIX) ? path : RESOURCE_PREFIX + path;
  try (InputStream input = resourceOwner.getResourceAsStream(resourcePath)) {
  if (input == null) {
  throw new IOException(missingMessage + ": " + path);

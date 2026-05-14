@@ -111,17 +111,14 @@ class ZipDownloader {
  while ((entry = ZipExtractionUtils.safeNextEntry(zipInputStream)) != null) {
  entries++;
  ZipExtractionUtils.validateEntry(entries);
- if (!ZipExtractionUtils.shouldMaterialize(entry.getName(), entry.isDirectory())) {
- zipInputStream.closeEntry();
- continue;
- }
-
+ if (ZipExtractionUtils.shouldMaterialize(entry.getName(), entry.isDirectory())) {
  byte[] bytes = readEntryBytes(zipInputStream);
  total = ZipExtractionUtils.checkQuotas(total, bytes.length, entry.getCompressedSize());
  sources.add(new ParsedSourceFile(
  toRelativeSourcePath(entry.getName()),
  new String(bytes, StandardCharsets.UTF_8),
  List.of()));
+ }
  zipInputStream.closeEntry();
  }
  }
@@ -130,6 +127,43 @@ class ZipDownloader {
  } finally {
  permits.release();
  }
+ }
+
+ /**
+ * Processes one ZIP entry during a full extraction. Skips empty or traversal-unsafe paths;
+ * creates directories for directory entries; writes file bytes for regular file entries.
+ *
+ * @param zipInputStream ZIP stream positioned at the entry
+ * @param entry current ZIP entry
+ * @param relative normalized relative path of the entry
+ * @param targetDir extraction target directory
+ * @param totalSoFar accumulated extracted bytes so far
+ * @return updated total extracted byte count
+ * @throws IOException when I/O fails
+ */
+ private long extractEntry(
+ ZipInputStream zipInputStream,
+ ZipEntry entry,
+ String relative,
+ Path targetDir,
+ long totalSoFar
+ ) throws IOException {
+ if (relative.isEmpty()) {
+ return totalSoFar;
+ }
+ if (entry.isDirectory()) {
+ java.nio.file.Files.createDirectories(targetDir.resolve(relative));
+ return totalSoFar;
+ }
+ Path dest = targetDir.resolve(relative).normalize();
+ if (!dest.startsWith(targetDir)) {
+ return totalSoFar; // skip traversal attempt
+ }
+ java.nio.file.Files.createDirectories(dest.getParent());
+ byte[] bytes = readEntryBytes(zipInputStream);
+ long updated = ZipExtractionUtils.checkQuotas(totalSoFar, bytes.length, entry.getCompressedSize());
+ java.nio.file.Files.write(dest, bytes);
+ return updated;
  }
 
  /**
@@ -214,24 +248,7 @@ class ZipDownloader {
  entries++;
  ZipExtractionUtils.validateEntry(entries);
  String relative = toRelativeSourcePath(entry.getName());
- if (relative.isEmpty()) {
- zipInputStream.closeEntry();
- continue;
- }
- if (entry.isDirectory()) {
- java.nio.file.Files.createDirectories(targetDir.resolve(relative));
- zipInputStream.closeEntry();
- continue;
- }
- Path dest = targetDir.resolve(relative).normalize();
- if (!dest.startsWith(targetDir)) {
- zipInputStream.closeEntry();
- continue; // skip traversal attempt
- }
- java.nio.file.Files.createDirectories(dest.getParent());
- byte[] bytes = readEntryBytes(zipInputStream);
- total = ZipExtractionUtils.checkQuotas(total, bytes.length, entry.getCompressedSize());
- java.nio.file.Files.write(dest, bytes);
+ total = extractEntry(zipInputStream, entry, relative, targetDir, total);
  zipInputStream.closeEntry();
  }
  }

@@ -9,7 +9,6 @@ import com.mantimetrics.util.AnalysisPathUtils;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Applies release-local Git history, cumulative history and historical bug labels to parsed rows.
@@ -158,7 +157,21 @@ final class DatasetRowEnricher {
  int currentCodeSmells
  ) {
  RowHistoryState previous = request.historyStore().get(uniqueKey);
- List<String> currentAuthors = distinctAuthors(request.commitData().authorsFor(relativePath));
+ List<String> totalAuthors = mergeAuthors(previous, distinctAuthors(request.commitData().authorsFor(relativePath)));
+ int currentNSmells = computeNSmells(metrics, currentCodeSmells);
+ double currentSmellDensity = currentNSmells / (double) Math.max(metrics.getLoc(), 1);
+
+ RowHistoryState updated = buildUpdatedHistory(
+ previous, relativePath, request, metrics,
+ currentCodeSmells, currentNSmells, currentSmellDensity, totalAuthors);
+ request.historyStore().put(uniqueKey, updated);
+ return updated;
+ }
+
+ /**
+ * Merges the previous author list with the current release authors, preserving encounter order.
+ */
+ private List<String> mergeAuthors(RowHistoryState previous, List<String> currentAuthors) {
  List<String> totalAuthors = new ArrayList<>();
  if (previous != null) {
  totalAuthors.addAll(previous.authors());
@@ -166,20 +179,40 @@ final class DatasetRowEnricher {
  currentAuthors.stream()
  .filter(author -> !totalAuthors.contains(author))
  .forEach(totalAuthors::add);
+ return totalAuthors;
+ }
 
+ /**
+ * Computes the total NSmells count from binary smell flags and PMD violations.
+ */
+ private int computeNSmells(MethodMetrics metrics, int currentCodeSmells) {
  int binarySmells = (metrics.isLongMethod() ? 1 : 0)
  + (metrics.isGodClass() ? 1 : 0)
  + (metrics.isFeatureEnvy() ? 1 : 0)
  + (metrics.isDuplicatedCode() ? 1 : 0);
- int currentNSmells = currentCodeSmells + binarySmells;
- double currentSmellDensity = currentNSmells / (double) Math.max(metrics.getLoc(), 1);
+ return currentCodeSmells + binarySmells;
+ }
 
- RowHistoryState updated = new RowHistoryState(
+ /**
+ * Builds the updated {@link RowHistoryState} by accumulating running counters and max values.
+ */
+ private RowHistoryState buildUpdatedHistory(
+ RowHistoryState previous,
+ String relativePath,
+ ReleaseDatasetRequest request,
+ MethodMetrics metrics,
+ int currentCodeSmells,
+ int currentNSmells,
+ double currentSmellDensity,
+ List<String> totalAuthors
+ ) {
+ int prevAge = previous != null ? previous.ageInReleases() : 0;
+ return new RowHistoryState(
  (previous != null ? previous.totalTouches() : 0) + request.commitData().touchesFor(relativePath).size(),
  (previous != null ? previous.totalIssueTouches() : 0) + request.commitData().issueTouchesFor(relativePath).size(),
  (previous != null ? previous.totalChurn() : 0) + request.commitData().churnFor(relativePath),
  totalAuthors,
- previous != null ? previous.ageInReleases() + 1 : 1,
+ prevAge + 1,
  Math.max(previous != null ? previous.maxLoc() : 0, metrics.getLoc()),
  Math.max(previous != null ? previous.maxCyclomatic() : 0, metrics.getCyclomatic()),
  Math.max(previous != null ? previous.maxCognitive() : 0, metrics.getCognitive()),
@@ -202,8 +235,6 @@ final class DatasetRowEnricher {
  Math.max(previous != null ? previous.maxCodeSmells() : 0, currentCodeSmells),
  Math.max(previous != null ? previous.maxSmellDensity() : 0.0, currentSmellDensity)
  );
- request.historyStore().put(uniqueKey, updated);
- return updated;
  }
 
  /**
@@ -248,7 +279,7 @@ final class DatasetRowEnricher {
  * @return distinct author list
  */
  private List<String> distinctAuthors(List<String> authors) {
- return authors.stream().distinct().collect(Collectors.toList());
+ return authors.stream().distinct().toList();
  }
 
  /**

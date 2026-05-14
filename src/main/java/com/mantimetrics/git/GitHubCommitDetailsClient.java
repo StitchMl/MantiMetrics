@@ -71,7 +71,9 @@ final class GitHubCommitDetailsClient {
  String message = null;
  String author = "";
  Set<ReleaseCommitDataBuilder.ReleaseCommitFile> files = new LinkedHashSet<>();
- for (int page = 1; ; page++) {
+ int page = 1;
+ boolean hasMore = true;
+ while (hasMore) {
  JsonNode response = apiClient.getApi(String.format(template, page));
  if (message == null) {
  message = response.path("commit").path("message").asText("");
@@ -79,12 +81,13 @@ final class GitHubCommitDetailsClient {
  }
 
  JsonNode fileNodes = response.path("files");
- if (!fileNodes.isArray() || fileNodes.isEmpty()) {
- break;
+ if (!fileNodes.isArray() || fileNodes.isEmpty() || fileNodes.size() < 100) {
+ hasMore = false;
+ } else {
+ page++;
  }
+ if (fileNodes.isArray()) {
  fileNodes.forEach(file -> addFilename(file, files));
- if (fileNodes.size() < 100) {
- break;
  }
  }
 
