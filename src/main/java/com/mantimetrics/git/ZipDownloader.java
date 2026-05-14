@@ -66,8 +66,9 @@ class ZipDownloader {
  } catch (SocketTimeoutException exception) {
  last = exception;
  long wait = backoff(i);
- LOG.warn("Timeout downloading {}, retry {}/{} in {} s",
- ref, i + 1, MAX_R, wait / 1_000);
+ LOG.warn("Timeout downloading {}, retry {}/{} in {}",
+ ref, i + 1, MAX_R,
+ com.mantimetrics.util.AnalysisPathUtils.humanDuration(wait));
  Thread.sleep(wait);
  }
  }

@@ -61,8 +61,9 @@ class GitApiClient {
  }
  if (isRetriable(response.code())) {
  long wait = backoff(response, attempt);
- LOG.warn("Rate-limit {}, retry {}/{} in {} s - {}",
- response.code(), attempt + 1, MAX_R, wait / 1_000, path);
+ LOG.warn("Rate-limit {}, retry {}/{} in {} - {}",
+ response.code(), attempt + 1, MAX_R,
+ com.mantimetrics.util.AnalysisPathUtils.humanDuration(wait), path);
  TimeUnit.MILLISECONDS.sleep(wait);
  continue;
  }
