@@ -78,6 +78,23 @@ public final class GitService {
  }
 
  /**
+ * Downloads the full release ZIP and extracts all files to {@code targetDir}.
+ * The top-level archive folder is stripped so that {@code pom.xml} lands directly
+ * inside {@code targetDir}.
+ *
+ * @param owner repository owner
+ * @param repo repository name
+ * @param ref tag or branch reference to download
+ * @param targetDir directory that will receive the extracted content (must already exist)
+ * @throws IOException when the download or extraction fails
+ * @throws InterruptedException when the thread is interrupted while waiting for the download
+ */
+ public void extractReleaseFull(String owner, String repo, String ref, Path targetDir)
+ throws IOException, InterruptedException {
+ zipDownloader.extractFullRelease(owner, repo, ref, targetDir);
+ }
+
+ /**
  * Returns temporary directories created by the download layer.
  *
  * @return temporary directories to clean up

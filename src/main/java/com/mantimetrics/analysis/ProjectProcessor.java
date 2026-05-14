@@ -41,7 +41,7 @@ public final class ProjectProcessor {
  private final CSVWriter csvWriter;
  private final DatasetArtifactService datasetArtifactService;
  private final MilestoneAuditService milestoneAuditService;
- private final SonarCloudClient sonarCloudClient = new SonarCloudClient();
+ private final SonarCloudClient sonarCloudClient;
  private final SonarPreScanService sonarPreScanService;
 
  /**
@@ -51,7 +51,8 @@ public final class ProjectProcessor {
  * @param releaseExecutionService service that executes one prepared release
  * @param gitService Git service used to preload release commit data
  * @param csvWriter CSV writer used to open per-granularity output files
- * @param sonarPreScanService service that runs sonar-scanner for missing releases
+ * @param sonarPreScanService service that runs {@code mvn sonar:sonar} for missing releases
+ * @param sonarCloudClient authenticated SonarCloud client shared across the pipeline
  * @param datasetArtifactService service that generates derived dataset artifacts
  * @param milestoneAuditService service that writes the milestone audit JSON
  */
@@ -61,6 +62,7 @@ public final class ProjectProcessor {
  GitService gitService,
  CSVWriter csvWriter,
  SonarPreScanService sonarPreScanService,
+ SonarCloudClient sonarCloudClient,
  DatasetArtifactService datasetArtifactService,
  MilestoneAuditService milestoneAuditService
  ) {
@@ -69,6 +71,7 @@ public final class ProjectProcessor {
  this.gitService = gitService;
  this.csvWriter = csvWriter;
  this.sonarPreScanService = sonarPreScanService;
+ this.sonarCloudClient = sonarCloudClient;
  this.datasetArtifactService = datasetArtifactService;
  this.milestoneAuditService = milestoneAuditService;
  }

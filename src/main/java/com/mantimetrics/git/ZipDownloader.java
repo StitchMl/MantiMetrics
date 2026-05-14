@@ -162,6 +162,86 @@ class ZipDownloader {
  }
 
  /**
+ * Downloads the release ZIP and extracts every entry (all file types) to {@code targetDir}.
+ * The top-level archive folder (e.g. {@code avro-release-1.8.1/}) is stripped so that
+ * {@code pom.xml} lands directly inside {@code targetDir}.
+ *
+ * @param owner repository owner
+ * @param repo repository name
+ * @param ref tag or branch reference to download
+ * @param targetDir directory that will receive the extracted content (must exist)
+ * @throws IOException when the download or extraction fails
+ * @throws InterruptedException when the thread is interrupted while waiting between retries
+ */
+ void extractFullRelease(String owner, String repo, String ref, Path targetDir)
+ throws IOException, InterruptedException {
+ String url = ZIP + "/" + owner + "/" + repo + "/zip/" +
+ URLEncoder.encode(ref, StandardCharsets.UTF_8);
+ IOException last = new java.net.SocketTimeoutException("Timeout downloading " + ref);
+ for (int i = 0; i < MAX_R; i++) {
+ try {
+ tryExtractFull(url, targetDir);
+ return;
+ } catch (java.net.SocketTimeoutException exception) {
+ last = exception;
+ long wait = backoff(i);
+ LOG.warn("Timeout downloading {}, retry {}/{} in {}",
+ ref, i + 1, MAX_R,
+ com.mantimetrics.util.AnalysisPathUtils.humanDuration(wait));
+ Thread.sleep(wait);
+ }
+ }
+ throw last;
+ }
+
+ /**
+ * One extraction attempt: streams the ZIP response directly to disk.
+ */
+ private void tryExtractFull(String url, Path targetDir) throws IOException {
+ permits.acquireUninterruptibly();
+ try {
+ Request request = new Request.Builder().url(url).build();
+ try (Response response = longClient.newCall(request).execute()) {
+ if (!response.isSuccessful() || response.body() == null) {
+ throw new IOException("ZIP HTTP " + response.code());
+ }
+ long total = 0;
+ int entries = 0;
+ try (java.io.InputStream inputStream = response.body().byteStream();
+ ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
+ ZipEntry entry;
+ while ((entry = ZipExtractionUtils.safeNextEntry(zipInputStream)) != null) {
+ entries++;
+ ZipExtractionUtils.validateEntry(entries);
+ String relative = toRelativeSourcePath(entry.getName());
+ if (relative.isEmpty()) {
+ zipInputStream.closeEntry();
+ continue;
+ }
+ if (entry.isDirectory()) {
+ java.nio.file.Files.createDirectories(targetDir.resolve(relative));
+ zipInputStream.closeEntry();
+ continue;
+ }
+ Path dest = targetDir.resolve(relative).normalize();
+ if (!dest.startsWith(targetDir)) {
+ zipInputStream.closeEntry();
+ continue; // skip traversal attempt
+ }
+ java.nio.file.Files.createDirectories(dest.getParent());
+ byte[] bytes = readEntryBytes(zipInputStream);
+ total = ZipExtractionUtils.checkQuotas(total, bytes.length, entry.getCompressedSize());
+ java.nio.file.Files.write(dest, bytes);
+ zipInputStream.closeEntry();
+ }
+ }
+ }
+ } finally {
+ permits.release();
+ }
+ }
+
+ /**
  * Returns temporary directories created by the downloader.
  *
  * @return empty list because the current implementation keeps everything in memory

@@ -10,6 +10,7 @@ import com.mantimetrics.cli.CliOptions;
 import com.mantimetrics.cli.ProjectSelectionPrompt;
 import com.mantimetrics.config.GitHubTokenLoader;
 import com.mantimetrics.config.ProjectConfigLoader;
+import com.mantimetrics.config.SonarTokenLoader;
 import com.mantimetrics.csv.CSVWriter;
 import com.mantimetrics.dataset.DatasetArffWriter;
 import com.mantimetrics.dataset.DatasetArtifactService;
@@ -36,6 +37,7 @@ import java.io.IOException;
 @SuppressWarnings("GrazieInspectionRunner")
 public final class ApplicationBootstrap {
  private final GitHubTokenLoader gitHubTokenLoader = new GitHubTokenLoader();
+ private final SonarTokenLoader sonarTokenLoader = new SonarTokenLoader();
  private final ProjectSelectionPrompt projectSelectionPrompt = new ProjectSelectionPrompt(System.in, System.out);
 
  /**
@@ -66,7 +68,8 @@ public final class ApplicationBootstrap {
  private ProjectProcessor createProcessor(GitService gitService) {
  JiraClient jiraClient = new JiraClient();
  CodeParser codeParser = new CodeParser(gitService);
- SonarCloudClient sonarClient = new SonarCloudClient();
+ String sonarToken = sonarTokenLoader.load(MainApp.class);
+ SonarCloudClient sonarClient = new SonarCloudClient(sonarToken);
 
  return new ProjectProcessor(
  new ProjectReleasePlanner(gitService, new ReleaseSelector(), jiraClient),
@@ -74,7 +77,8 @@ public final class ApplicationBootstrap {
  new ReleaseDatasetCollector(codeParser, new MetricsCalculator())),
  gitService,
  new CSVWriter(),
- new SonarPreScanService(codeParser, sonarClient),
+ new SonarPreScanService(gitService, sonarClient, sonarToken),
+ sonarClient,
  new DatasetArtifactService(
  new DatasetCsvTableReader(),
  new DatasetTableWriter(),
