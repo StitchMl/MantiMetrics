@@ -2,6 +2,8 @@ package com.mantimetrics.labeling;
 
 import com.mantimetrics.analysis.ReleaseSnapshot;
 import com.mantimetrics.jira.JiraBugTicket;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -20,6 +22,7 @@ import java.util.Set;
  * data is available (equivalent to IV = OV).
  */
 public final class HistoricalBugLabelIndexBuilder {
+ private static final Logger LOG = LoggerFactory.getLogger(HistoricalBugLabelIndexBuilder.class);
 
  /**
  * Builds the historical bug-label index from the full release history and resolved Jira tickets.
@@ -44,10 +47,18 @@ public final class HistoricalBugLabelIndexBuilder {
  Map<String, JiraBugTicket> ticketsByKey = indexTickets(resolvedTickets);
  Map<String, Integer> fixReleaseByTicket = new HashMap<>();
  Map<String, Set<String>> touchedPathsByTicket = new HashMap<>();
+
+ LOG.info(" Scanning {} releases for bug-fix commit references…", releaseHistory.size());
  collectFixHistory(releaseHistory, timeline, ticketsByKey.keySet(), fixReleaseByTicket, touchedPathsByTicket);
+ LOG.info(" {} tickets linked to at least one fix commit", fixReleaseByTicket.size());
 
+ long withKnownIv = ticketsByKey.values().stream().filter(JiraBugTicket::hasAffectedVersions).count();
+ LOG.info(" Computing Proportion P ({} tickets with known IV, {} will use fallback)…",
+ withKnownIv, fixReleaseByTicket.size() - withKnownIv);
  double proportionP = computeProportionP(ticketsByKey, fixReleaseByTicket, timeline);
+ LOG.info(" Proportion P = {}", String.format("%.4f", proportionP));
 
+ LOG.info(" Labeling releases with injected-version ranges…");
  Map<String, Set<String>> buggyPathsByRelease = new HashMap<>();
  int withAffectedVersions = 0;
  int withProportionFallback = 0;
@@ -78,6 +89,9 @@ public final class HistoricalBugLabelIndexBuilder {
  buggyPathsByRelease.computeIfAbsent(releaseTag, ignored -> new LinkedHashSet<>()).addAll(touchedPaths);
  }
  }
+
+ LOG.info(" Oracle built — {} releases with buggy paths (IV from JIRA: {} / Proportion: {})",
+ buggyPathsByRelease.size(), withAffectedVersions, withProportionFallback);
 
  return new HistoricalBugLabelIndex(
  immutableSetValues(buggyPathsByRelease),
