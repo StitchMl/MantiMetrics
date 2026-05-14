@@ -87,18 +87,41 @@ public final class ProjectProcessor {
             return;
         }
 
+        LOG.info("┌─────────────────────────────────────────────────────────────────────");
+        LOG.info("│  Project  : {}", config.name());
+        LOG.info("│  Releases : {} total  →  {} selected ({}%)  │  {} bug tickets",
+                plan.timeline().size(), plan.selectedTags().size(),
+                config.percentage(), plan.resolvedTickets().size());
+        LOG.info("└─────────────────────────────────────────────────────────────────────");
+
+        LOG.info("[1/4] Preloading Git commit history ({} releases)…", plan.timeline().size());
         List<ReleaseSnapshot> releaseHistory = buildReleaseHistory(plan);
+        LOG.info("[1/4] done — {} release snapshots loaded", releaseHistory.size());
+
+        LOG.info("[2/4] Building bug-label oracle ({} tickets, Proportion-Total)…",
+                plan.resolvedTickets().size());
         HistoricalBugLabelIndex labelIndex = new HistoricalBugLabelIndexBuilder()
                 .build(plan.timeline(), plan.selectedTags(), plan.resolvedTickets(), releaseHistory);
+        LOG.info("[2/4] done — {}", labelIndex.summary().notes());
+
+        LOG.info("[3/4] Fetching SonarCloud smell index for {}…",
+                config.sonarProjectKey() != null ? config.sonarProjectKey() : "n/a (fallback to PMD)");
         Map<String, Map<String, Integer>> sonarSmellsByTag = buildSonarSmellsByTag(plan, config);
+        LOG.info("[3/4] done");
+
+        LOG.info("[4/4] Generating dataset — {} releases to analyse…", plan.selectedTags().size());
         Map<Granularity, Path> csvPaths = new LinkedHashMap<>();
         List<ProjectContext> contexts = openContexts(plan, granularities, csvPaths, labelIndex,
                 sonarSmellsByTag);
+        int releasesDone = 0;
+        int releasesTotal = plan.selectedTags().size();
         try {
             for (ReleaseSnapshot snapshot : releaseHistory) {
                 if (!plan.selectedTags().contains(snapshot.tag())) {
                     continue;
                 }
+                releasesDone++;
+                LOG.info("[4/4] Release [{}/{}] {}", releasesDone, releasesTotal, snapshot.tag());
                 releaseExecutionService.processRelease(snapshot, contexts);
             }
         } finally {
@@ -106,6 +129,7 @@ public final class ProjectProcessor {
         }
 
         generateArtifacts(csvPaths, plan, labelIndex, releaseHistory);
+        LOG.info("✓ Dataset complete — output files written to output/");
     }
 
     /**
@@ -183,9 +207,11 @@ public final class ProjectProcessor {
     private List<ReleaseSnapshot> buildReleaseHistory(ProjectReleasePlan plan) {
         List<ReleaseSnapshot> history = new ArrayList<>();
         List<String> timelineTags = plan.timeline().orderedTags();
-        for (int index = 0; index < timelineTags.size(); index++) {
+        int total = timelineTags.size();
+        for (int index = 0; index < total; index++) {
             String tag = timelineTags.get(index);
             String previousTag = index > 0 ? timelineTags.get(index - 1) : null;
+            LOG.info("  Git history [{}/{}] {}", index + 1, total, tag);
             try {
                 history.add(new ReleaseSnapshot(
                         tag,
