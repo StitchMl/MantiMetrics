@@ -43,3 +43,9 @@ config/*.local.properties
 
 ### Mac OS ###
 .DS_Store
+
+### Claude / AI tooling ###
+.claude/
+
+### LibreOffice lock files ###
+.~lock.*#
