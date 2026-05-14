@@ -19,6 +19,9 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.TemporalAccessor;
 import java.util.*;
 
 /**
@@ -31,6 +34,13 @@ public final class SonarCloudClient implements AutoCloseable {
  private static final int PAGE_SIZE = 500;
  private static final ObjectMapper JSON = new ObjectMapper()
  .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+ /**
+ * Handles both ISO-8601 ({@code Z}) and SonarCloud's {@code +0000} offset format
+ * (missing colon between hours and minutes).
+ */
+ private static final DateTimeFormatter SONAR_DATE =
+ DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
 
  private final CloseableHttpClient httpClient;
  private final String authHeader;
@@ -89,7 +99,7 @@ public final class SonarCloudClient implements AutoCloseable {
  String dateStr = a.path("date").asText(null);
  if (key != null && dateStr != null) {
  String version = a.path("projectVersion").asText(null);
- analyses.add(new SonarAnalysis(key, Instant.parse(dateStr), version));
+ analyses.add(new SonarAnalysis(key, parseSonarDate(dateStr), version));
  }
  }
  int total = response.path("paging").path("total").asInt(0);
@@ -203,6 +213,22 @@ public final class SonarCloudClient implements AutoCloseable {
  throw new SonarCloudException("SonarCloud HTTP " + code + " for " + uri + " -> " + body);
  }
  return JSON.readTree(body);
+ }
+ }
+
+ /**
+ * Parses a SonarCloud date string that may use either the standard ISO-8601 {@code Z} suffix
+ * or the non-standard {@code +0000} / {@code +0200} offset (no colon between HH and MM).
+ *
+ * @param dateStr date string from the SonarCloud API
+ * @return parsed instant
+ */
+ static Instant parseSonarDate(String dateStr) {
+ try {
+ return Instant.parse(dateStr); // standard "Z" form
+ } catch (DateTimeParseException ignored) {
+ TemporalAccessor ta = SONAR_DATE.parse(dateStr); // "+0000" / "+0200" form
+ return Instant.from(ta);
  }
  }
 
