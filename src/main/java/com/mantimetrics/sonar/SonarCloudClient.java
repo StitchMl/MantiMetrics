@@ -19,10 +19,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * HTTP client for the SonarCloud public REST API.
@@ -94,7 +91,7 @@ public final class SonarCloudClient implements AutoCloseable {
  } catch (IOException | URISyntaxException e) {
  throw new SonarCloudException("Failed to fetch analyses for " + projectKey, e);
  }
- analyses.sort((a, b) -> a.date().compareTo(b.date()));
+ analyses.sort(Comparator.comparing(SonarAnalysis::date));
  LOG.debug("SonarCloud {} - {} analyses fetched", projectKey, analyses.size());
  return analyses;
  }

@@ -146,7 +146,7 @@ final class DatasetRowEnricher {
 
  /**
  * Updates the cumulative history state associated with a dataset row and returns the refreshed value.
- * Computes the current nSmells internally from the provided metrics and codeSmells count.
+ * Computes the current nsmells internally from the provided metrics and codeSmells count.
  *
  * @param uniqueKey stable dataset identifier for the row
  * @param relativePath normalized relative source path

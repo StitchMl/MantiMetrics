@@ -1,5 +1,7 @@
 package com.mantimetrics.util;
 
+import org.jetbrains.annotations.NotNull;
+
 /**
  * Single-line ASCII progress bar that updates in place using a carriage-return trick.
  *
@@ -80,21 +82,7 @@ public final class ProgressBar implements AutoCloseable {
  private void render(String detail) {
  int filled = (int) Math.round((double) current / total * BAR_WIDTH);
  int empty = BAR_WIDTH - filled;
- int pct = (int) Math.round((double) current / total * 100);
-
- String detailPart = "";
- if (detail != null && !detail.isEmpty()) {
- String d = detail.length() > 36 ? detail.substring(0, 33) + "…" : detail;
- detailPart = " " + d;
- }
-
- String bar = String.format(
- " %-" + LABEL_WIDTH + "s [%s%s] %3d%% (%d/%d)%s",
- label,
- FILL.repeat(filled),
- EMPTY.repeat(empty),
- pct, current, total,
- detailPart);
+ String bar = getBar(detail, filled, empty);
 
  // Pad to LINE_WIDTH to overwrite leftover chars from a previously longer line.
  if (bar.length() < LINE_WIDTH) {
@@ -103,5 +91,24 @@ public final class ProgressBar implements AutoCloseable {
 
  System.out.print("\r" + bar);
  System.out.flush();
+ }
+
+ @NotNull
+ private String getBar(String detail, int filled, int empty) {
+ int pct = (int) Math.round((double) current / total * 100);
+
+ String detailPart = "";
+ if (detail != null && !detail.isEmpty()) {
+ String d = detail.length() > 36 ? detail.substring(0, 33) + "…" : detail;
+ detailPart = " " + d;
+ }
+
+ return String.format(
+ " %-" + LABEL_WIDTH + "s [%s%s] %3d%% (%d/%d)%s",
+ label,
+ FILL.repeat(filled),
+ EMPTY.repeat(empty),
+ pct, current, total,
+ detailPart);
  }
 }
