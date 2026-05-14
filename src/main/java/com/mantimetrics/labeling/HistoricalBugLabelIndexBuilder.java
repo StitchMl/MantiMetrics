@@ -193,41 +193,55 @@ public final class HistoricalBugLabelIndexBuilder {
 
         for (Map.Entry<String, Integer> entry : fixReleaseByTicket.entrySet()) {
             JiraBugTicket ticket = ticketsByKey.get(entry.getKey());
-            if (ticket == null || !ticket.hasAffectedVersions()) {
+            double contribution = computeProportionContribution(ticket, entry.getValue(), timeline);
+            if (contribution >= 0) {
+                sum += contribution;
+                count++;
+                bar.step(entry.getKey());
+            } else {
                 bar.step();
-                continue;
             }
-
-            int fv = entry.getValue();
-            int ov = timeline.findOpeningVersionIndex(ticket.createdDate());
-
-            List<Integer> candidates = new ArrayList<>();
-            for (String av : ticket.affectedVersions()) {
-                OptionalInt idx = timeline.findIndex(av);
-                if (idx.isPresent() && idx.getAsInt() < fv) {
-                    candidates.add(idx.getAsInt());
-                }
-            }
-            if (candidates.isEmpty()) {
-                bar.step();
-                continue;
-            }
-            int iv = candidates.stream().min(Integer::compareTo).orElseThrow();
-
-            int denominator = fv - ov;
-            if (denominator <= 0) {
-                bar.step();
-                continue;
-            }
-
-            double p = (double) (fv - iv) / denominator;
-            p = Math.min(1.0, Math.max(0.0, p));
-            sum += p;
-            count++;
-            bar.step(entry.getKey());
         }
 
         return count == 0 ? 1.0 : sum / count;
+    }
+
+    /**
+     * Computes the proportion contribution for a single ticket.
+     * Returns the clamped P value in [0.0, 1.0] when all conditions are satisfied,
+     * or {@code -1.0} when this ticket should not contribute to the calibration.
+     *
+     * @param ticket resolved bug ticket (may be {@code null})
+     * @param fv     fix version index
+     * @param timeline complete release timeline
+     * @return clamped P value, or {@code -1.0} when the ticket cannot be used
+     */
+    private double computeProportionContribution(JiraBugTicket ticket, int fv, ReleaseTimeline timeline) {
+        if (ticket == null || !ticket.hasAffectedVersions()) {
+            return -1.0;
+        }
+
+        int ov = timeline.findOpeningVersionIndex(ticket.createdDate());
+
+        List<Integer> candidates = new ArrayList<>();
+        for (String av : ticket.affectedVersions()) {
+            OptionalInt idx = timeline.findIndex(av);
+            if (idx.isPresent() && idx.getAsInt() < fv) {
+                candidates.add(idx.getAsInt());
+            }
+        }
+        if (candidates.isEmpty()) {
+            return -1.0;
+        }
+        int iv = candidates.stream().min(Integer::compareTo).orElseThrow();
+
+        int denominator = fv - ov;
+        if (denominator <= 0) {
+            return -1.0;
+        }
+
+        double p = (double) (fv - iv) / denominator;
+        return Math.min(1.0, Math.max(0.0, p));
     }
 
     /**

@@ -6,6 +6,7 @@ import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.mantimetrics.util.JavaTypeUtils;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -104,6 +105,21 @@ public final class CohesionCalculator {
                 if (parentLeft != parentRight) {
                     parent[parentRight] = parentLeft;
                 }
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                return o instanceof DisjointSet d && Arrays.equals(parent, d.parent);
+            }
+
+            @Override
+            public int hashCode() {
+                return Arrays.hashCode(parent);
+            }
+
+            @Override
+            public String toString() {
+                return "DisjointSet" + Arrays.toString(parent);
             }
         }
 }

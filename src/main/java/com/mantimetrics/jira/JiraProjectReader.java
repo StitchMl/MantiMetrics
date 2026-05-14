@@ -26,6 +26,7 @@ import java.util.Set;
 final class JiraProjectReader {
     private static final Logger LOG = LoggerFactory.getLogger(JiraProjectReader.class);
     private static final int PAGE_SIZE = 100;
+    private static final String PARAM_FIELDS = "fields";
 
     private final JiraJsonClient jsonClient;
 
@@ -158,7 +159,7 @@ final class JiraProjectReader {
         try {
             while (true) {
                 URI uri = new URIBuilder(session.searchBase())
-                        .addParameter("fields", "key,versions,created")
+                        .addParameter(PARAM_FIELDS, "key,versions,created")
                         .addParameter("startAt", String.valueOf(startAt))
                         .addParameter("maxResults", String.valueOf(PAGE_SIZE))
                         .build();
@@ -211,13 +212,13 @@ final class JiraProjectReader {
                 continue;
             }
 
-            String createdRaw = issue.path("fields").path("created").asText(null);
+            String createdRaw = issue.path(PARAM_FIELDS).path("created").asText(null);
             Instant createdDate = (createdRaw != null && !createdRaw.isBlank())
                     ? OffsetDateTime.parse(createdRaw, JIRA_DATE_FORMAT).toInstant()
                     : Instant.EPOCH;
 
             Set<String> affectedVersions = new LinkedHashSet<>();
-            JsonNode versionNodes = issue.path("fields").path("versions");
+            JsonNode versionNodes = issue.path(PARAM_FIELDS).path("versions");
             if (versionNodes.isArray()) {
                 versionNodes.forEach(version -> {
                     String name = version.path("name").asText(null);

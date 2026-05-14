@@ -53,8 +53,7 @@ public final class ProjectProcessor {
      * @param csvWriter               CSV writer used to open per-granularity output files
      * @param sonarPreScanService     service that runs {@code mvn sonar:sonar} for missing releases
      * @param sonarCloudClient        authenticated SonarCloud client shared across the pipeline
-     * @param datasetArtifactService  service that generates derived dataset artifacts
-     * @param milestoneAuditService   service that writes the milestone audit JSON
+     * @param outputServices          groups {@link DatasetArtifactService} and {@link MilestoneAuditService}
      */
     public ProjectProcessor(
             ProjectReleasePlanner releasePlanner,
@@ -63,8 +62,7 @@ public final class ProjectProcessor {
             CSVWriter csvWriter,
             SonarPreScanService sonarPreScanService,
             SonarCloudClient sonarCloudClient,
-            DatasetArtifactService datasetArtifactService,
-            MilestoneAuditService milestoneAuditService
+            ProjectOutputServices outputServices
     ) {
         this.releasePlanner = releasePlanner;
         this.releaseExecutionService = releaseExecutionService;
@@ -72,8 +70,8 @@ public final class ProjectProcessor {
         this.csvWriter = csvWriter;
         this.sonarPreScanService = sonarPreScanService;
         this.sonarCloudClient = sonarCloudClient;
-        this.datasetArtifactService = datasetArtifactService;
-        this.milestoneAuditService = milestoneAuditService;
+        this.datasetArtifactService = outputServices.datasetArtifactService();
+        this.milestoneAuditService = outputServices.milestoneAuditService();
     }
 
     /**

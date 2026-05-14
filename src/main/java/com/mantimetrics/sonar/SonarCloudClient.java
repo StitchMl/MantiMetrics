@@ -83,7 +83,8 @@ public final class SonarCloudClient implements AutoCloseable {
         List<SonarAnalysis> analyses = new ArrayList<>();
         try {
             int page = 1;
-            while (true) {
+            boolean hasMore = true;
+            while (hasMore) {
                 URI uri = new URIBuilder(BASE_URL + "/api/project_analyses/search")
                         .addParameter("project", projectKey)
                         .addParameter("ps", String.valueOf(PAGE_SIZE))
@@ -92,21 +93,16 @@ public final class SonarCloudClient implements AutoCloseable {
                 JsonNode response = get(uri);
                 JsonNode analysesNode = response.path("analyses");
                 if (!analysesNode.isArray() || analysesNode.isEmpty()) {
-                    break;
-                }
-                for (JsonNode a : analysesNode) {
-                    String key     = a.path("key").asText(null);
-                    String dateStr = a.path("date").asText(null);
-                    if (key != null && dateStr != null) {
-                        String version = a.path("projectVersion").asText(null);
-                        analyses.add(new SonarAnalysis(key, parseSonarDate(dateStr), version));
+                    hasMore = false;
+                } else {
+                    parseAnalysesPage(analysesNode, analyses);
+                    int total = response.path("paging").path("total").asInt(0);
+                    if (page * PAGE_SIZE >= total) {
+                        hasMore = false;
+                    } else {
+                        page++;
                     }
                 }
-                int total = response.path("paging").path("total").asInt(0);
-                if (page * PAGE_SIZE >= total) {
-                    break;
-                }
-                page++;
             }
         } catch (IOException | URISyntaxException e) {
             throw new SonarCloudException("Failed to fetch analyses for " + projectKey, e);
@@ -114,6 +110,23 @@ public final class SonarCloudClient implements AutoCloseable {
         analyses.sort(Comparator.comparing(SonarAnalysis::date));
         LOG.debug("SonarCloud {} - {} analyses fetched", projectKey, analyses.size());
         return analyses;
+    }
+
+    /**
+     * Parses one page of analysis nodes and appends valid entries to the output list.
+     *
+     * @param analysesNode JSON array of analysis nodes
+     * @param analyses     output list to append to
+     */
+    private static void parseAnalysesPage(JsonNode analysesNode, List<SonarAnalysis> analyses) {
+        for (JsonNode a : analysesNode) {
+            String key     = a.path("key").asText(null);
+            String dateStr = a.path("date").asText(null);
+            if (key != null && dateStr != null) {
+                String version = a.path("projectVersion").asText(null);
+                analyses.add(new SonarAnalysis(key, parseSonarDate(dateStr), version));
+            }
+        }
     }
 
     /**
@@ -130,46 +143,22 @@ public final class SonarCloudClient implements AutoCloseable {
         Map<String, Integer> result = new LinkedHashMap<>();
         try {
             int page = 1;
-            while (true) {
-                URIBuilder builder = new URIBuilder(BASE_URL + "/api/measures/component_tree")
-                        .addParameter("component", projectKey)
-                        .addParameter("metricKeys", "code_smells")
-                        .addParameter("strategy", "leaves")
-                        .addParameter("ps", String.valueOf(PAGE_SIZE))
-                        .addParameter("p", String.valueOf(page));
-                if (analysisKey != null) {
-                    builder.addParameter("analysisId", analysisKey);
-                }
-                URI uri = builder.build();
+            boolean hasMore = true;
+            while (hasMore) {
+                URI uri = buildComponentTreeUri(projectKey, analysisKey, page);
                 JsonNode response = get(uri);
                 JsonNode components = response.path("components");
                 if (!components.isArray() || components.isEmpty()) {
-                    break;
-                }
-                for (JsonNode comp : components) {
-                    String rawKey = comp.path("key").asText(null);
-                    if (rawKey == null || !rawKey.endsWith(".java")) {
-                        continue;
-                    }
-                    JsonNode measures = comp.path("measures");
-                    if (!measures.isArray()) {
-                        continue;
-                    }
-                    for (JsonNode m : measures) {
-                        if ("code_smells".equals(m.path("metric").asText())) {
-                            String valueStr = m.path("value").asText(null);
-                            if (valueStr != null) {
-                                result.put(normalizeSonarPath(projectKey, rawKey),
-                                        Integer.parseInt(valueStr));
-                            }
-                        }
+                    hasMore = false;
+                } else {
+                    parseComponents(components, projectKey, result);
+                    int total = response.path("paging").path("total").asInt(0);
+                    if (page * PAGE_SIZE >= total) {
+                        hasMore = false;
+                    } else {
+                        page++;
                     }
                 }
-                int total = response.path("paging").path("total").asInt(0);
-                if (page * PAGE_SIZE >= total) {
-                    break;
-                }
-                page++;
             }
         } catch (IOException | URISyntaxException e) {
             throw new SonarCloudException("Failed to fetch file smells for " + projectKey
@@ -177,6 +166,69 @@ public final class SonarCloudClient implements AutoCloseable {
         }
         LOG.debug("SonarCloud {} analysis {} - {} files with smells", projectKey, analysisKey, result.size());
         return result;
+    }
+
+    /**
+     * Builds the URI for one page of the component-tree endpoint.
+     *
+     * @param projectKey  SonarCloud project key
+     * @param analysisKey optional analysis snapshot key
+     * @param page        1-based page number
+     * @return constructed URI
+     * @throws URISyntaxException when URI construction fails
+     */
+    private URI buildComponentTreeUri(String projectKey, String analysisKey, int page)
+            throws URISyntaxException {
+        URIBuilder builder = new URIBuilder(BASE_URL + "/api/measures/component_tree")
+                .addParameter("component", projectKey)
+                .addParameter("metricKeys", "code_smells")
+                .addParameter("strategy", "leaves")
+                .addParameter("ps", String.valueOf(PAGE_SIZE))
+                .addParameter("p", String.valueOf(page));
+        if (analysisKey != null) {
+            builder.addParameter("analysisId", analysisKey);
+        }
+        return builder.build();
+    }
+
+    /**
+     * Parses one page of component nodes and appends Java-file entries to the result map.
+     *
+     * @param components JSON array of component nodes
+     * @param projectKey SonarCloud project key used for path normalization
+     * @param result     output map to append to
+     */
+    private void parseComponents(JsonNode components, String projectKey, Map<String, Integer> result) {
+        for (JsonNode comp : components) {
+            String rawKey = comp.path("key").asText(null);
+            if (rawKey != null && rawKey.endsWith(".java")) {
+                Integer smellValue = extractSmellValue(comp.path("measures"));
+                if (smellValue != null) {
+                    result.put(normalizeSonarPath(projectKey, rawKey), smellValue);
+                }
+            }
+        }
+    }
+
+    /**
+     * Extracts the {@code code_smells} integer value from a component's measures array.
+     *
+     * @param measures JSON array of measure nodes for a component
+     * @return the code-smell count, or {@code null} when the metric is absent
+     */
+    private static Integer extractSmellValue(JsonNode measures) {
+        if (!measures.isArray()) {
+            return null;
+        }
+        for (JsonNode m : measures) {
+            if ("code_smells".equals(m.path("metric").asText())) {
+                String valueStr = m.path("value").asText(null);
+                if (valueStr != null) {
+                    return Integer.parseInt(valueStr);
+                }
+            }
+        }
+        return null;
     }
 
     /**

@@ -2,6 +2,8 @@ package com.mantimetrics.git;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Parses repository coordinates from explicit owner/name pairs or repository URLs.
@@ -82,19 +84,11 @@ final class RepositoryUrlParser {
         }
 
         String[] parts = rawPath.replace('\\', '/').split("/");
-        String owner = null;
-        String repo = null;
-        for (String part : parts) {
-            if (part == null || part.isBlank()) {
-                continue;
-            }
-            if (owner == null) {
-                owner = part;
-            } else {
-                repo = stripGitSuffix(part);
-                break;
-            }
-        }
+        List<String> nonBlankParts = Arrays.stream(parts)
+                .filter(part -> part != null && !part.isBlank())
+                .toList();
+        String owner = nonBlankParts.size() > 0 ? nonBlankParts.get(0) : null;
+        String repo   = nonBlankParts.size() > 1 ? stripGitSuffix(nonBlankParts.get(1)) : null;
 
         if (!hasText(owner) || !hasText(repo)) {
             throw new IllegalArgumentException("Cannot extract owner/repository from URL: " + repoUrl);

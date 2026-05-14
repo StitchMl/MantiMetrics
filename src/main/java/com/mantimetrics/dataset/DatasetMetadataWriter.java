@@ -15,6 +15,7 @@ import java.util.Map;
 public final class DatasetMetadataWriter {
     private static final ObjectMapper JSON = new ObjectMapper()
             .enable(SerializationFeature.INDENT_OUTPUT);
+    private static final String KEY_BPLUS = "BPlus";
 
     /**
      * Writes the metadata JSON associated with the derived datasets.
@@ -47,7 +48,7 @@ public final class DatasetMetadataWriter {
 
         Map<String, Object> artifacts = new LinkedHashMap<>();
         artifacts.put("A", artifactEntry(csvArtifacts.get("A"), arffArtifacts.get("A"), datasets.datasetA().rowCount()));
-        artifacts.put("BPlus", artifactEntry(csvArtifacts.get("BPlus"), arffArtifacts.get("BPlus"), datasets.datasetBPlus().rowCount()));
+        artifacts.put(KEY_BPLUS, artifactEntry(csvArtifacts.get(KEY_BPLUS), arffArtifacts.get(KEY_BPLUS), datasets.datasetBPlus().rowCount()));
         artifacts.put("B", artifactEntry(csvArtifacts.get("B"), arffArtifacts.get("B"), datasets.datasetB().rowCount()));
         artifacts.put("C", artifactEntry(csvArtifacts.get("C"), arffArtifacts.get("C"), datasets.datasetC().rowCount()));
         metadata.put("derivedDatasets", artifacts);

@@ -17,52 +17,62 @@ public final class CliOptionsParser {
      * @throws IllegalArgumentException when an option is unknown, malformed or incomplete
      */
     public CliOptions parse(String[] args) {
-        String granularityRaw = null;
-        String repoUrl = null;
-        String jiraKey = null;
-        Integer percentage = null;
+        ParseState state = new ParseState();
+        int index = 0;
+        while (index < args.length) {
+            index = consumeArg(args, index, state);
+        }
+        return new CliOptions(
+                state.granularityRaw == null
+                        ? GranularityOption.CLASS
+                        : GranularityOption.fromCli(state.granularityRaw),
+                buildCliProject(state.repoUrl, state.jiraKey, state.percentage)
+        );
+    }
 
-        for (int index = 0; index < args.length; index++) {
-            String arg = args[index];
-            if (arg.startsWith("--granularity=")) {
-                granularityRaw = arg.substring("--granularity=".length());
-                continue;
-            }
-            if (arg.equals("--granularity") || arg.equals("-g")) {
-                granularityRaw = nextValue(args, ++index, arg);
-                continue;
-            }
-            if (arg.startsWith("--repo-url=")) {
-                repoUrl = arg.substring("--repo-url=".length());
-                continue;
-            }
-            if (arg.equals("--repo-url") || arg.equals("-r")) {
-                repoUrl = nextValue(args, ++index, arg);
-                continue;
-            }
-            if (arg.startsWith("--jira-key=")) {
-                jiraKey = arg.substring("--jira-key=".length());
-                continue;
-            }
-            if (arg.equals("--jira-key") || arg.equals("-j")) {
-                jiraKey = nextValue(args, ++index, arg);
-                continue;
-            }
-            if (arg.startsWith("--percentage=")) {
-                percentage = parsePercentage(arg.substring("--percentage=".length()));
-                continue;
-            }
-            if (arg.equals("--percentage") || arg.equals("-p")) {
-                percentage = parsePercentage(nextValue(args, ++index, arg));
-                continue;
-            }
+    /**
+     * Consumes one argument (and possibly its following value token) from the array,
+     * updating the mutable parse state.
+     *
+     * @param args  full command-line argument array
+     * @param index current position
+     * @param state mutable accumulator for parsed values
+     * @return next index to process
+     */
+    private int consumeArg(String[] args, int index, ParseState state) {
+        String arg = args[index];
+        if (arg.startsWith("--granularity=")) {
+            state.granularityRaw = arg.substring("--granularity=".length());
+        } else if (arg.equals("--granularity") || arg.equals("-g")) {
+            index++;
+            state.granularityRaw = nextValue(args, index, arg);
+        } else if (arg.startsWith("--repo-url=")) {
+            state.repoUrl = arg.substring("--repo-url=".length());
+        } else if (arg.equals("--repo-url") || arg.equals("-r")) {
+            index++;
+            state.repoUrl = nextValue(args, index, arg);
+        } else if (arg.startsWith("--jira-key=")) {
+            state.jiraKey = arg.substring("--jira-key=".length());
+        } else if (arg.equals("--jira-key") || arg.equals("-j")) {
+            index++;
+            state.jiraKey = nextValue(args, index, arg);
+        } else if (arg.startsWith("--percentage=")) {
+            state.percentage = parsePercentage(arg.substring("--percentage=".length()));
+        } else if (arg.equals("--percentage") || arg.equals("-p")) {
+            index++;
+            state.percentage = parsePercentage(nextValue(args, index, arg));
+        } else {
             throw new IllegalArgumentException("Argomento non riconosciuto: " + arg);
         }
+        return index + 1;
+    }
 
-        return new CliOptions(
-                granularityRaw == null ? GranularityOption.CLASS : GranularityOption.fromCli(granularityRaw),
-                buildCliProject(repoUrl, jiraKey, percentage)
-        );
+    /** Mutable accumulator used while scanning CLI arguments. */
+    private static final class ParseState {
+        String granularityRaw;
+        String repoUrl;
+        String jiraKey;
+        Integer percentage;
     }
 
     /**

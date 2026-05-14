@@ -15,8 +15,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 /**
  * Runs {@code mvn sonar:sonar} for every release tag that has not yet been analysed on SonarCloud.
@@ -108,16 +110,32 @@ public final class SonarPreScanService {
                 projectKey, alreadyScanned.size(), tags.size());
 
         int newScans = 0;
+        boolean autoAnalysisBlocked = false;
         for (String tag : tags) {
             if (alreadyScanned.contains(tag)) {
+                bar.step(tag);
+                continue;
+            }
+            if (autoAnalysisBlocked) {
                 bar.step(tag);
                 continue;
             }
             try {
                 scanRelease(owner, repo, tag, projectKey, organization, mvn);
                 newScans++;
+            } catch (AutomaticAnalysisEnabledException e) {
+                autoAnalysisBlocked = true;
+                LOG.warn("┌─────────────────────────────────────────────────────────────────");
+                LOG.warn("│  SonarCloud Automatic Analysis is ON — manual scans are blocked.");
+                LOG.warn("│  Disable it here: https://sonarcloud.io/project/analysis_method?id={}", projectKey);
+                LOG.warn("│  Select \"Other CI tools\", save, then re-run.");
+                LOG.warn("│  Pre-scan skipped for all remaining releases.");
+                LOG.warn("└─────────────────────────────────────────────────────────────────");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOG.debug("SonarCloud pre-scan interrupted for {} — {}", tag, e.getMessage());
             } catch (Exception e) {
-                LOG.warn("SonarCloud pre-scan failed for {} — skipping: {}", tag, e.getMessage());
+                LOG.debug("SonarCloud pre-scan skipped for {} — {}", tag, e.getMessage());
             }
             bar.step(tag);
         }
@@ -139,15 +157,106 @@ public final class SonarPreScanService {
 
         // Sanitize tag for use in directory name (remove characters invalid on Windows)
         String safeName = tag.replaceAll("[^a-zA-Z0-9._-]", "_");
+        @SuppressWarnings("java:S5443")
         Path tempDir = Files.createTempDirectory("sonar-" + safeName + "-");
+        tempDir.toFile().setReadable(true, true);
+        tempDir.toFile().setWritable(true, true);
+        tempDir.toFile().setExecutable(true, true);
         try {
             gitService.extractReleaseFull(owner, repo, tag, tempDir);
-            runMavenSonar(mvn, tempDir, projectKey, organization, tag);
+
+            // Locate the Maven project root (may be a subdirectory, e.g. lang/java/ for Avro)
+            Path mavenRoot = findJavaPom(tempDir)
+                    .orElseThrow(() -> new IOException("No pom.xml found in extracted ZIP for " + tag));
+            LOG.debug("SonarCloud pre-scan: using pom.xml at {}", tempDir.relativize(mavenRoot));
+
+            runMavenSonar(mvn, mavenRoot, projectKey, organization, tag);
             waitForAnalysis(projectKey, tag);
             LOG.info("SonarCloud pre-scan: {} ✓", tag);
         } finally {
             deleteTree(tempDir);
         }
+    }
+
+    /**
+     * Finds the directory containing the best {@code pom.xml} for a Java analysis inside {@code root}.
+     *
+     * <p>Strategy (first match wins):
+     * <ol>
+     *   <li>Root {@code pom.xml} + {@code src/main/java} present → pure Java project, use root.</li>
+     *   <li>A {@code pom.xml} whose path contains a {@code java}-named segment (e.g.
+     *       {@code lang/java/pom.xml}) → multi-language project layout (Avro, etc.), use that.</li>
+     *   <li>Root {@code pom.xml} without {@code src/main/java} → top-level aggregator, still use root.</li>
+     *   <li>Shallowest non-noisy {@code pom.xml} anywhere in the tree.</li>
+     * </ol>
+     *
+     * @param root extraction root of the release ZIP
+     * @return parent directory of the selected {@code pom.xml}, or empty when none is found
+     */
+    private static Optional<Path> findJavaPom(Path root) throws IOException {
+        // 1) Root pom.xml with src/main/java present → straightforward Java project
+        if (Files.isRegularFile(root.resolve("pom.xml"))
+                && Files.isDirectory(root.resolve("src/main/java"))) {
+            return Optional.of(root);
+        }
+
+        // 2) Look for a pom.xml inside a directory named "java" (multi-language layouts)
+        try (Stream<Path> walk = Files.walk(root, 5)) {
+            Optional<Path> javaDirPom = walk
+                    .filter(p -> "pom.xml".equals(p.getFileName() != null ? p.getFileName().toString() : "")
+                            && Files.isRegularFile(p))
+                    .filter(p -> hasJavaSegment(root.relativize(p)))
+                    .filter(p -> !isNoisyPath(root.relativize(p)))
+                    .min(Comparator.comparingInt(Path::getNameCount))
+                    .map(Path::getParent);
+            if (javaDirPom.isPresent()) {
+                return javaDirPom;
+            }
+        }
+
+        // 3) Root pom.xml exists (aggregator without src/main/java) → still valid
+        if (Files.isRegularFile(root.resolve("pom.xml"))) {
+            return Optional.of(root);
+        }
+
+        // 4) Shallowest non-noisy pom.xml anywhere in the tree
+        try (Stream<Path> walk = Files.walk(root)) {
+            return walk
+                    .filter(p -> "pom.xml".equals(p.getFileName() != null ? p.getFileName().toString() : "")
+                            && Files.isRegularFile(p))
+                    .filter(p -> !isNoisyPath(root.relativize(p)))
+                    .min(Comparator.comparingInt(Path::getNameCount))
+                    .map(Path::getParent);
+        }
+    }
+
+    /**
+     * Returns {@code true} when any non-final path segment of {@code relative} is exactly {@code java}.
+     * This identifies multi-language layouts where the Java module lives under e.g. {@code lang/java/}.
+     */
+    private static boolean hasJavaSegment(Path relative) {
+        for (int i = 0; i < relative.getNameCount() - 1; i++) {
+            if ("java".equalsIgnoreCase(relative.getName(i).toString())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns {@code true} when the relative path contains a path segment that signals
+     * it is not the main project pom (doc, example, test, archetype, sample, etc.).
+     */
+    private static boolean isNoisyPath(Path relative) {
+        for (int i = 0; i < relative.getNameCount(); i++) {
+            String seg = relative.getName(i).toString().toLowerCase();
+            if (seg.equals("doc") || seg.equals("docs")
+                    || seg.contains("example") || seg.contains("sample")
+                    || seg.contains("archetype") || seg.contains("test")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -169,6 +278,9 @@ public final class SonarPreScanService {
         cmd.add("-Dsonar.host.url=https://sonarcloud.io");
         cmd.add("-Dsonar.token="         + sonarToken);
         cmd.add("-Dsonar.scm.disabled=true");
+        // Allow source-only analysis: avoids "binary files not found" when the project
+        // has never been compiled inside this temp directory
+        cmd.add("-Dsonar.java.binaries=.");
         cmd.add("-DskipTests=true");
         cmd.add("-Dmaven.test.skip=true");
         // Suppress most Maven output — sonar goal is still verbose but this keeps it manageable
@@ -196,7 +308,12 @@ public final class SonarPreScanService {
             throw new IOException("mvn sonar:sonar timed out after " + MVN_TIMEOUT_MIN + " min for " + tag);
         }
         if (proc.exitValue() != 0) {
-            LOG.debug("mvn sonar:sonar output for {}:\n{}", tag, output);
+            String outputStr = output.toString();
+            // Detect the "Automatic Analysis enabled" configuration conflict — actionable, fatal for all tags
+            if (outputStr.contains("Automatic Analysis is enabled")) {
+                throw new AutomaticAnalysisEnabledException();
+            }
+            LOG.debug("mvn sonar:sonar output for {}:\n{}", tag, outputStr);
             throw new IOException("mvn sonar:sonar exited with code " + proc.exitValue() + " for " + tag);
         }
     }
@@ -255,10 +372,22 @@ public final class SonarPreScanService {
                 LOG.debug("Maven found on PATH");
                 return binaryName;
             }
-        } catch (IOException | InterruptedException ignored) {
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        } catch (IOException ignored) {
             // not on PATH
         }
         return null;
+    }
+
+    /**
+     * Thrown when {@code mvn sonar:sonar} fails because SonarCloud Automatic Analysis
+     * is still enabled on the project, blocking all manual scans.
+     */
+    private static final class AutomaticAnalysisEnabledException extends IOException {
+        AutomaticAnalysisEnabledException() {
+            super("SonarCloud Automatic Analysis is enabled — manual scan blocked");
+        }
     }
 
     /** Recursively deletes a directory tree, silently ignoring errors. */

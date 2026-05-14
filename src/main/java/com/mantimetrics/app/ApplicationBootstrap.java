@@ -1,5 +1,6 @@
 package com.mantimetrics.app;
 
+import com.mantimetrics.analysis.ProjectOutputServices;
 import com.mantimetrics.analysis.ProjectProcessor;
 import com.mantimetrics.analysis.ProjectReleasePlanner;
 import com.mantimetrics.analysis.ReleaseDatasetCollector;
@@ -8,6 +9,7 @@ import com.mantimetrics.MainApp;
 import com.mantimetrics.audit.MilestoneAuditService;
 import com.mantimetrics.cli.CliOptions;
 import com.mantimetrics.cli.ProjectSelectionPrompt;
+import com.mantimetrics.config.ConfigurationException;
 import com.mantimetrics.config.GitHubTokenLoader;
 import com.mantimetrics.config.ProjectConfigLoader;
 import com.mantimetrics.config.SonarTokenLoader;
@@ -38,6 +40,7 @@ import java.io.IOException;
 public final class ApplicationBootstrap {
     private final GitHubTokenLoader gitHubTokenLoader = new GitHubTokenLoader();
     private final SonarTokenLoader sonarTokenLoader = new SonarTokenLoader();
+    @SuppressWarnings("java:S106")
     private final ProjectSelectionPrompt projectSelectionPrompt = new ProjectSelectionPrompt(System.in, System.out);
 
     /**
@@ -79,14 +82,16 @@ public final class ApplicationBootstrap {
                 new CSVWriter(),
                 new SonarPreScanService(gitService, sonarClient, sonarToken),
                 sonarClient,
-                new DatasetArtifactService(
-                        new DatasetCsvTableReader(),
-                        new DatasetTableWriter(),
-                        new DatasetArffWriter(),
-                        new DatasetMetadataWriter(),
-                        new WhatIfDatasetBuilder()
-                ),
-                new MilestoneAuditService(new DatasetCsvTableReader())
+                new ProjectOutputServices(
+                        new DatasetArtifactService(
+                                new DatasetCsvTableReader(),
+                                new DatasetTableWriter(),
+                                new DatasetArffWriter(),
+                                new DatasetMetadataWriter(),
+                                new WhatIfDatasetBuilder()
+                        ),
+                        new MilestoneAuditService(new DatasetCsvTableReader())
+                )
         );
     }
 
@@ -98,7 +103,8 @@ public final class ApplicationBootstrap {
      * @throws Exception when project configuration loading or interactive prompting fails
      */
     @SuppressWarnings("GrazieInspectionRunner")
-    private ProjectConfig[] resolveProjectConfigs(CliOptions cliOptions) throws Exception {
+    private ProjectConfig[] resolveProjectConfigs(CliOptions cliOptions)
+            throws ConfigurationException, IOException {
         if (cliOptions.hasCliProject()) {
             return new ProjectConfig[] { cliOptions.cliProject() };
         }
