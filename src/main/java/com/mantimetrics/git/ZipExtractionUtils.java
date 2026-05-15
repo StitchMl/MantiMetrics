@@ -8,6 +8,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -181,12 +182,14 @@ class ZipExtractionUtils {
  * @return {@code true} when the entry is a production Java source file
  */
  static boolean shouldMaterialize(String name, boolean directory) {
- if (directory) {
+ if (directory || !name.endsWith(".java")) {
  return false;
  }
- return name.endsWith(".java")
- && !name.matches("(?i).*/src/test/java/.*")
- && !name.matches("(?i).*/test/.*")
- && !name.matches(".*(Test|IT)\\.java$");
+ // Use plain string operations — regex with leading/trailing .* is vulnerable to ReDoS.
+ String lower = name.toLowerCase(Locale.ROOT);
+ return !lower.contains("/src/test/java/")
+ && !lower.contains("/test/")
+ && !name.endsWith("Test.java")
+ && !name.endsWith("IT.java");
  }
 }
