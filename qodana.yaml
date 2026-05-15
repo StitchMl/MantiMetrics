@@ -2,30 +2,29 @@
 # Qodana analysis is configured by qodana.yaml file #
 # https://www.jetbrains.com/help/qodana/qodana-yaml.html #
 #-------------------------------------------------------------------------------#
+
 version: "1.0"
 
-#Specify the inspection profile for code analysis
-profile:
- name: qodana.starter
+linter: jetbrains/qodana-jvm-community:2025.1
 
-#Enable inspections
-#include:
+profile:
+ name: qodana.recommended
+
+projectJDK: "22"
+
+# Enable inspections
+# include:
 # - name: <SomeEnabledInspectionId>
 
-#Disable inspections
-#exclude:
+# Disable inspections
+# exclude:
 # - name: <SomeDisabledInspectionId>
 # paths:
 # - <path/where/not/run/inspection>
 
-projectJDK: "22" #(Applied in CI/CD pipeline)
+# Execute shell command before Qodana execution
+# bootstrap: sh ./prepare-qodana.sh
 
-#Execute shell command before Qodana execution (Applied in CI/CD pipeline)
-#bootstrap: sh ./prepare-qodana.sh
-
-#Install IDE plugins before Qodana execution (Applied in CI/CD pipeline)
-#plugins:
-# - id: <plugin.id> # (plug in id can be found at https://plugins.jetbrains.com)
-
-#Specify Qodana linter for analysis (Applied in CI/CD pipeline)
-linter: jetbrains/qodana-jvm:2025.1
+# Install IDE plugins before Qodana execution
+# plugins:
+# - id: <plugin.id>
