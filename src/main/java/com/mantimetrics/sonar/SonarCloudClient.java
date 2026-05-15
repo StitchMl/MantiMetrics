@@ -234,7 +234,10 @@ public final class SonarCloudClient implements AutoCloseable {
 
  /**
  * Normalizes a SonarCloud component key to the dataset path format.
- * Strips the project prefix and, for multi-module projects, the first module segment.
+ * Strips the {@code projectKey:} prefix and then applies the canonical
+ * dataset-path normalization (removes any leading/trailing slashes).
+ * The path segments after the prefix are kept verbatim so they match
+ * the repository-relative paths stored in dataset rows.
  *
  * @param projectKey SonarCloud project key
  * @param rawKey component key returned by the API
@@ -243,13 +246,6 @@ public final class SonarCloudClient implements AutoCloseable {
  static String normalizeSonarPath(String projectKey, String rawKey) {
  String relative = rawKey.startsWith(projectKey + ":")
  ? rawKey.substring(projectKey.length() + 1) : rawKey;
- // Strip first segment when path does not start with "src/" (multi-module layout)
- if (!relative.startsWith("src/")) {
- int firstSlash = relative.indexOf('/');
- if (firstSlash >= 0) {
- relative = relative.substring(firstSlash + 1);
- }
- }
  return AnalysisPathUtils.normalizeDatasetPath(relative);
  }
 
