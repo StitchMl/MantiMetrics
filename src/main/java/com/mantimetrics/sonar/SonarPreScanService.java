@@ -103,12 +103,7 @@ public final class SonarPreScanService {
                 : projectKey.toLowerCase();
 
         // Collect version tags that already exist on SonarCloud
-        Set<String> alreadyScanned = new HashSet<>();
-        for (SonarAnalysis a : sonarClient.fetchAnalyses(projectKey)) {
-            if (a.projectVersion() != null && !a.projectVersion().isBlank()) {
-                alreadyScanned.add(a.projectVersion());
-            }
-        }
+        Set<String> alreadyScanned = fetchAlreadyScanned(projectKey);
         LOG.info("SonarCloud {}: {}/{} releases already scanned",
                 projectKey, alreadyScanned.size(), tags.size());
 
@@ -142,6 +137,23 @@ public final class SonarPreScanService {
     }
 
     // ── private ──────────────────────────────────────────────────────────────
+
+    /**
+     * Returns the set of release tags that already have a versioned analysis on SonarCloud.
+     *
+     * @param projectKey SonarCloud project key
+     * @return non-null set of already-scanned version strings
+     * @throws SonarCloudException when the API call fails
+     */
+    private Set<String> fetchAlreadyScanned(String projectKey) throws SonarCloudException {
+        Set<String> scanned = new HashSet<>();
+        for (SonarAnalysis a : sonarClient.fetchAnalyses(projectKey)) {
+            if (a.projectVersion() != null && !a.projectVersion().isBlank()) {
+                scanned.add(a.projectVersion());
+            }
+        }
+        return scanned;
+    }
 
     /**
      * Fully extracts the release ZIP, runs {@code mvn sonar:sonar} and waits until the
