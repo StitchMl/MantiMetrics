@@ -3,7 +3,6 @@
 # https://www.jetbrains.com/help/qodana/qodana-yaml.html #
 #-------------------------------------------------------------------------------#
 version: "1.0"
-linter: qodana-jvm-community
 
 #Specify the inspection profile for code analysis
 profile:
@@ -29,4 +28,4 @@ projectJDK: "22" #(Applied in CI/CD pipeline)
 # - id: <plugin.id> # (plug in id can be found at https://plugins.jetbrains.com)
 
 #Specify Qodana linter for analysis (Applied in CI/CD pipeline)
-linter: jetbrains/qodana-jvm:2025.1
+linter: qodana-jvm-community
