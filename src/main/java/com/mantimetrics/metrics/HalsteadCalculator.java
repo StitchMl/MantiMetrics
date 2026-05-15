@@ -25,9 +25,9 @@ public final class HalsteadCalculator {
  * Computes Halstead metrics for a single AST root.
  *
  * @param root AST root to analyze
- * @return Halstead metrics
+ * @return partially-built {@link MethodMetricsBuilder} with the nine Halstead fields populated
  */
- public HalsteadMetrics compute(Node root) {
+ public MethodMetricsBuilder compute(Node root) {
  return compute(List.of(root));
  }
 
@@ -35,9 +35,9 @@ public final class HalsteadCalculator {
  * Computes Halstead metrics for multiple AST roots treated as one aggregate entity.
  *
  * @param roots AST roots to analyze
- * @return Halstead metrics
+ * @return partially-built {@link MethodMetricsBuilder} with the nine Halstead fields populated
  */
- public HalsteadMetrics compute(Collection<? extends Node> roots) {
+ public MethodMetricsBuilder compute(Collection<? extends Node> roots) {
  Set<String> distinctOps = new HashSet<>();
  Set<String> distinctOperands = new HashSet<>();
  AtomicInteger totalOps = new AtomicInteger();
@@ -77,16 +77,15 @@ public final class HalsteadCalculator {
  double difficulty = (n1 > 0 && n2 > 0) ? (n1 / 2.0) * (totalN2 / (double) n2) : 0;
  double effort = difficulty * volume;
 
- return new HalsteadMetrics.Builder()
- .n1((int) n1)
- .n2(n2)
- .totalN1((int) totalN1)
- .totalN2(totalN2)
+ return MethodMetrics.builder()
+ .distinctOperators((int) n1)
+ .distinctOperands(n2)
+ .totalOperators((int) totalN1)
+ .totalOperands(totalN2)
  .vocabulary(vocabulary)
  .length(length)
  .volume(volume)
  .difficulty(difficulty)
- .effort(effort)
- .build();
+ .effort(effort);
  }
 }

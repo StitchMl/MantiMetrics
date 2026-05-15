@@ -168,21 +168,22 @@ public final class MethodMetricsBuilder {
  public MethodMetricsBuilder duplicatedCode(boolean value) { this.duplicatedCode = value; return this; }
 
  /**
- * Copies the Halstead metrics from the provided aggregate.
+ * Copies the nine Halstead fields from a partially-built Halstead builder returned by
+ * {@link HalsteadCalculator#compute}.
  *
- * @param halsteadMetrics Halstead metrics aggregate
+ * @param h partially-built builder carrying the Halstead field values
  * @return current builder
  */
- public MethodMetricsBuilder halstead(HalsteadMetrics halsteadMetrics) {
- return distinctOperators(halsteadMetrics.getDistinctOperators())
- .distinctOperands(halsteadMetrics.getDistinctOperands())
- .totalOperators(halsteadMetrics.getTotalOperators())
- .totalOperands(halsteadMetrics.getTotalOperands())
- .vocabulary(halsteadMetrics.getVocabulary())
- .length(halsteadMetrics.getLength())
- .volume(halsteadMetrics.getVolume())
- .difficulty(halsteadMetrics.getDifficulty())
- .effort(halsteadMetrics.getEffort());
+ public MethodMetricsBuilder halstead(MethodMetricsBuilder h) {
+ return distinctOperators(h.distinctOperators)
+ .distinctOperands(h.distinctOperands)
+ .totalOperators(h.totalOperators)
+ .totalOperands(h.totalOperands)
+ .vocabulary(h.vocabulary)
+ .length(h.length)
+ .volume(h.volume)
+ .difficulty(h.difficulty)
+ .effort(h.effort);
  }
 
  /**
