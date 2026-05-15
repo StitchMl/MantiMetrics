@@ -3,10 +3,11 @@
 # https://www.jetbrains.com/help/qodana/qodana-yaml.html #
 #-------------------------------------------------------------------------------#
 version: "1.0"
+linter: qodana-jvm-community
 
 #Specify the inspection profile for code analysis
 profile:
- name: qodana.starter
+ name: qodana-jvm-community
 
 #Enable inspections
 #include:
