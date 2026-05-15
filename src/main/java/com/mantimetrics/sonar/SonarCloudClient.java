@@ -132,7 +132,8 @@ public final class SonarCloudClient implements AutoCloseable {
 
     /**
      * Fetches file-level {@code code_smells} counts for a specific analysis snapshot.
-     * Paths are normalized to match the dataset path format (no leading slash, no module prefix).
+     * Paths are normalized to match the dataset path format (no leading or trailing slashes;
+     * the repository-relative path segments are kept verbatim).
      *
      * @param projectKey SonarCloud project key
      * @param analysisKey analysis snapshot key returned by {@link #fetchAnalyses}
