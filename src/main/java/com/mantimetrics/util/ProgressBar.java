@@ -7,7 +7,7 @@ import org.jetbrains.annotations.NotNull;
  *
  * <p>All output is written to {@code System.out} while being protected by {@link #CONSOLE_LOCK}.
  * The companion {@link ProgressBarAppender} acquires the same lock before printing any log line,
- * so log messages and progress-bar updates are always serialised and never interleave on the
+ * so log messages and progress-bar updates are always serialized and never interleave on the
  * terminal — even when Log4j2 fires a WARN from a rate-limit retry mid-update.
  *
  * <p>Typical usage:

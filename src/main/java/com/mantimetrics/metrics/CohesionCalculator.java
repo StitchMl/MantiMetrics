@@ -5,6 +5,7 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.mantimetrics.util.JavaTypeUtils;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -117,6 +118,7 @@ public final class CohesionCalculator {
  return Arrays.hashCode(parent);
  }
 
+ @NotNull
  @Override
  public String toString() {
  return "DisjointSet" + Arrays.toString(parent);

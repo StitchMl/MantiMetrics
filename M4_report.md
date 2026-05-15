@@ -1,6 +1,6 @@
 # Valutazione dell'effetto del contesto di test sul refactoring generato da LLM: uno studio su Apache Avro
 
-Matteo Lagioia
+Matteo La Gioia
 
 *Ingegneria del Software II — A.A. 2024/2025 — progetto individuale (Falessi). Apache Avro — modulo `lang/java/avro`. Classe target: `org.apache.avro.Schema`. Baseline C0: `release-1.5.4`. Repository: <https://github.com/StitchMl/avro>. CI: <https://github.com/StitchMl/avro/actions>. SonarCloud: <https://sonarcloud.io/project/overview?id=StitchMl_avro>. Data: 24 aprile 2026.*
 
@@ -136,7 +136,7 @@ Più in generale, questo lavoro suggerisce che l'integrazione tra tecniche class
 Il CSV grezzo `output/avro_dataset_class.csv` contiene 3 183 righe e 60 colonne (4 identificatori, 55 feature, 1 label). Dal CSV grezzo, `WhatIfDatasetBuilder` deriva quattro dataset classifier-ready, ciascuno esportato in coppia CSV/ARFF sotto `output/avro_dataset_class_artifacts/`. Le righe identificatore vengono rimosse dal formato classifier-ready (colonne `Project`, `Path`, `Class`, `ReleaseId` e l'eventuale `Method` non presente a livello di classe); le restanti 55 feature e la label `Buggy` sono preservate.
 
 | Dataset | Righe | Criterio di filtro | Valori azionabili |
-|---------|-------|--------------------|-------------------|
+|---------|-------|-----------------------------------------------------|-----------------------------------------|
 | `A` | 3 183 | Intero dataset classifier-ready | Preservati |
 | `B+` | 2 355 | Filtro: `NSmells > 0` (classi con almeno uno smell) | Preservati |
 | `B` | 2 355 | Stessa selezione di `B+` | Azzerati su 14 colonne azionabili |
@@ -147,7 +147,7 @@ Le quattordici colonne azionabili azzerate nel dataset `B` sono quelle elencate 
 Le 55 feature sono organizzate per famiglia nella tabella seguente; le colonne di destra dichiarano il ruolo di ciascuna famiglia rispetto alla convenzione Asterisco della traccia (CR = current release, ST = storico della classe).
 
 | Famiglia | Colonne | Cardinalità | Asterisco |
-|----------|---------|-------------|-----------|
+|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------|-----------|
 | Metriche statiche istantanee | LOC, StmtCount, Cyclomatic, Cognitive, MaxNestingDepth, DistinctOperators, DistinctOperands, TotalOperators, TotalOperands, Vocabulary, Length, Volume, Difficulty, Effort | 14 | CR |
 | Picchi storici (`max…`) | maxLOC, maxStmtCount, maxCyclomatic, maxCognitive, maxNSmells, maxDistinctOperators, maxDistinctOperands, maxTotalOperators, maxTotalOperands, maxVocabulary, maxLength, maxVolume, maxDifficulty, maxEffort, maxNestingDepth | 15 | ST |
 | Flag smell istantanei | isLongMethod, isGodClass, isFeatureEnvy, isDuplicatedCode | 4 | CR |
@@ -162,7 +162,7 @@ Le 55 feature sono organizzate per famiglia nella tabella seguente; le colonne d
 I file ARFF generati per Weka sono `output/avro_dataset_class_artifacts/{A, BPlus, B, C}.arff`; i CSV corrispondenti sono nello stesso percorso. Un file di metadati `metadata.json` riassume identificatori, feature columns, actionable columns, label column e conteggio righe per ciascun dataset derivato. Un secondo file di audit `milestone1-audit.json` documenta la policy complessiva di M1 ed è il riferimento testuale usato per verificare la coerenza della costruzione:
 
 | Campo (`milestone1-audit.json`) | Valore |
-|-------------------------------|--------|
+|------------------------------------------|-----------------------------------------------|
 | `rows` | 3 183 |
 | `featureCount` | 55 |
 | `distinctReleasesInDataset` | 14 |
@@ -254,9 +254,9 @@ Prodotti dal pipeline in `output/charts/`:
 Estratto da `output/fold_metrics.csv`: Kappa e AUC per ciascuno dei tre classificatori sui 13 fold walk-forward. La colonna `TestWindow` segue l'ordine `ReleaseId` (data di rilascio Jira), non l'ordine semver:
 
 | Fold | Train | Test | Test release | Kappa NB | AUC NB | Kappa RF | AUC RF | Kappa IBk | AUC IBk |
-|------|-------|------|----------------|----------|--------|----------|--------|-----------|---------|
+|------|-------|------|---------------|----------|--------|----------|--------|-----------|---------|
 | 0 | 187 | 187 | release-1.3.1 | 1,000 | 0,500 | 0,227 | 1,000 | 0,837 | 0,996 |
 | 1 | 374 | 186 | release-1.3.0 | 1,000 | 0,500 | 1,000 | 1,000 | 1,000 | 1,000 |
 | 2 | 560 | 137 | release-1.2.0 | 1,000 | NaN | 1,000 | NaN | 0,000 | NaN |
 | 3 | 697 | 129 | release-1.1.0 | 1,000 | NaN | 1,000 | NaN | 1,000 | NaN |
-| 4 | 826 | 93 | relea
+| 4 | 826 | 93 | relea | | | | | | |

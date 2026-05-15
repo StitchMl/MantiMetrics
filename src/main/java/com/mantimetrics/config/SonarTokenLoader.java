@@ -8,7 +8,7 @@ import java.util.Properties;
  *
  * <p>Resolution order (first non-blank wins):
  * <ol>
- * <li>{@code config/sonar.local.properties} — local override file (gitignored)</li>
+ * <li>{@code config/sonar.local.properties} — local override file (gitignore)</li>
  * <li>{@code -Dmantimetrics.sonar.token} — JVM system property</li>
  * <li>{@code SONAR_TOKEN} — environment variable</li>
  * <li>{@code sonar.properties} — classpath resource (empty by default)</li>

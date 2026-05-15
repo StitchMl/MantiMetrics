@@ -12,7 +12,7 @@ import java.util.Map;
  * Indexed snapshot of per-file code-smell counts across all SonarCloud analyses for a project.
  * Smells for each analysis are fetched lazily and cached on first access.
  *
- * <p>Lookup strategy (best accuracy first):
+ * <p>Lookup strategy (the best accuracy first):
  * <ol>
  * <li>{@link #getSmellsForTag(String)} — exact match on {@code sonar.projectVersion} set during
  * each per-release scan (requires the pre-scan phase to have been run).</li>

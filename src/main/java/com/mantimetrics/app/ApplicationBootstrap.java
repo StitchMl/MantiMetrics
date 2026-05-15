@@ -49,7 +49,6 @@ public final class ApplicationBootstrap {
  * Wires the runtime services, resolves the target project and executes the analysis pipeline.
  *
  * @param cliOptions command-line options resolved at startup
- * @throws Exception when configuration loading or project processing fails
  */
  public void run(CliOptions cliOptions) throws IOException, ConfigurationException, JiraClientException, CsvWriteException {
  GitService gitService = new GitService(loadGithubToken());
@@ -102,7 +101,6 @@ public final class ApplicationBootstrap {
  *
  * @param cliOptions command-line options resolved at startup
  * @return single-element array containing the selected project configuration
- * @throws Exception when project configuration loading or interactive prompting fails
  */
  @SuppressWarnings("GrazieInspectionRunner")
  private ProjectConfig[] resolveProjectConfigs(CliOptions cliOptions)

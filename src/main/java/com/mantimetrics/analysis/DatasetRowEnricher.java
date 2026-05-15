@@ -273,7 +273,7 @@ final class DatasetRowEnricher {
  /**
  * Returns the SonarCloud code-smell count for a row.
  * SonarCloud is the sole source of code-smell data; rows whose file is absent from the map
- * receive a count of zero (project not configured on SonarCloud, or file not analysed).
+ * receive a count of zero (project not configured on SonarCloud, or file not analyzed).
  *
  * @param row dataset row being enriched
  * @param sonarSmells SonarCloud file-level smell counts keyed by normalized path
