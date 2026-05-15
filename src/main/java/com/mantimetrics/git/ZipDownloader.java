@@ -66,7 +66,7 @@ class ZipDownloader {
             } catch (SocketTimeoutException exception) {
                 last = exception;
                 long wait = backoff(i);
-                LOG.warn("Timeout downloading {}, retry {}/{} in {}",
+                LOG.warn("[Download] Timeout downloading {}, retry {}/{} in {}",
                         ref, i + 1, MAX_R,
                         com.mantimetrics.util.AnalysisPathUtils.humanDuration(wait));
                 Thread.sleep(wait);
@@ -219,7 +219,7 @@ class ZipDownloader {
             } catch (java.net.SocketTimeoutException exception) {
                 last = exception;
                 long wait = backoff(i);
-                LOG.warn("Timeout downloading {}, retry {}/{} in {}",
+                LOG.warn("[Extract] Timeout downloading {}, retry {}/{} in {}",
                         ref, i + 1, MAX_R,
                         com.mantimetrics.util.AnalysisPathUtils.humanDuration(wait));
                 Thread.sleep(wait);

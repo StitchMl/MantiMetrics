@@ -28,6 +28,7 @@ import java.util.*;
  * HTTP client for the SonarCloud public REST API.
  * Authentication is optional: set the {@code SONAR_TOKEN} environment variable for private projects.
  */
+@SuppressWarnings("unused")
 public final class SonarCloudClient implements AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(SonarCloudClient.class);
     private static final String BASE_URL = "https://sonarcloud.io";
@@ -53,7 +54,7 @@ public final class SonarCloudClient implements AutoCloseable {
     }
 
     /**
-     * Creates a client using the supplied token directly (may be {@code null} for public projects).
+     * Creates a client using the supplied token directly (maybe {@code null} for public projects).
      *
      * @param token optional Bearer token; may be {@code null} for public projects
      */

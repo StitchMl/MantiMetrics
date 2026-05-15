@@ -13,6 +13,7 @@ import java.util.List;
  * ({@link DatasetRow#getUniqueKey()}, {@link DatasetRow#toCsvLine()}) and the
  * entity-identifying field (class name / method signature).
  */
+@SuppressWarnings("unused")
 abstract class AbstractDatasetRow implements DatasetRow {
 
     /**
@@ -22,7 +23,7 @@ abstract class AbstractDatasetRow implements DatasetRow {
     protected final MetricDatasetRowData data;
 
     /**
-     * Initialises the shared payload.
+     * Initializes the shared payload.
      *
      * @param data immutable shared dataset payload (non-null, already validated by the builder)
      */

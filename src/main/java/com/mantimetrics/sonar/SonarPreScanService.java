@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 /**
- * Runs {@code mvn sonar:sonar} for every release tag that has not yet been analysed on SonarCloud.
+ * Runs {@code mvn sonar:sonar} for every release tag that has not yet been analyzed on SonarCloud.
  *
  * <p>Each scan sets {@code sonar.projectVersion} to the release tag so that
  * {@link SonarSmellIndex#getSmellsForTag(String)} can later look up the exact snapshot.
@@ -34,6 +34,7 @@ import java.util.stream.Stream;
  * </ul>
  * In both cases a warning is logged and the caller continues with whatever analyses already exist.
  */
+@SuppressWarnings({"ResultOfMethodCallIgnored", "resource", "BusyWait"})
 public final class SonarPreScanService {
     private static final Logger LOG = LoggerFactory.getLogger(SonarPreScanService.class);
 
@@ -56,7 +57,7 @@ public final class SonarPreScanService {
      *
      * @param gitService   Git service used to download and fully extract release ZIPs
      * @param sonarClient  SonarCloud REST client used to check existing analyses
-     * @param sonarToken   SonarCloud authentication token (may be {@code null} — pre-scan is skipped)
+     * @param sonarToken   SonarCloud authentication token (maybe {@code null} — pre-scan is skipped)
      */
     public SonarPreScanService(GitService gitService, SonarCloudClient sonarClient, String sonarToken) {
         this.gitService  = gitService;
@@ -179,7 +180,7 @@ public final class SonarPreScanService {
         try {
             gitService.extractReleaseFull(owner, repo, tag, tempDir);
 
-            // Locate the Maven project root (may be a subdirectory, e.g. lang/java/ for Avro)
+            // Locate the Maven project root (maybe a subdirectory, e.g. lang/java/ for Avro)
             Path mavenRoot = findJavaPom(tempDir)
                     .orElseThrow(() -> new IOException("No pom.xml found in extracted ZIP for " + tag));
             LOG.debug("SonarCloud pre-scan: using pom.xml at {}", tempDir.relativize(mavenRoot));
@@ -220,7 +221,7 @@ public final class SonarPreScanService {
                     .filter(p -> POM_XML.equals(p.getFileName() != null ? p.getFileName().toString() : "")
                             && Files.isRegularFile(p))
                     .filter(p -> hasJavaSegment(root.relativize(p)))
-                    .filter(p -> !isNoisyPath(root.relativize(p)))
+                    .filter(p -> isNotNoisyPath(root.relativize(p)))
                     .min(Comparator.comparingInt(Path::getNameCount))
                     .map(Path::getParent);
             if (javaDirPom.isPresent()) {
@@ -238,7 +239,7 @@ public final class SonarPreScanService {
             return walk
                     .filter(p -> POM_XML.equals(p.getFileName() != null ? p.getFileName().toString() : "")
                             && Files.isRegularFile(p))
-                    .filter(p -> !isNoisyPath(root.relativize(p)))
+                    .filter(p -> isNotNoisyPath(root.relativize(p)))
                     .min(Comparator.comparingInt(Path::getNameCount))
                     .map(Path::getParent);
         }
@@ -261,16 +262,16 @@ public final class SonarPreScanService {
      * Returns {@code true} when the relative path contains a path segment that signals
      * it is not the main project pom (doc, example, test, archetype, sample, etc.).
      */
-    private static boolean isNoisyPath(Path relative) {
+    private static boolean isNotNoisyPath(Path relative) {
         for (int i = 0; i < relative.getNameCount(); i++) {
             String seg = relative.getName(i).toString().toLowerCase();
             if (seg.equals("doc") || seg.equals("docs")
                     || seg.contains("example") || seg.contains("sample")
                     || seg.contains("archetype") || seg.contains("test")) {
-                return true;
+                return false;
             }
         }
-        return false;
+        return true;
     }
 
     /**

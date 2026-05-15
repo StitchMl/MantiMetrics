@@ -211,7 +211,7 @@ public final class HistoricalBugLabelIndexBuilder {
      * Returns the clamped P value in [0.0, 1.0] when all conditions are satisfied,
      * or {@code -1.0} when this ticket should not contribute to the calibration.
      *
-     * @param ticket resolved bug ticket (may be {@code null})
+     * @param ticket resolved bug ticket (maybe {@code null})
      * @param fv     fix version index
      * @param timeline complete release timeline
      * @return clamped P value, or {@code -1.0} when the ticket cannot be used
