@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -40,7 +41,8 @@ public final class HistoricalBugTaker {
             ReleaseTimeline timeline,
             List<String> datasetTags,
             List<JiraSnapshot> resolvedTickets,
-            List<ReleaseSnapshot> releaseHistory
+            List<ReleaseSnapshot> releaseHistory,
+            Proportion.Variant variant
     ) {
         Objects.requireNonNull(timeline, "timeline");
         Objects.requireNonNull(datasetTags, "datasetTags");
@@ -58,21 +60,28 @@ public final class HistoricalBugTaker {
         }
         LOG.info("  {} tickets linked to at least one fix commit", fixReleaseByTicket.size());
 
-        // Sub-bar 2b — compute Proportion P
+        // Sub-bar 2b — calibrate Proportion P (per-ticket contributions from tickets with affected versions)
         int linkedCount = fixReleaseByTicket.size();
-        double proportionP;
+        Map<String, Double> contributions = new HashMap<>();
+        double globalP;
         try (ProgressBar bar = new ProgressBar("Proportion P", linkedCount)) {
-            proportionP = computeProportionP(ticketsByKey, fixReleaseByTicket, timeline, bar);
+            globalP = computeContributions(ticketsByKey, fixReleaseByTicket, timeline, contributions, bar);
         }
-        LOG.info("  Proportion P = {}", String.format("%.4f", proportionP));
+        LOG.info("  Proportion variant = {} (global mean P = {})", variant, String.format("%.4f", globalP));
 
-        // Sub-bar 2c — label every ticket range
+        // Sub-bar 2c — label every ticket range, in fix-release order so INCREMENTAL uses only past defects
         Map<String, Set<String>> buggyPathsByRelease = new HashMap<>();
         int withAffectedVersions = 0;
         int withProportionFallback = 0;
 
+        List<Map.Entry<String, Integer>> orderedTickets = new ArrayList<>(fixReleaseByTicket.entrySet());
+        orderedTickets.sort(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue)
+                .thenComparing(Map.Entry::getKey));
+
+        double runningSum = 0.0;
+        int runningCount = 0;
         try (ProgressBar bar = new ProgressBar("Labeling releases", linkedCount)) {
-            for (Map.Entry<String, Integer> entry : fixReleaseByTicket.entrySet()) {
+            for (Map.Entry<String, Integer> entry : orderedTickets) {
                 JiraSnapshot ticket = ticketsByKey.get(entry.getKey());
                 if (ticket == null) {
                     bar.step();
@@ -80,8 +89,11 @@ public final class HistoricalBugTaker {
                 }
 
                 int fixIndex = entry.getValue();
+                double pForTicket = variant == Proportion.Variant.INCREMENTAL
+                        ? (runningCount == 0 ? 1.0 : runningSum / runningCount)
+                        : globalP;
                 boolean hadAffectedVersions = ticket.hasAffectedVersions();
-                int injectedIndex = resolveInjectedVersionIndex(ticket, timeline, fixIndex, proportionP);
+                int injectedIndex = resolveInjectedVersionIndex(ticket, timeline, fixIndex, pForTicket);
 
                 if (hadAffectedVersions && injectedIndex < fixIndex) {
                     withAffectedVersions++;
@@ -96,6 +108,12 @@ public final class HistoricalBugTaker {
                         buggyPathsByRelease.computeIfAbsent(releaseTag, ignored -> new LinkedHashSet<>())
                                 .addAll(touchedPaths);
                     }
+                }
+
+                double contribution = contributions.getOrDefault(entry.getKey(), -1.0);
+                if (contribution >= 0) {
+                    runningSum += contribution;
+                    runningCount++;
                 }
                 bar.step(ticket.key());
             }
@@ -116,7 +134,7 @@ public final class HistoricalBugTaker {
                         datasetTags.size(),
                         "The oracle uses affected versions when available. When absent, the injected version "
                                 + "is predicted via the Proportion algorithm (mean P="
-                                + String.format("%.4f", proportionP)
+                                + String.format("%.4f", globalP)
                                 + "). When no calibration data exists, P defaults to 1.0 (IV=OV)."
                 )
         );
@@ -184,10 +202,11 @@ public final class HistoricalBugTaker {
      * @param timeline complete release timeline with optional tag dates
      * @return calibrated proportion P in [0, 1]
      */
-    private double computeProportionP(
+    private double computeContributions(
             Map<String, JiraSnapshot> ticketsByKey,
             Map<String, Integer> fixReleaseByTicket,
             ReleaseTimeline timeline,
+            Map<String, Double> contributions,
             ProgressBar bar
     ) {
         double sum = 0.0;
@@ -196,13 +215,12 @@ public final class HistoricalBugTaker {
         for (Map.Entry<String, Integer> entry : fixReleaseByTicket.entrySet()) {
             JiraSnapshot ticket = ticketsByKey.get(entry.getKey());
             double contribution = computeProportionContribution(ticket, entry.getValue(), timeline);
+            contributions.put(entry.getKey(), contribution);
             if (contribution >= 0) {
                 sum += contribution;
                 count++;
-                bar.step(entry.getKey());
-            } else {
-                bar.step();
             }
+            bar.step(entry.getKey());
         }
 
         return count == 0 ? 1.0 : sum / count;

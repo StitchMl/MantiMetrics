@@ -87,7 +87,8 @@ public final class SingleReleaseExecution {
                     context.prevData(),
                     context.historyStore(),
                     context.labelIndex(),
-                    sonarSmells
+                    sonarSmells,
+                    context.excludeChurnZero()
             );
             List<? extends DatasetRow> rows = datasetCollector.collectClassRows(request);
 

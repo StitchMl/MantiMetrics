@@ -11,6 +11,7 @@ import com.mantimetrics.history.StoreReleaseInMemory;
 import com.mantimetrics.jira.JiraClientException;
 import com.mantimetrics.labeling.ReleaseLabeling;
 import com.mantimetrics.labeling.HistoricalBugTaker;
+import com.mantimetrics.labeling.Proportion;
 import com.mantimetrics.datasetOutput.MilestoneAuditWriter;
 import com.mantimetrics.releaseSelection.ReleaseException;
 import com.mantimetrics.smell.SonarClient;
@@ -81,10 +82,13 @@ public final class Orchestrator {
      *
      * @param config project configuration to analyze
      * @param useGithubIssues whether to union GitHub Issues with Jira bug tickets
+     * @param proportionVariant Proportion variant used to estimate the injected version
+     * @param excludeChurnZero whether to drop rows whose current-release churn is zero
      * @throws JiraClientException when Jira metadata cannot be loaded
      * @throws CSVException when a dataset CSV file cannot be written or closed
      */
-    public void process(GitConfig config, boolean useGithubIssues)
+    public void process(GitConfig config, boolean useGithubIssues, Proportion.Variant proportionVariant,
+            boolean excludeChurnZero)
             throws JiraClientException, CSVException {
         ReleasePlan plan = releasePlanner.plan(config, useGithubIssues);
         if (plan == null) {
@@ -107,10 +111,10 @@ public final class Orchestrator {
         LOG.info("[1/5] done — {} snapshots loaded", releaseHistory.size());
 
         // ── Phase 2: Bug-label oracle (sub-bars managed inside the builder) ──
-        LOG.info("[2/5] Building bug-label oracle ({} tickets, Proportion-Total)…",
-                plan.resolvedTickets().size());
+        LOG.info("[2/5] Building bug-label oracle ({} tickets, Proportion-{})…",
+                plan.resolvedTickets().size(), proportionVariant);
         ReleaseLabeling labelIndex = new HistoricalBugTaker()
-                .build(plan.timeline(), plan.selectedTags(), plan.resolvedTickets(), releaseHistory);
+                .build(plan.timeline(), plan.selectedTags(), plan.resolvedTickets(), releaseHistory, proportionVariant);
         LOG.info("[2/5] done — linked={}, IV-JIRA={}, Proportion-fallback={}",
                 labelIndex.summary().ticketsWithFixCommit(),
                 labelIndex.summary().ticketsUsingAffectedVersions(),
@@ -146,7 +150,7 @@ public final class Orchestrator {
         LOG.info("[5/5] Generating dataset — {} releases…", releasesTotal);
         List<Path> csvPaths = new ArrayList<>();
         List<SharedStatus> contexts = openContexts(plan, csvPaths, labelIndex,
-                sonarSmellsByTag);
+                sonarSmellsByTag, excludeChurnZero);
         try (ProgressBar bar = new ProgressBar("Dataset", releasesTotal)) {
             int releasesDone = 0;
             try {
@@ -216,7 +220,8 @@ public final class Orchestrator {
             ReleasePlan plan,
             List<Path> csvPaths,
             ReleaseLabeling labelIndex,
-            Map<String, Map<String, Integer>> sonarSmellsByTag
+            Map<String, Map<String, Integer>> sonarSmellsByTag,
+            boolean excludeChurnZero
     ) throws CSVException {
         List<SharedStatus> contexts = new ArrayList<>();
         try {
@@ -231,7 +236,8 @@ public final class Orchestrator {
                     new StoreReleaseInMemory(),
                     labelIndex,
                     writer,
-                    sonarSmellsByTag
+                    sonarSmellsByTag,
+                    excludeChurnZero
             ));
             return contexts;
         } catch (CSVException exception) {

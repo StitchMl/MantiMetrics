@@ -19,6 +19,7 @@ import java.util.Map;
  * @param historyStore cumulative history state for the same granularity
  * @param labelIndex historical bug labels used to mark buggy rows
  * @param sonarSmellsByFile SonarCloud file-level code-smell counts; empty map when SonarCloud is unconfigured
+ * @param excludeChurnZero whether to drop rows whose current-release churn is zero
  */
 public record ReleaseToDatasetRequest(
         ScanResult releaseSources,
@@ -28,6 +29,7 @@ public record ReleaseToDatasetRequest(
         Map<String, DatasetRow> previousRows,
         StoreReleaseInMemory historyStore,
         ReleaseLabeling labelIndex,
-        Map<String, Integer> sonarSmellsByFile
+        Map<String, Integer> sonarSmellsByFile,
+        boolean excludeChurnZero
 ) {
 }

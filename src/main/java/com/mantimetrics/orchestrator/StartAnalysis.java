@@ -57,7 +57,7 @@ public final class StartAnalysis {
             Orchestrator processor = createProcessor(gitService, new GitIssueClient(githubToken));
             GitConfig[] configs = resolveProjectConfigs(cliOptions);
             for (GitConfig config : configs) {
-                processor.process(config, cliOptions.useGithubIssues());
+                processor.process(config, cliOptions.useGithubIssues(), cliOptions.proportionVariant(), cliOptions.excludeChurnZero());
             }
         } finally {
             TmpDirCleaner.cleanup(gitService.getTmp());

@@ -33,7 +33,8 @@ class HistoricalBugLabelIndexBuilderTest {
                         snapshot("v1", null, Map.of()),
                         snapshot("v2", "v1", Map.of()),
                         snapshot("v3", "v2", Map.of("src/main/java/com/acme/Sample.java", List.of("PROJ-1")))
-                )
+                ),
+                Proportion.Variant.TOTAL
         );
 
         assertFalse(index.isBuggy("v1", "src/main/java/com/acme/Sample.java"));
@@ -57,7 +58,8 @@ class HistoricalBugLabelIndexBuilderTest {
                         snapshot("v1", null, Map.of()),
                         snapshot("v2", "v1", Map.of()),
                         snapshot("v3", "v2", Map.of("src/main/java/com/acme/Sample.java", List.of("PROJ-2")))
-                )
+                ),
+                Proportion.Variant.TOTAL
         );
 
         assertTrue(index.isBuggy("v1", "src/main/java/com/acme/Sample.java"));
@@ -104,7 +106,8 @@ class HistoricalBugLabelIndexBuilderTest {
                                 trainerFile, List.of("PROJ-T"),
                                 fallbackFile, List.of("PROJ-F")
                         ))
-                )
+                ),
+                Proportion.Variant.TOTAL
         );
 
         // Trainer ticket: IV = v1 (index 0), fix = v3 (index 2) → buggy at v1 and v2

@@ -19,6 +19,7 @@ import java.util.Map;
  * @param labelIndex historical bug labels available for the project timeline
  * @param writer buffered writer bound to the output CSV file
  * @param sonarSmellsByTag SonarCloud file-smell counts keyed by release tag; empty map when unavailable
+ * @param excludeChurnZero whether to drop rows whose current-release churn is zero
  */
 public record SharedStatus(
         String owner,
@@ -28,6 +29,7 @@ public record SharedStatus(
         StoreReleaseInMemory historyStore,
         ReleaseLabeling labelIndex,
         BufferedWriter writer,
-        Map<String, Map<String, Integer>> sonarSmellsByTag
+        Map<String, Map<String, Integer>> sonarSmellsByTag,
+        boolean excludeChurnZero
 ) {
 }

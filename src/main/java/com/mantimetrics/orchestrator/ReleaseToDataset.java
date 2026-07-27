@@ -43,7 +43,11 @@ public final class ReleaseToDataset {
                 calculator,
                 request.commitData().fileToIssueKeys()
         );
-        return rowEnricher.enrichClasses(uniqueByKey(classes), request);
+        List<DatasetClassData> enriched = rowEnricher.enrichClasses(uniqueByKey(classes), request);
+        if (request.excludeChurnZero()) {
+            enriched = enriched.stream().filter(row -> row.getChurn() != 0).toList();
+        }
+        return enriched;
     }
 
     /**

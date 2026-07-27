@@ -1,6 +1,7 @@
 package com.mantimetrics.projectSelector;
 
 import com.mantimetrics.git.GitConfig;
+import com.mantimetrics.labeling.Proportion;
 
 /**
  * Parses the supported command-line options and translates them into {@link OptionsSelector}.
@@ -24,7 +25,9 @@ public final class CliParser {
         }
         return new OptionsSelector(
                 buildCliProject(state.repoUrl, state.jiraKey, state.percentage),
-                state.useGithubIssues
+                state.useGithubIssues,
+                Proportion.Variant.fromCli(state.proportionRaw),
+                state.excludeChurnZero
         );
     }
 
@@ -54,6 +57,13 @@ public final class CliParser {
         } else if (arg.equals("--percentage") || arg.equals("-p")) {
             index++;
             state.percentage = parsePercentage(nextValue(args, index, arg));
+        } else if (arg.startsWith("--proportion=")) {
+            state.proportionRaw = arg.substring("--proportion=".length());
+        } else if (arg.equals("--proportion")) {
+            index++;
+            state.proportionRaw = nextValue(args, index, arg);
+        } else if (arg.equals("--exclude-churn-zero")) {
+            state.excludeChurnZero = true;
         } else if (arg.equals("--github-issues")) {
             state.useGithubIssues = true;
         } else {
@@ -65,6 +75,8 @@ public final class CliParser {
     /** Mutable accumulator used while scanning CLI arguments. */
     private static final class ParseState {
         boolean useGithubIssues;
+        boolean excludeChurnZero;
+        String proportionRaw;
         String repoUrl;
         String jiraKey;
         Integer percentage;
