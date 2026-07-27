@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * Tests for {@link GitHubReleaseCommitDataClient}.
+ * Tests for {@link GitCommitWriter}.
  */
 class GitHubReleaseCommitDataClientTest {
 
@@ -51,7 +51,7 @@ class GitHubReleaseCommitDataClientTest {
                 }
                 """);
 
-        ReleaseCommitData data = new GitHubReleaseCommitDataClient(apiClient)
+        GitReleaseSnapshot data = new GitCommitWriter(apiClient)
                 .build("apache", "demo", "v1.0", "v1.1");
 
         assertEquals(
@@ -102,7 +102,7 @@ class GitHubReleaseCommitDataClientTest {
                 }
                 """);
 
-        ReleaseCommitData data = new GitHubReleaseCommitDataClient(apiClient)
+        GitReleaseSnapshot data = new GitCommitWriter(apiClient)
                 .build("apache", "demo", null, "v1.0");
 
         assertEquals(

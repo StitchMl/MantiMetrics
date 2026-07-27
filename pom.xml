@@ -283,7 +283,7 @@
         <artifactId>exec-maven-plugin</artifactId>
         <version>3.6.3</version>
         <configuration>
-          <mainClass>com.mantimetrics.MainApp</mainClass>
+          <mainClass>com.mantimetrics.orchestrator.MainApp</mainClass>
         </configuration>
       </plugin>
     </plugins>

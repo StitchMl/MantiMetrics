@@ -10,7 +10,7 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Tests for {@link JiraConfigurationLoader}.
+ * Tests for {@link JiraConfigLoader}.
  */
 class JiraConfigurationLoaderTest {
 
@@ -31,7 +31,7 @@ class JiraConfigurationLoaderTest {
             System.setProperty("mantimetrics.jira.override.path", overrideFile.toString());
             System.clearProperty("mantimetrics.jira.pat");
 
-            JiraProjectSession session = new JiraConfigurationLoader().load(JiraClient.class, "/jira.properties", "BOOK");
+            JiraProjectState session = new JiraConfigLoader().load(JiraFacade.class, "/jira.properties", "BOOK");
 
             assertEquals("Bearer test-jira-token", session.authHeader());
         } finally {

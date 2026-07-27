@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * Tests for {@link IssueKeySupport}.
+ * Tests for {@link GitLinkage}.
  */
 class IssueKeySupportTest {
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -30,8 +30,8 @@ class IssueKeySupportTest {
 
         Map<String, List<String>> map = new HashMap<>();
 
-        IssueKeySupport.addKeysForFiles(firstCommitFiles, List.of("PROJ-1", "PROJ-1"), map);
-        IssueKeySupport.addKeysForFiles(secondCommitFiles, List.of("PROJ-2", "PROJ-1"), map);
+        GitLinkage.addKeysForFiles(firstCommitFiles, List.of("PROJ-1", "PROJ-1"), map);
+        GitLinkage.addKeysForFiles(secondCommitFiles, List.of("PROJ-2", "PROJ-1"), map);
 
         assertEquals(
                 List.of("PROJ-1", "PROJ-2"),
@@ -47,7 +47,7 @@ class IssueKeySupportTest {
         files.addObject().put("filename", "README.md");
 
         Map<String, List<String>> map = new HashMap<>();
-        IssueKeySupport.addKeysForFiles(files, List.of("PROJ-1"), map);
+        GitLinkage.addKeysForFiles(files, List.of("PROJ-1"), map);
 
         assertFalse(map.containsKey("README.md"));
     }

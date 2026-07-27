@@ -15,13 +15,13 @@ import java.util.Properties;
  * </ol>
  */
 public final class SonarTokenLoader {
-    private final PropertiesLoaderSupport support;
+    private final LoaderSupport support;
 
     /**
      * Creates a loader using the default properties helper.
      */
     public SonarTokenLoader() {
-        this(new PropertiesLoaderSupport());
+        this(new LoaderSupport());
     }
 
     /**
@@ -29,7 +29,7 @@ public final class SonarTokenLoader {
      *
      * @param support support component used to resolve property sources
      */
-    SonarTokenLoader(PropertiesLoaderSupport support) {
+    SonarTokenLoader(LoaderSupport support) {
         this.support = support;
     }
 

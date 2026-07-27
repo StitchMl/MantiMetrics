@@ -1,8 +1,10 @@
 package com.mantimetrics.labeling;
 
-import com.mantimetrics.analysis.ReleaseSnapshot;
-import com.mantimetrics.git.ReleaseCommitData;
-import com.mantimetrics.jira.JiraBugTicket;
+import com.mantimetrics.releaseSelection.ReleaseTimeline;
+
+import com.mantimetrics.orchestrator.ReleaseSnapshot;
+import com.mantimetrics.git.GitReleaseSnapshot;
+import com.mantimetrics.jira.JiraSnapshot;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -13,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link HistoricalBugLabelIndexBuilder}.
+ * Tests for {@link HistoricalBugTaker}.
  */
 class HistoricalBugLabelIndexBuilderTest {
 
@@ -23,10 +25,10 @@ class HistoricalBugLabelIndexBuilderTest {
     @Test
     void usesAffectedVersionsWhenTheyAreConsistentWithTheFixRelease() {
         ReleaseTimeline timeline = new ReleaseTimeline(List.of("v1", "v2", "v3"));
-        HistoricalBugLabelIndex index = new HistoricalBugLabelIndexBuilder().build(
+        ReleaseLabeling index = new HistoricalBugTaker().build(
                 timeline,
                 List.of("v1", "v2"),
-                List.of(new JiraBugTicket("PROJ-1", Instant.parse("2020-01-01T00:00:00Z"), List.of("v2"))),
+                List.of(new JiraSnapshot("PROJ-1", Instant.parse("2020-01-01T00:00:00Z"), List.of("v2"))),
                 List.of(
                         snapshot("v1", null, Map.of()),
                         snapshot("v2", "v1", Map.of()),
@@ -47,10 +49,10 @@ class HistoricalBugLabelIndexBuilderTest {
     @Test
     void fallsBackToProportionWhenAffectedVersionsAreMissing() {
         ReleaseTimeline timeline = new ReleaseTimeline(List.of("v1", "v2", "v3"));
-        HistoricalBugLabelIndex index = new HistoricalBugLabelIndexBuilder().build(
+        ReleaseLabeling index = new HistoricalBugTaker().build(
                 timeline,
                 List.of("v1", "v2"),
-                List.of(new JiraBugTicket("PROJ-2", Instant.parse("2020-01-01T00:00:00Z"), List.of())),
+                List.of(new JiraSnapshot("PROJ-2", Instant.parse("2020-01-01T00:00:00Z"), List.of())),
                 List.of(
                         snapshot("v1", null, Map.of()),
                         snapshot("v2", "v1", Map.of()),
@@ -83,15 +85,15 @@ class HistoricalBugLabelIndexBuilderTest {
         );
         ReleaseTimeline timeline = new ReleaseTimeline(List.of("v1", "v2", "v3"), tagDates);
 
-        List<JiraBugTicket> tickets = List.of(
-                new JiraBugTicket("PROJ-T", Instant.parse("2020-01-15T00:00:00Z"), List.of("v1")),
-                new JiraBugTicket("PROJ-F", Instant.parse("2020-07-15T00:00:00Z"), List.of())
+        List<JiraSnapshot> tickets = List.of(
+                new JiraSnapshot("PROJ-T", Instant.parse("2020-01-15T00:00:00Z"), List.of("v1")),
+                new JiraSnapshot("PROJ-F", Instant.parse("2020-07-15T00:00:00Z"), List.of())
         );
 
         String trainerFile = "src/Trainer.java";
         String fallbackFile = "src/Fallback.java";
 
-        HistoricalBugLabelIndex index = new HistoricalBugLabelIndexBuilder().build(
+        ReleaseLabeling index = new HistoricalBugTaker().build(
                 timeline,
                 List.of("v1", "v2"),
                 tickets,
@@ -126,7 +128,7 @@ class HistoricalBugLabelIndexBuilderTest {
      * @return synthetic release snapshot
      */
     private ReleaseSnapshot snapshot(String tag, String previousTag, Map<String, List<String>> fileToIssueKeys) {
-        return new ReleaseSnapshot(tag, previousTag, new ReleaseCommitData(
+        return new ReleaseSnapshot(tag, previousTag, new GitReleaseSnapshot(
                 Map.of(),
                 Map.of(),
                 fileToIssueKeys,

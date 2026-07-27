@@ -1,6 +1,8 @@
 package com.mantimetrics.config;
 
-import com.mantimetrics.MainApp;
+import com.mantimetrics.orchestrator.MainApp;
+
+import com.mantimetrics.orchestrator.MainApp;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -11,7 +13,7 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Tests for {@link GitHubTokenLoader}.
+ * Tests for {@link GitTokenLoader}.
  */
 class GitHubTokenLoaderTest {
 
@@ -32,7 +34,7 @@ class GitHubTokenLoaderTest {
             System.setProperty("mantimetrics.github.override.path", overrideFile.toString());
             System.clearProperty("mantimetrics.github.pat");
 
-            String token = new GitHubTokenLoader().load(MainApp.class);
+            String token = new GitTokenLoader().load(MainApp.class);
 
             assertEquals("test-token", token);
         } finally {

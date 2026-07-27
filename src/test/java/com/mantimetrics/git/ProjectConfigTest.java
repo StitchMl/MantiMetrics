@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Tests for {@link ProjectConfig}.
+ * Tests for {@link GitConfig}.
  */
 class ProjectConfigTest {
 
@@ -14,7 +14,7 @@ class ProjectConfigTest {
      */
     @Test
     void defaultsPercentageToHundredWhenMissing() {
-        ProjectConfig cfg = new ProjectConfig("apache", "Avro", null, "AVRO");
+        GitConfig cfg = new GitConfig("apache", "Avro", null, "AVRO");
 
         assertEquals(100, cfg.percentage());
     }
@@ -24,7 +24,7 @@ class ProjectConfigTest {
      */
     @Test
     void keepsExplicitPercentage() {
-        ProjectConfig cfg = new ProjectConfig("apache", "BookKeeper", 33, "BOOKKEEPER");
+        GitConfig cfg = new GitConfig("apache", "BookKeeper", 33, "BOOKKEEPER");
 
         assertEquals(33, cfg.percentage());
     }
@@ -34,7 +34,7 @@ class ProjectConfigTest {
      */
     @Test
     void derivesOwnerAndNameFromRepositoryUrlWhenNeeded() {
-        ProjectConfig cfg = new ProjectConfig(null, null,
+        GitConfig cfg = new GitConfig(null, null,
                 "https://github.com/apache/avro.git", 33, "AVRO", null);
 
         assertEquals("apache", cfg.owner());

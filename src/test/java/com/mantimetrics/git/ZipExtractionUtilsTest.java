@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link ZipExtractionUtils}.
+ * Tests for {@link GitZipExtractor}.
  */
 class ZipExtractionUtilsTest {
 
@@ -15,12 +15,12 @@ class ZipExtractionUtilsTest {
      */
     @Test
     void materializesOnlyProductionJavaSources() {
-        assertTrue(ZipExtractionUtils.shouldMaterialize("repo/src/main/java/com/acme/App.java", false));
-        assertTrue(ZipExtractionUtils.shouldMaterialize("repo/module-info.java", false));
+        assertTrue(GitZipExtractor.shouldMaterialize("repo/src/main/java/com/acme/App.java", false));
+        assertTrue(GitZipExtractor.shouldMaterialize("repo/module-info.java", false));
 
-        assertFalse(ZipExtractionUtils.shouldMaterialize("repo/README.md", false));
-        assertFalse(ZipExtractionUtils.shouldMaterialize("repo/src/test/java/com/acme/AppTest.java", false));
-        assertFalse(ZipExtractionUtils.shouldMaterialize("repo/src/main/java/com/acme/AppTest.java", false));
-        assertFalse(ZipExtractionUtils.shouldMaterialize("repo/docs/", true));
+        assertFalse(GitZipExtractor.shouldMaterialize("repo/README.md", false));
+        assertFalse(GitZipExtractor.shouldMaterialize("repo/src/test/java/com/acme/AppTest.java", false));
+        assertFalse(GitZipExtractor.shouldMaterialize("repo/src/main/java/com/acme/AppTest.java", false));
+        assertFalse(GitZipExtractor.shouldMaterialize("repo/docs/", true));
     }
 }

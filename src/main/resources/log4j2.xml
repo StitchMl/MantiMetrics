@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  packages="com.mantimetrics.util" tells Log4j2 to scan that package for @Plugin classes,
+  packages="com.mantimetrics.utility" tells Log4j2 to scan that package for @Plugin classes,
   which is how it discovers ProgressBarAppender.
 -->
-<Configuration status="WARN" packages="com.mantimetrics.util">
+<Configuration status="WARN" packages="com.mantimetrics.utility">
     <Appenders>
         <!--
           ProgressBarAppender writes to System.out and holds ProgressBar.CONSOLE_LOCK

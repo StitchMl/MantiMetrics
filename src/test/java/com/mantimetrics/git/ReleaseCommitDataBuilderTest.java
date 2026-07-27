@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * Tests for {@link ReleaseCommitDataBuilder}.
+ * Tests for {@link GitPrevReleaseBuilder}.
  */
 class ReleaseCommitDataBuilderTest {
 
@@ -18,19 +18,19 @@ class ReleaseCommitDataBuilderTest {
      */
     @Test
     void aggregateKeepsBugLabelsScopedToTheCurrentReleaseRange() {
-        ReleaseCommitData firstRelease = ReleaseCommitDataBuilder.aggregate(List.of(
-                new ReleaseCommitDataBuilder.ReleaseCommitSnapshot(
+        GitReleaseSnapshot firstRelease = GitPrevReleaseBuilder.aggregate(List.of(
+                new GitPrevReleaseBuilder.ReleaseCommitSnapshot(
                         "sha-1",
                         "PROJ-1 Fix parser regression",
                         "Alice",
-                        Set.of(new ReleaseCommitDataBuilder.ReleaseCommitFile("src/main/java/com/acme/Sample.java", 10, 2)))));
+                        Set.of(new GitPrevReleaseBuilder.ReleaseCommitFile("src/main/java/com/acme/Sample.java", 10, 2)))));
 
-        ReleaseCommitData secondRelease = ReleaseCommitDataBuilder.aggregate(List.of(
-                new ReleaseCommitDataBuilder.ReleaseCommitSnapshot(
+        GitReleaseSnapshot secondRelease = GitPrevReleaseBuilder.aggregate(List.of(
+                new GitPrevReleaseBuilder.ReleaseCommitSnapshot(
                         "sha-2",
                         "PROJ-2 Fix parser edge case",
                         "Bob",
-                        Set.of(new ReleaseCommitDataBuilder.ReleaseCommitFile("src/main/java/com/acme/Sample.java", 3, 1)))));
+                        Set.of(new GitPrevReleaseBuilder.ReleaseCommitFile("src/main/java/com/acme/Sample.java", 3, 1)))));
 
         assertEquals(
                 List.of("PROJ-1"),
@@ -51,14 +51,14 @@ class ReleaseCommitDataBuilderTest {
      */
     @Test
     void aggregateTracksTouchesEvenWithoutIssueKeys() {
-        ReleaseCommitData data = ReleaseCommitDataBuilder.aggregate(List.of(
-                new ReleaseCommitDataBuilder.ReleaseCommitSnapshot(
+        GitReleaseSnapshot data = GitPrevReleaseBuilder.aggregate(List.of(
+                new GitPrevReleaseBuilder.ReleaseCommitSnapshot(
                         "sha-1",
                         "Refactor parser internals",
                         "Alice",
                         Set.of(
-                                new ReleaseCommitDataBuilder.ReleaseCommitFile("src/main/java/com/acme/Sample.java", 4, 4),
-                                new ReleaseCommitDataBuilder.ReleaseCommitFile("README.md", 1, 0)
+                                new GitPrevReleaseBuilder.ReleaseCommitFile("src/main/java/com/acme/Sample.java", 4, 4),
+                                new GitPrevReleaseBuilder.ReleaseCommitFile("README.md", 1, 0)
                         ))));
 
         assertEquals(

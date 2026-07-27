@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link JiraProjectSession}.
+ * Tests for {@link JiraProjectState}.
  */
 class JiraProjectSessionTest {
 
@@ -23,7 +23,7 @@ class JiraProjectSessionTest {
         properties.setProperty("jira.pat", "secret");
         properties.setProperty("jira.query", "project = {projectKey} AND type = Bug");
 
-        JiraProjectSession session = JiraProjectSession.fromProperties(properties, "BOOK");
+        JiraProjectState session = JiraProjectState.fromProperties(properties, "BOOK");
 
         assertEquals("https://jira.example.com", session.baseUrl());
         assertEquals("Bearer secret", session.authHeader());
@@ -40,7 +40,7 @@ class JiraProjectSessionTest {
 
         JiraClientException exception = assertThrows(
                 JiraClientException.class,
-                () -> JiraProjectSession.fromProperties(properties, "BOOK"));
+                () -> JiraProjectState.fromProperties(properties, "BOOK"));
 
         assertTrue(exception.getMessage().contains("jira.url, jira.pat and jira.query must be set"));
     }

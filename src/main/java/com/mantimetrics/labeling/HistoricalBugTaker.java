@@ -1,0 +1,297 @@
+package com.mantimetrics.labeling;
+
+import com.mantimetrics.releaseSelection.ReleaseTimeline;
+
+import com.mantimetrics.orchestrator.ReleaseSnapshot;
+import com.mantimetrics.jira.JiraSnapshot;
+import com.mantimetrics.utility.ProgressBar;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.OptionalInt;
+import java.util.Set;
+
+/**
+ * Builds the historical labeling oracle used by the milestone-1 dataset.
+ * The implementation prefers affected versions when they are consistent and falls back to
+ * the Proportion algorithm (Predicted_IV = FV - (FV - OV) * P) when JIRA metadata is incomplete.
+ * P is calibrated from tickets that do have affected versions; defaults to 1.0 when no training
+ * data is available (equivalent to IV = OV).
+ */
+public final class HistoricalBugTaker {
+    private static final Logger LOG = LoggerFactory.getLogger(HistoricalBugTaker.class);
+
+    /**
+     * Builds the historical bug-label index from the full release history and resolved Jira tickets.
+     *
+     * @param timeline complete release timeline shared by Git and Jira
+     * @param datasetTags releases selected for dataset generation
+     * @param resolvedTickets resolved bug tickets fetched from Jira
+     * @param releaseHistory preloaded release snapshots containing commit-range metadata
+     * @return historical bug-label index plus audit summary
+     */
+    public ReleaseLabeling build(
+            ReleaseTimeline timeline,
+            List<String> datasetTags,
+            List<JiraSnapshot> resolvedTickets,
+            List<ReleaseSnapshot> releaseHistory
+    ) {
+        Objects.requireNonNull(timeline, "timeline");
+        Objects.requireNonNull(datasetTags, "datasetTags");
+        Objects.requireNonNull(resolvedTickets, "resolvedTickets");
+        Objects.requireNonNull(releaseHistory, "releaseHistory");
+
+        Map<String, JiraSnapshot> ticketsByKey = indexTickets(resolvedTickets);
+        Map<String, Integer> fixReleaseByTicket = new HashMap<>();
+        Map<String, Set<String>> touchedPathsByTicket = new HashMap<>();
+
+        // Sub-bar 2a — scan commit history for bug-fix references
+        try (ProgressBar bar = new ProgressBar("Scanning commits", releaseHistory.size())) {
+            collectFixHistory(releaseHistory, timeline, ticketsByKey.keySet(),
+                    fixReleaseByTicket, touchedPathsByTicket, bar);
+        }
+        LOG.info("  {} tickets linked to at least one fix commit", fixReleaseByTicket.size());
+
+        // Sub-bar 2b — compute Proportion P
+        int linkedCount = fixReleaseByTicket.size();
+        double proportionP;
+        try (ProgressBar bar = new ProgressBar("Proportion P", linkedCount)) {
+            proportionP = computeProportionP(ticketsByKey, fixReleaseByTicket, timeline, bar);
+        }
+        LOG.info("  Proportion P = {}", String.format("%.4f", proportionP));
+
+        // Sub-bar 2c — label every ticket range
+        Map<String, Set<String>> buggyPathsByRelease = new HashMap<>();
+        int withAffectedVersions = 0;
+        int withProportionFallback = 0;
+
+        try (ProgressBar bar = new ProgressBar("Labeling releases", linkedCount)) {
+            for (Map.Entry<String, Integer> entry : fixReleaseByTicket.entrySet()) {
+                JiraSnapshot ticket = ticketsByKey.get(entry.getKey());
+                if (ticket == null) {
+                    bar.step();
+                    continue;
+                }
+
+                int fixIndex = entry.getValue();
+                boolean hadAffectedVersions = ticket.hasAffectedVersions();
+                int injectedIndex = resolveInjectedVersionIndex(ticket, timeline, fixIndex, proportionP);
+
+                if (hadAffectedVersions && injectedIndex < fixIndex) {
+                    withAffectedVersions++;
+                } else if (!hadAffectedVersions && injectedIndex < fixIndex) {
+                    withProportionFallback++;
+                }
+
+                if (injectedIndex < fixIndex) {
+                    Set<String> touchedPaths = touchedPathsByTicket.getOrDefault(ticket.key(), Set.of());
+                    for (int releaseIndex = injectedIndex; releaseIndex < fixIndex; releaseIndex++) {
+                        String releaseTag = timeline.orderedTags().get(releaseIndex);
+                        buggyPathsByRelease.computeIfAbsent(releaseTag, ignored -> new LinkedHashSet<>())
+                                .addAll(touchedPaths);
+                    }
+                }
+                bar.step(ticket.key());
+            }
+        }
+
+        LOG.info("  Oracle built — {} releases with buggy paths  (IV-JIRA: {}  /  Proportion: {})",
+                buggyPathsByRelease.size(), withAffectedVersions, withProportionFallback);
+
+        return new ReleaseLabeling(
+                immutableSetValues(buggyPathsByRelease),
+                new ReleaseLabeling.Summary(
+                        "proportion-fallback",
+                        resolvedTickets.size(),
+                        fixReleaseByTicket.size(),
+                        withAffectedVersions,
+                        withProportionFallback,
+                        timeline.size(),
+                        datasetTags.size(),
+                        "The oracle uses affected versions when available. When absent, the injected version "
+                                + "is predicted via the Proportion algorithm (mean P="
+                                + String.format("%.4f", proportionP)
+                                + "). When no calibration data exists, P defaults to 1.0 (IV=OV)."
+                )
+        );
+    }
+
+    /**
+     * Indexes bug tickets by key for quick lookups during labeling.
+     *
+     * @param tickets resolved bug tickets
+     * @return ticket index keyed by Jira issue key
+     */
+    private Map<String, JiraSnapshot> indexTickets(List<JiraSnapshot> tickets) {
+        Map<String, JiraSnapshot> index = new HashMap<>();
+        for (JiraSnapshot ticket : tickets) {
+            index.put(ticket.key(), ticket);
+        }
+        return index;
+    }
+
+    /**
+     * Scans the complete release history to identify the earliest fixing release and touched paths for each ticket.
+     *
+     * @param releaseHistory preloaded release snapshots
+     * @param timeline complete release timeline
+     * @param knownBugKeys Jira issue keys that represent resolved bug tickets
+     * @param fixReleaseByTicket output map receiving the earliest fixing release index per ticket
+     * @param touchedPathsByTicket output map receiving the paths touched by each ticket
+     */
+    private void collectFixHistory(
+            List<ReleaseSnapshot> releaseHistory,
+            ReleaseTimeline timeline,
+            Set<String> knownBugKeys,
+            Map<String, Integer> fixReleaseByTicket,
+            Map<String, Set<String>> touchedPathsByTicket,
+            ProgressBar bar
+    ) {
+        for (ReleaseSnapshot snapshot : releaseHistory) {
+            OptionalInt releaseIndex = timeline.findIndex(snapshot.tag());
+            if (releaseIndex.isEmpty()) {
+                bar.step(snapshot.tag());
+                continue;
+            }
+            int currentReleaseIndex = releaseIndex.getAsInt();
+
+            snapshot.commitData().fileToIssueKeys().forEach((path, issueKeys) -> {
+                for (String issueKey : issueKeys) {
+                    if (!knownBugKeys.contains(issueKey)) {
+                        continue;
+                    }
+                    fixReleaseByTicket.merge(issueKey, currentReleaseIndex, Math::min);
+                    touchedPathsByTicket.computeIfAbsent(issueKey, ignored -> new LinkedHashSet<>()).add(path);
+                }
+            });
+            bar.step(snapshot.tag());
+        }
+    }
+
+    /**
+     * Computes the mean proportion P = mean((FV - IV) / (FV - OV)) calibrated from tickets
+     * that have known affected versions. Returns 1.0 when no training data is available,
+     * which causes the Proportion formula to predict IV = OV (conservative fallback).
+     *
+     * @param ticketsByKey ticket index
+     * @param fixReleaseByTicket earliest fixing release index per ticket
+     * @param timeline complete release timeline with optional tag dates
+     * @return calibrated proportion P in [0, 1]
+     */
+    private double computeProportionP(
+            Map<String, JiraSnapshot> ticketsByKey,
+            Map<String, Integer> fixReleaseByTicket,
+            ReleaseTimeline timeline,
+            ProgressBar bar
+    ) {
+        double sum = 0.0;
+        int count = 0;
+
+        for (Map.Entry<String, Integer> entry : fixReleaseByTicket.entrySet()) {
+            JiraSnapshot ticket = ticketsByKey.get(entry.getKey());
+            double contribution = computeProportionContribution(ticket, entry.getValue(), timeline);
+            if (contribution >= 0) {
+                sum += contribution;
+                count++;
+                bar.step(entry.getKey());
+            } else {
+                bar.step();
+            }
+        }
+
+        return count == 0 ? 1.0 : sum / count;
+    }
+
+    /**
+     * Computes the proportion contribution for a single ticket.
+     * Returns the clamped P value in [0.0, 1.0] when all conditions are satisfied,
+     * or {@code -1.0} when this ticket should not contribute to the calibration.
+     *
+     * @param ticket resolved bug ticket (maybe {@code null})
+     * @param fv     fix version index
+     * @param timeline complete release timeline
+     * @return clamped P value, or {@code -1.0} when the ticket cannot be used
+     */
+    private double computeProportionContribution(JiraSnapshot ticket, int fv, ReleaseTimeline timeline) {
+        if (ticket == null || !ticket.hasAffectedVersions()) {
+            return -1.0;
+        }
+
+        int ov = timeline.findOpeningVersionIndex(ticket.createdDate());
+
+        List<Integer> candidates = new ArrayList<>();
+        for (String av : ticket.affectedVersions()) {
+            OptionalInt idx = timeline.findIndex(av);
+            if (idx.isPresent() && idx.getAsInt() < fv) {
+                candidates.add(idx.getAsInt());
+            }
+        }
+        if (candidates.isEmpty()) {
+            return -1.0;
+        }
+        int iv = candidates.stream().min(Integer::compareTo).orElseThrow();
+
+        int denominator = fv - ov;
+        if (denominator <= 0) {
+            return -1.0;
+        }
+
+        double p = (double) (fv - iv) / denominator;
+        return Math.min(1.0, Math.max(0.0, p));
+    }
+
+    /**
+     * Resolves the injected version index for a ticket.
+     * Uses JIRA affected versions when they are consistent, otherwise applies the Proportion algorithm.
+     *
+     * @param ticket resolved bug ticket being labeled
+     * @param timeline complete release timeline
+     * @param fixIndex release index where the fix was observed
+     * @param proportionP calibrated proportion P used when affected versions are absent
+     * @return injected release index; returns {@code fixIndex} when no valid range can be determined
+     */
+    private int resolveInjectedVersionIndex(
+            JiraSnapshot ticket,
+            ReleaseTimeline timeline,
+            int fixIndex,
+            double proportionP
+    ) {
+        // Preferred path: use JIRA affected versions
+        List<Integer> candidates = new ArrayList<>();
+        for (String affectedVersion : ticket.affectedVersions()) {
+            OptionalInt index = timeline.findIndex(affectedVersion);
+            if (index.isPresent() && index.getAsInt() < fixIndex) {
+                candidates.add(index.getAsInt());
+            }
+        }
+        if (!candidates.isEmpty()) {
+            return candidates.stream().min(Integer::compareTo).orElse(0);
+        }
+
+        // Proportion fallback: Predicted_IV = FV - (FV - OV) * P
+        int ov = timeline.findOpeningVersionIndex(ticket.createdDate());
+        if (ov >= fixIndex) {
+            return fixIndex;  // no valid range; ticket opened after its fix release
+        }
+        int predicted = (int) Math.round(fixIndex - (fixIndex - ov) * proportionP);
+        return Math.max(ov, Math.min(predicted, fixIndex - 1));
+    }
+
+    /**
+     * Copies a map of mutable sets into an immutable equivalent.
+     *
+     * @param source source map containing mutable set values
+     * @return immutable map with immutable set values
+     */
+    private Map<String, Set<String>> immutableSetValues(Map<String, Set<String>> source) {
+        Map<String, Set<String>> copy = new HashMap<>();
+        source.forEach((key, value) -> copy.put(key, Set.copyOf(value)));
+        return copy;
+    }
+}

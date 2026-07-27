@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link GitHubRepositoryClient}.
+ * Tests for {@link GitRepoClient}.
  */
 class GitHubRepositoryClientTest {
 
@@ -25,7 +25,7 @@ class GitHubRepositoryClientTest {
                 {"commit":{"committer":{"date":"2024-02-01T00:00:00Z"}}}
                 """);
 
-        GitHubRepositoryClient client = new GitHubRepositoryClient(apiClient);
+        GitRepoClient client = new GitRepoClient(apiClient);
         assertTrue(client.compareTagDates("apache", "demo", "v1.0", "v2.0") < 0);
         assertTrue(client.compareTagDates("apache", "demo", "v1.0", "v2.0") < 0);
 

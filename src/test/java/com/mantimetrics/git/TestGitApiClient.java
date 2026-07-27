@@ -8,9 +8,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Test double for {@link GitApiClient} that returns preconfigured JSON payloads.
+ * Test double for {@link GitClient} that returns preconfigured JSON payloads.
  */
-final class TestGitApiClient extends GitApiClient {
+final class TestGitApiClient extends GitClient {
     private final ObjectMapper mapper = new ObjectMapper();
     private final Map<String, JsonNode> responses = new HashMap<>();
     private final Map<String, Integer> calls = new HashMap<>();
