@@ -24,7 +24,7 @@ public final class CliParser {
             index = consumeArg(args, index, state);
         }
         return new OptionsSelector(
-                buildCliProject(state.repoUrl, state.jiraKey, state.percentage),
+                buildCliProject(state.repoUrl, state.jiraKey, state.percentage, state.sonarKey),
                 state.useGithubIssues,
                 Proportion.Variant.fromCli(state.proportionRaw),
                 state.excludeChurnZero
@@ -52,6 +52,11 @@ public final class CliParser {
         } else if (arg.equals("--jira-key") || arg.equals("-j")) {
             index++;
             state.jiraKey = nextValue(args, index, arg);
+        } else if (arg.startsWith("--sonar-key=")) {
+            state.sonarKey = arg.substring("--sonar-key=".length());
+        } else if (arg.equals("--sonar-key") || arg.equals("-s")) {
+            index++;
+            state.sonarKey = nextValue(args, index, arg);
         } else if (arg.startsWith("--percentage=")) {
             state.percentage = parsePercentage(arg.substring("--percentage=".length()));
         } else if (arg.equals("--percentage") || arg.equals("-p")) {
@@ -79,6 +84,7 @@ public final class CliParser {
         String proportionRaw;
         String repoUrl;
         String jiraKey;
+        String sonarKey;
         Integer percentage;
     }
 
@@ -90,7 +96,7 @@ public final class CliParser {
      * @param percentage optional percentage of releases to analyze
      * @return a project configuration when a repository URL is present, otherwise {@code null}
      */
-    private GitConfig buildCliProject(String repoUrl, String jiraKey, Integer percentage) {
+    private GitConfig buildCliProject(String repoUrl, String jiraKey, Integer percentage, String sonarKey) {
         if (repoUrl == null || repoUrl.isBlank()) {
             rejectOptionWithoutRepoUrl(jiraKey, "--jira-key");
             rejectOptionWithoutRepoUrl(percentage, "--percentage");
@@ -105,7 +111,7 @@ public final class CliParser {
                 repoUrl,
                 percentage != null ? percentage : DEFAULT_CLI_PERCENTAGE,
                 jiraKey,
-                null
+                (sonarKey != null && !sonarKey.isBlank()) ? sonarKey : null
         );
     }
 

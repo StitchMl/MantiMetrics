@@ -14,7 +14,7 @@ public final class MainApp {
     private static final Logger LOG = LoggerFactory.getLogger(MainApp.class);
     private static final String USAGE = """
             Uso:
-              --repo-url=<https://github.com/org/repo.git> --jira-key=<KEY>
+              --repo-url=<https://github.com/org/repo.git> --jira-key=<KEY> [--sonar-key=<SONAR_PROJECT>]
             Note:
               se --repo-url manca, la CLI chiede quale progetto analizzare;
               una singola esecuzione scarica i dati UNA volta e genera TUTTE le varianti
