@@ -57,7 +57,7 @@ public final class SonarPreScanOrchestrator {
      *
      * @param gitService   Git service used to download and fully extract release ZIPs
      * @param sonarClient  SonarCloud REST client used to check existing analyses
-     * @param sonarToken   SonarCloud authentication token (maybe {@code null} — pre-scan is skipped)
+     * @param sonarToken   SonarCloud authentication token (maybe {@code null} - pre-scan is skipped)
      */
     public SonarPreScanOrchestrator(GitFacade gitService, SonarClient sonarClient, String sonarToken) {
         this.gitService  = gitService;
@@ -71,7 +71,7 @@ public final class SonarPreScanOrchestrator {
      *
      * @param owner      GitHub repository owner
      * @param repo       GitHub repository name
-     * @param tags       all release tags to consider (ordered oldest → newest)
+     * @param tags       all release tags to consider (ordered oldest -> newest)
      * @param projectKey SonarCloud project key (e.g. {@code StitchMl_avro})
      * @param bar        progress bar that is stepped once per tag (scanned or skipped)
      * @return number of releases newly scanned
@@ -84,7 +84,7 @@ public final class SonarPreScanOrchestrator {
     ) throws SonarException {
 
         if (sonarToken == null || sonarToken.isBlank()) {
-            LOG.warn("SONAR_TOKEN not set — skipping SonarCloud pre-scan. " +
+            LOG.warn("SONAR_TOKEN not set - skipping SonarCloud pre-scan. " +
                      "Set the env variable and re-run to get per-release smell counts.");
             tags.forEach(bar::step);
             return 0;
@@ -92,7 +92,7 @@ public final class SonarPreScanOrchestrator {
 
         String mvn = findMavenExecutable();
         if (mvn == null) {
-            LOG.warn("Maven executable not found (set MAVEN_HOME/M2_HOME or add mvn to PATH) — " +
+            LOG.warn("Maven executable not found (set MAVEN_HOME/M2_HOME or add mvn to PATH) - " +
                      "skipping per-release pre-scan.");
             tags.forEach(bar::step);
             return 0;
@@ -120,24 +120,24 @@ public final class SonarPreScanOrchestrator {
                 newScans++;
             } catch (AutomaticAnalysisEnabledException e) {
                 autoAnalysisBlocked = true;
-                LOG.warn("┌─────────────────────────────────────────────────────────────────");
-                LOG.warn("│  SonarCloud Automatic Analysis is ON — manual scans are blocked.");
-                LOG.warn("│  Disable it here: https://sonarcloud.io/project/analysis_method?id={}", projectKey);
-                LOG.warn("│  Select \"Other CI tools\", save, then re-run.");
-                LOG.warn("│  Pre-scan skipped for all remaining releases.");
-                LOG.warn("└─────────────────────────────────────────────────────────────────");
+                LOG.warn("+-----------------------------------------------------------------");
+                LOG.warn("|  SonarCloud Automatic Analysis is ON - manual scans are blocked.");
+                LOG.warn("|  Disable it here: https://sonarcloud.io/project/analysis_method?id={}", projectKey);
+                LOG.warn("|  Select \"Other CI tools\", save, then re-run.");
+                LOG.warn("|  Pre-scan skipped for all remaining releases.");
+                LOG.warn("+-----------------------------------------------------------------");
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                LOG.debug("SonarCloud pre-scan interrupted for {} — {}", tag, e.getMessage());
+                LOG.debug("SonarCloud pre-scan interrupted for {} - {}", tag, e.getMessage());
             } catch (Exception e) {
-                LOG.debug("SonarCloud pre-scan skipped for {} — {}", tag, e.getMessage());
+                LOG.debug("SonarCloud pre-scan skipped for {} - {}", tag, e.getMessage());
             }
             bar.step(tag);
         }
         return newScans;
     }
 
-    // ── private ──────────────────────────────────────────────────────────────
+    // -- private --------------------------------------------------------------
 
     /**
      * Returns the set of release tags that already have a versioned analysis on SonarCloud.
@@ -187,7 +187,7 @@ public final class SonarPreScanOrchestrator {
 
             runMavenSonar(mvn, mavenRoot, projectKey, organization, tag);
             waitForAnalysis(projectKey, tag);
-            LOG.info("SonarCloud pre-scan: {} ✓", tag);
+            LOG.info("SonarCloud pre-scan: {} [OK]", tag);
         } finally {
             deleteTree(tempDir);
         }
@@ -198,10 +198,10 @@ public final class SonarPreScanOrchestrator {
      *
      * <p>Strategy (first match wins):
      * <ol>
-     *   <li>Root {@code pom.xml} + {@code src/main/java} present → pure Java project, use root.</li>
+     *   <li>Root {@code pom.xml} + {@code src/main/java} present -> pure Java project, use root.</li>
      *   <li>A {@code pom.xml} whose path contains a {@code java}-named segment (e.g.
-     *       {@code lang/java/pom.xml}) → multi-language project layout (Avro, etc.), use that.</li>
-     *   <li>Root {@code pom.xml} without {@code src/main/java} → top-level aggregator, still use root.</li>
+     *       {@code lang/java/pom.xml}) -> multi-language project layout (Avro, etc.), use that.</li>
+     *   <li>Root {@code pom.xml} without {@code src/main/java} -> top-level aggregator, still use root.</li>
      *   <li>Shallowest non-noisy {@code pom.xml} anywhere in the tree.</li>
      * </ol>
      *
@@ -209,7 +209,7 @@ public final class SonarPreScanOrchestrator {
      * @return parent directory of the selected {@code pom.xml}, or empty when none is found
      */
     private static Optional<Path> findJavaPom(Path root) throws IOException {
-        // 1) Root pom.xml with src/main/java present → straightforward Java project
+        // 1) Root pom.xml with src/main/java present -> straightforward Java project
         if (Files.isRegularFile(root.resolve(POM_XML))
                 && Files.isDirectory(root.resolve("src/main/java"))) {
             return Optional.of(root);
@@ -229,7 +229,7 @@ public final class SonarPreScanOrchestrator {
             }
         }
 
-        // 3) Root pom.xml exists (aggregator without src/main/java) → still valid
+        // 3) Root pom.xml exists (aggregator without src/main/java) -> still valid
         if (Files.isRegularFile(root.resolve(POM_XML))) {
             return Optional.of(root);
         }
@@ -298,7 +298,7 @@ public final class SonarPreScanOrchestrator {
         cmd.add("-Dsonar.java.binaries=.");
         cmd.add("-DskipTests=true");
         cmd.add("-Dmaven.test.skip=true");
-        // Suppress most Maven output — sonar goal is still verbose but this keeps it manageable
+        // Suppress most Maven output - sonar goal is still verbose but this keeps it manageable
         cmd.add("--batch-mode");
         cmd.add("--no-transfer-progress");
 
@@ -324,7 +324,7 @@ public final class SonarPreScanOrchestrator {
         }
         if (proc.exitValue() != 0) {
             String outputStr = output.toString();
-            // Detect the "Automatic Analysis enabled" configuration conflict — actionable, fatal for all tags
+            // Detect the "Automatic Analysis enabled" configuration conflict - actionable, fatal for all tags
             if (outputStr.contains("Automatic Analysis is enabled")) {
                 throw new AutomaticAnalysisEnabledException();
             }
@@ -346,7 +346,7 @@ public final class SonarPreScanOrchestrator {
             if (found) return;
             Thread.sleep(POLL_INTERVAL_SEC * 1_000L);
         }
-        LOG.warn("SonarCloud: analysis for version '{}' did not appear within {}s — continuing anyway",
+        LOG.warn("SonarCloud: analysis for version '{}' did not appear within {}s - continuing anyway",
                 expectedVersion, POLL_TIMEOUT_SEC);
     }
 
@@ -374,7 +374,7 @@ public final class SonarPreScanOrchestrator {
             }
         }
 
-        // 2) Assume it's on PATH — try a quick version check
+        // 2) Assume it's on PATH - try a quick version check
         try {
             Process probe = new ProcessBuilder(binaryName, "--version")
                     .redirectErrorStream(true)
@@ -401,7 +401,7 @@ public final class SonarPreScanOrchestrator {
      */
     private static final class AutomaticAnalysisEnabledException extends IOException {
         AutomaticAnalysisEnabledException() {
-            super("SonarCloud Automatic Analysis is enabled — manual scan blocked");
+            super("SonarCloud Automatic Analysis is enabled - manual scan blocked");
         }
     }
 

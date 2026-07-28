@@ -109,7 +109,7 @@ final class JiraTicketReader {
     }
 
     /**
-     * Fetches a map of normalized version name → JIRA release date for a project.
+     * Fetches a map of normalized version name -> JIRA release date for a project.
      * Only versions that carry a {@code releaseDate} field are included.
      *
      * @param session initialized Jira project session

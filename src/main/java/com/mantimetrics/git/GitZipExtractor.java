@@ -185,7 +185,7 @@ class GitZipExtractor {
         if (directory || !name.endsWith(".java")) {
             return false;
         }
-        // Use plain string operations — regex with leading/trailing .* is vulnerable to ReDoS.
+        // Use plain string operations - regex with leading/trailing .* is vulnerable to ReDoS.
         String lower = name.toLowerCase(Locale.ROOT);
         return !lower.contains("/src/test/java/")
                 && !lower.contains("/test/")

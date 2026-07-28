@@ -137,7 +137,7 @@ public final class SonarClient implements AutoCloseable {
      *
      * @param projectKey SonarCloud project key
      * @param analysisKey analysis snapshot key returned by {@link #fetchAnalyses}
-     * @return map of normalized relative path → code smell count
+     * @return map of normalized relative path -> code smell count
      * @throws SonarException when the API call fails
      */
     public Map<String, Integer> fetchFileSmells(String projectKey, String analysisKey)

@@ -8,7 +8,7 @@ import org.jetbrains.annotations.NotNull;
  * <p>All output is written to {@code System.out} while being protected by {@link #CONSOLE_LOCK}.
  * The companion {@link ProgressBarLogAppender} acquires the same lock before printing any log line,
  * so log messages and progress-bar updates are always serialized and never interleave on the
- * terminal — even when Log4j2 fires a WARN from a rate-limit retry mid-update.
+ * terminal - even when Log4j2 fires a WARN from a rate-limit retry mid-update.
  *
  * <p>Typical usage:
  * <pre>{@code
@@ -16,27 +16,27 @@ import org.jetbrains.annotations.NotNull;
  *     for (String tag : tags) {
  *         bar.step(tag);   // advances counter, re-renders the bar in place
  *     }
- * }  // auto-calls finish() → appends final newline
+ * }  // auto-calls finish() -> appends final newline
  * }</pre>
  */
 @SuppressWarnings("java:S106")
 public final class ProgressBar implements AutoCloseable {
 
-    // ── shared console lock ───────────────────────────────────────────────────
+    // -- shared console lock ---------------------------------------------------
     /** Shared monitor used by both ProgressBar and {@link ProgressBarLogAppender}. */
     static final Object CONSOLE_LOCK = new Object();
 
     /** The currently active (not yet finished) progress bar, or {@code null}. */
     private static volatile ProgressBar active = null;
 
-    // ── layout constants ──────────────────────────────────────────────────────
+    // -- layout constants ------------------------------------------------------
     private static final int    BAR_WIDTH   = 28;
     private static final int    LABEL_WIDTH = 22;
     private static final int    LINE_WIDTH  = 100;
-    private static final String FILL        = "█";
-    private static final String EMPTY       = "░";
+    private static final String FILL        = "#";
+    private static final String EMPTY       = ".";
 
-    // ── instance state ────────────────────────────────────────────────────────
+    // -- instance state --------------------------------------------------------
     private final String label;
     private final int    total;
     private int          current    = 0;
@@ -99,7 +99,7 @@ public final class ProgressBar implements AutoCloseable {
         finish();
     }
 
-    // ── package-private helpers used by ProgressBarLogAppender ──────────────────
+    // -- package-private helpers used by ProgressBarLogAppender ------------------
 
     /**
      * Erases the active bar's line so a log message can be printed cleanly.
@@ -124,10 +124,10 @@ public final class ProgressBar implements AutoCloseable {
         }
     }
 
-    // ── private ──────────────────────────────────────────────────────────────
+    // -- private --------------------------------------------------------------
 
     /**
-     * Low-level render — writes the current bar state to {@code System.out}.
+     * Low-level render - writes the current bar state to {@code System.out}.
      * Caller is responsible for holding {@link #CONSOLE_LOCK}.
      */
     private void doRender(String detail) {
@@ -150,7 +150,7 @@ public final class ProgressBar implements AutoCloseable {
 
         String detailPart = "";
         if (detail != null && !detail.isEmpty()) {
-            String d = detail.length() > 36 ? detail.substring(0, 33) + "…" : detail;
+            String d = detail.length() > 36 ? detail.substring(0, 33) + "..." : detail;
             detailPart = "  " + d;
         }
 

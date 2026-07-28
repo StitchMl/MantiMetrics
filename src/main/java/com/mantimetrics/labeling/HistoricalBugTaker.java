@@ -53,14 +53,14 @@ public final class HistoricalBugTaker {
         Map<String, Integer> fixReleaseByTicket = new HashMap<>();
         Map<String, Set<String>> touchedPathsByTicket = new HashMap<>();
 
-        // Sub-bar 2a — scan commit history for bug-fix references
+        // Sub-bar 2a - scan commit history for bug-fix references
         try (ProgressBar bar = new ProgressBar("Scanning commits", releaseHistory.size())) {
             collectFixHistory(releaseHistory, timeline, ticketsByKey.keySet(),
                     fixReleaseByTicket, touchedPathsByTicket, bar);
         }
         LOG.info("  {} tickets linked to at least one fix commit", fixReleaseByTicket.size());
 
-        // Sub-bar 2b — calibrate Proportion P (per-ticket contributions from tickets with affected versions)
+        // Sub-bar 2b - calibrate Proportion P (per-ticket contributions from tickets with affected versions)
         int linkedCount = fixReleaseByTicket.size();
         Map<String, Double> contributions = new HashMap<>();
         double globalP;
@@ -69,7 +69,7 @@ public final class HistoricalBugTaker {
         }
         LOG.info("  Proportion variant = {} (global mean P = {})", variant, String.format("%.4f", globalP));
 
-        // Sub-bar 2c — label every ticket range, in fix-release order so INCREMENTAL uses only past defects
+        // Sub-bar 2c - label every ticket range, in fix-release order so INCREMENTAL uses only past defects
         Map<String, Set<String>> buggyPathsByRelease = new HashMap<>();
         int withAffectedVersions = 0;
         int withProportionFallback = 0;
@@ -119,7 +119,7 @@ public final class HistoricalBugTaker {
             }
         }
 
-        LOG.info("  Oracle built — {} releases with buggy paths  (IV-JIRA: {}  /  Proportion: {})",
+        LOG.info("  Oracle built - {} releases with buggy paths  (IV-JIRA: {}  /  Proportion: {})",
                 buggyPathsByRelease.size(), withAffectedVersions, withProportionFallback);
 
         return new ReleaseLabeling(

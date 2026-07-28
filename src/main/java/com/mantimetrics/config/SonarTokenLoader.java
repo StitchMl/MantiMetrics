@@ -8,10 +8,10 @@ import java.util.Properties;
  *
  * <p>Resolution order (first non-blank wins):
  * <ol>
- *   <li>{@code config/sonar.local.properties} — local override file (gitignore)</li>
- *   <li>{@code -Dmantimetrics.sonar.token} — JVM system property</li>
- *   <li>{@code SONAR_TOKEN} — environment variable</li>
- *   <li>{@code sonar.properties} — classpath resource (empty by default)</li>
+ *   <li>{@code config/sonar.local.properties} - local override file (gitignore)</li>
+ *   <li>{@code -Dmantimetrics.sonar.token} - JVM system property</li>
+ *   <li>{@code SONAR_TOKEN} - environment variable</li>
+ *   <li>{@code sonar.properties} - classpath resource (empty by default)</li>
  * </ol>
  */
 public final class SonarTokenLoader {
@@ -50,7 +50,7 @@ public final class SonarTokenLoader {
             String token = properties.getProperty("sonar.token", "").trim();
             return token.isBlank() ? null : token;
         } catch (IOException e) {
-            return null; // missing config is fine — public projects need no token
+            return null; // missing config is fine - public projects need no token
         }
     }
 }

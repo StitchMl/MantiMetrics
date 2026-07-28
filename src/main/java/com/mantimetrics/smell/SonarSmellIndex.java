@@ -14,9 +14,9 @@ import java.util.Map;
  *
  * <p>Lookup strategy (the best accuracy first):
  * <ol>
- *   <li>{@link #getSmellsForTag(String)} — exact match on {@code sonar.projectVersion} set during
+ *   <li>{@link #getSmellsForTag(String)} - exact match on {@code sonar.projectVersion} set during
  *       each per-release scan (requires the pre-scan phase to have been run).</li>
- *   <li>{@link #getSmellsForDate(Instant)} — picks the latest analysis whose date ≤ release date;
+ *   <li>{@link #getSmellsForDate(Instant)} - picks the latest analysis whose date <= release date;
  *       falls back to the earliest available analysis when none predates the release.</li>
  * </ol>
  */
@@ -27,7 +27,7 @@ public final class SonarSmellIndex {
     public static final SonarSmellIndex EMPTY = new SonarSmellIndex(List.of(), null, null);
 
     private final List<SonarAnalysis>           analyses;
-    private final Map<String, SonarAnalysis>    byVersion;   // projectVersion → analysis
+    private final Map<String, SonarAnalysis>    byVersion;   // projectVersion -> analysis
     private final SonarClient              client;
     private final String                        projectKey;
     private final Map<String, Map<String, Integer>> cache = new LinkedHashMap<>();
@@ -60,7 +60,7 @@ public final class SonarSmellIndex {
         long withVersion = analyses.stream()
                 .filter(a -> a.projectVersion() != null && !a.projectVersion().isBlank())
                 .count();
-        LOG.info("SonarCloud {} — {} analyses ({} with version tag)", projectKey,
+        LOG.info("SonarCloud {} - {} analyses ({} with version tag)", projectKey,
                 analyses.size(), withVersion);
         return new SonarSmellIndex(analyses, client, projectKey);
     }
@@ -83,9 +83,9 @@ public final class SonarSmellIndex {
     /**
      * Returns the file-level code-smell counts from the best matching SonarCloud analysis by date.
      *
-     * <p>Selection strategy (analyses are sorted oldest → newest):
+     * <p>Selection strategy (analyses are sorted oldest -> newest):
      * <ol>
-     *   <li>Latest analysis whose date is ≤ {@code releaseDate} — exact historical match.</li>
+     *   <li>Latest analysis whose date is <= {@code releaseDate} - exact historical match.</li>
      *   <li>If none predates the release (SonarCloud set up after all releases),
      *       falls back to the earliest available analysis as a proxy.</li>
      * </ol>
@@ -106,19 +106,19 @@ public final class SonarSmellIndex {
         }
         if (best == null) {
             best = analyses.get(0);  // proxy: oldest available
-            LOG.debug("SonarCloud {}: no analysis predates {} — using earliest ({}) as proxy",
+            LOG.debug("SonarCloud {}: no analysis predates {} - using earliest ({}) as proxy",
                     projectKey, releaseDate, best.date());
         }
         return fetchOrCached(best.key());
     }
 
-    // ── private ──────────────────────────────────────────────────────────────
+    // -- private --------------------------------------------------------------
 
     private Map<String, Integer> fetchOrCached(String analysisKey) {
         return cache.computeIfAbsent(analysisKey, key -> {
             try {
                 Map<String, Integer> smells = client.fetchFileSmells(projectKey, key);
-                LOG.debug("SonarCloud {} analysis {} — {} files", projectKey, key, smells.size());
+                LOG.debug("SonarCloud {} analysis {} - {} files", projectKey, key, smells.size());
                 return smells;
             } catch (SonarException e) {
                 LOG.warn("SonarCloud smell fetch failed for {}/{}: {}", projectKey, key, e.getMessage());
