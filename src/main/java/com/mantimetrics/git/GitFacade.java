@@ -157,4 +157,32 @@ public final class GitFacade {
     ) throws IOException, InterruptedException {
         return releaseCommitDataClient.build(owner, repo, prevTag, tag, includeGithub);
     }
+
+    /**
+     * Fetches the raw commit snapshots for a release range once, so the aggregation can be recomputed
+     * per dataset variant (collect-once / derive-many).
+     *
+     * @param owner repository owner
+     * @param repo repository name
+     * @param prevTag previous release tag, or {@code null} for the first release
+     * @param tag current release tag
+     * @return opaque holder of the raw commit snapshots
+     * @throws IOException when GitHub data cannot be fetched
+     * @throws InterruptedException when the thread is interrupted while waiting for the API
+     */
+    public RawReleaseCommits fetchRawReleaseCommits(String owner, String repo, String prevTag, String tag)
+            throws IOException, InterruptedException {
+        return releaseCommitDataClient.fetchRaw(owner, repo, prevTag, tag);
+    }
+
+    /**
+     * Aggregates previously fetched raw commits with the requested issue-key source.
+     *
+     * @param raw raw commit snapshots
+     * @param includeGithub whether to also link GitHub issue references
+     * @return aggregated release commit data
+     */
+    public GitReleaseSnapshot aggregate(RawReleaseCommits raw, boolean includeGithub) {
+        return GitCommitWriter.aggregate(raw, includeGithub);
+    }
 }

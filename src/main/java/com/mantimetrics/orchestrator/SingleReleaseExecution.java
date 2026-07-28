@@ -35,6 +35,34 @@ public final class SingleReleaseExecution {
     }
 
     /**
+     * Downloads and parses one release's sources into raw class rows (product metrics only).
+     * Flag-independent: cache once, enrich per variant.
+     *
+     * @param owner repository owner
+     * @param repo repository name
+     * @param tag release tag
+     * @return raw parsed class rows
+     * @throws JavaParsingException when the release sources cannot be loaded or parsed
+     */
+    public List<com.mantimetrics.datasetSetting.DatasetClassData> parseRelease(String owner, String repo, String tag)
+            throws JavaParsingException {
+        ScanResult sources = codeParser.loadReleaseSources(owner, repo, tag);
+        return datasetCollector.parse(sources, repo, tag);
+    }
+
+    /**
+     * Enriches cached raw class rows for one release and variant (no network calls).
+     *
+     * @param rawRows raw parsed class rows
+     * @param request per-release request for the current variant
+     * @return enriched rows
+     */
+    public List<com.mantimetrics.datasetSetting.DatasetClassData> enrich(
+            List<com.mantimetrics.datasetSetting.DatasetClassData> rawRows, ReleaseToDatasetRequest request) {
+        return datasetCollector.enrich(rawRows, request);
+    }
+
+    /**
      * Processes one release snapshot. The snapshot already carries commit history so the expensive GitHub
      * history walk is not repeated for each dataset granularity.
      *

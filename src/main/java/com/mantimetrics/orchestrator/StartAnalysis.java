@@ -1,10 +1,6 @@
 package com.mantimetrics.orchestrator;
 
-import com.mantimetrics.orchestrator.OutputServices;
-import com.mantimetrics.orchestrator.Orchestrator;
 import com.mantimetrics.releaseSelection.ReleaseTimelineJiraGit;
-import com.mantimetrics.orchestrator.ReleaseToDataset;
-import com.mantimetrics.orchestrator.SingleReleaseExecution;
 import com.mantimetrics.datasetOutput.MilestoneAuditWriter;
 import com.mantimetrics.projectSelector.OptionsSelector;
 import com.mantimetrics.projectSelector.ProjectSelection;
@@ -57,7 +53,7 @@ public final class StartAnalysis {
             Orchestrator processor = createProcessor(gitService, new GitIssueClient(githubToken));
             GitConfig[] configs = resolveProjectConfigs(cliOptions);
             for (GitConfig config : configs) {
-                processor.process(config, cliOptions.useGithubIssues(), cliOptions.proportionVariant(), cliOptions.excludeChurnZero());
+                processor.run(config);
             }
         } finally {
             TmpDirCleaner.cleanup(gitService.getTmp());

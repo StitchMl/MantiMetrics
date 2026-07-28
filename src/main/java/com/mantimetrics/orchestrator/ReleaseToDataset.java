@@ -29,11 +29,34 @@ public final class ReleaseToDataset {
     }
 
     /**
-     * Collects enriched class-level dataset rows for a prepared release.
+     * Parses class rows from already-downloaded release sources (no enrichment). Flag-independent,
+     * so the result can be cached once and enriched per dataset variant.
      *
-     * @param request prepared release request
-     * @return enriched class rows keyed by the latest occurrence of each unique identifier
+     * @param sources scanned release sources
+     * @param repo repository name
+     * @param tag release identifier
+     * @return raw class rows with product metrics only
      */
+    public List<DatasetClassData> parse(com.mantimetrics.javaParsing.ScanResult sources, String repo, String tag) {
+        return parser.parseClasses(sources, sources, repo, tag, calculator, java.util.Map.of());
+    }
+
+    /**
+     * Enriches already-parsed class rows with process/history/labeling/TLP features and applies the
+     * churn-zero filter. Contains no network calls, so it can run per variant from cached raw rows.
+     *
+     * @param rawRows raw parsed class rows for the release
+     * @param request per-release request carrying commit data, labels, tickets and flags
+     * @return enriched class rows
+     */
+    public List<DatasetClassData> enrich(List<DatasetClassData> rawRows, ReleaseToDatasetRequest request) {
+        List<DatasetClassData> enriched = rowEnricher.enrichClasses(uniqueByKey(rawRows), request);
+        if (request.excludeChurnZero()) {
+            enriched = enriched.stream().filter(row -> row.getChurn() != 0).toList();
+        }
+        return enriched;
+    }
+
     public List<DatasetClassData> collectClassRows(ReleaseToDatasetRequest request) {
         List<DatasetClassData> classes = parser.parseClasses(
                 request.releaseSources(),

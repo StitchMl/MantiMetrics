@@ -15,7 +15,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -67,16 +66,14 @@ public final class ReleaseTimelineJiraGit {
         }
 
         List<String> selectedTags = releaseSelector.selectFirstPercent(chronologicalTags, config.percentage());
-        List<JiraSnapshot> resolvedTickets = new ArrayList<>(jiraClient.fetchResolvedBugTickets());
-        if (useGithubIssues) {
-            try {
-                List<JiraSnapshot> ghTickets = new GitIssueMapper()
-                        .toBugTickets(gitIssueClient.fetchClosedBugIssues(owner, repo));
-                resolvedTickets.addAll(ghTickets);
-                LOG.info("GitHub Issues: added {} bug tickets (union with Jira)", ghTickets.size());
-            } catch (IOException e) {
-                LOG.warn("GitHub Issues unavailable for {}/{}: {}", owner, repo, e.getMessage());
-            }
+        List<JiraSnapshot> resolvedTickets = jiraClient.fetchResolvedBugTickets();
+        List<JiraSnapshot> ghTickets;
+        try {
+            ghTickets = new GitIssueMapper().toBugTickets(gitIssueClient.fetchClosedBugIssues(owner, repo));
+            LOG.info("GitHub Issues: fetched {} bug issues (available for union per variant)", ghTickets.size());
+        } catch (IOException e) {
+            LOG.warn("GitHub Issues unavailable for {}/{}: {}. Variants with --github-issues will match Jira-only.", owner, repo, e.getMessage());
+            ghTickets = List.of();
         }
 
         LOG.info("{} - percentage {}% -> {} release to be processed",
@@ -100,7 +97,7 @@ public final class ReleaseTimelineJiraGit {
         }
         return new ReleasePlan(owner, repo,
                 new ReleaseTimeline(chronologicalTags, tagDates),
-                selectedTags, resolvedTickets, allTickets);
+                selectedTags, resolvedTickets, allTickets, ghTickets);
     }
 
     /**

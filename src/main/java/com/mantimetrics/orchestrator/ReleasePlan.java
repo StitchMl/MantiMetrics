@@ -14,6 +14,7 @@ import java.util.List;
  * @param selectedTags prefix of releases selected for dataset generation
  * @param resolvedTickets resolved bug tickets fetched from Jira
  * @param allTickets all resolved tickets (any type) used for the ticket-level (TLP) features
+ * @param ghTickets GitHub Issues (bug-labeled) fetched separately; unioned per-variant when requested
  */
 public record ReleasePlan(
         String owner,
@@ -21,6 +22,7 @@ public record ReleasePlan(
         ReleaseTimeline timeline,
         List<String> selectedTags,
         List<JiraSnapshot> resolvedTickets,
-        List<JiraSnapshot> allTickets
+        List<JiraSnapshot> allTickets,
+        List<JiraSnapshot> ghTickets
 ) {
 }

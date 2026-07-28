@@ -14,14 +14,12 @@ public final class MainApp {
     private static final Logger LOG = LoggerFactory.getLogger(MainApp.class);
     private static final String USAGE = """
             Uso:
-              --repo-url=<https://github.com/org/repo.git> --jira-key=<KEY> [--percentage=33]
-              [--proportion=total|incremental] [--github-issues] [--exclude-churn-zero]
+              --repo-url=<https://github.com/org/repo.git> --jira-key=<KEY>
             Note:
-              se --repo-url manca, la CLI chiede quale progetto analizzare
-              --percentage: frazione di release piu' vecchie da tenere (snoring); default 33
-              --proportion: variante di stima della Injected Version; default total
-              --github-issues: unisce i GitHub Issues ai ticket Jira
-              --exclude-churn-zero: scarta le classi con churn nullo nella release
+              se --repo-url manca, la CLI chiede quale progetto analizzare;
+              una singola esecuzione scarica i dati UNA volta e genera TUTTE le varianti
+              di dataset in output/batch/ (snoring 66%/80% x Proportion total/incremental
+              x con/senza GitHub Issues x con/senza churn-zero = 16 CSV).
             """;
 
     /**
