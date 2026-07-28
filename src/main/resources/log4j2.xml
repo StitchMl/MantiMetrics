@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   packages="com.mantimetrics.utility" tells Log4j2 to scan that package for @Plugin classes,
-  which is how it discovers ProgressBarAppender.
+  which is how it discovers ProgressBarLogAppender.
 -->
 <Configuration status="WARN" packages="com.mantimetrics.utility">
     <Appenders>
         <!--
-          ProgressBarAppender writes to System.out and holds ProgressBar.CONSOLE_LOCK
+          ProgressBarLogAppender writes to System.out and holds ProgressBar.CONSOLE_LOCK
           around each log line, so log messages and progress bars never share a terminal line.
         -->
-        <ProgressBarAppender name="Console">
+        <ProgressBarLogAppender name="Console">
             <PatternLayout disableAnsi="false">
                 <!-- %highlight applies ANSI colors based on level -->
                 <Pattern>%d{HH:mm:ss} %highlight{%-5level}{FATAL=bg_red, ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=blue} %style{%class{0}}{bold} - %msg%n</Pattern>
             </PatternLayout>
-        </ProgressBarAppender>
+        </ProgressBarLogAppender>
     </Appenders>
 
     <Loggers>
