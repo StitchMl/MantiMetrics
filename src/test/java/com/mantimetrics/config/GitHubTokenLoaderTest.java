@@ -2,7 +2,6 @@ package com.mantimetrics.config;
 
 import com.mantimetrics.orchestrator.MainApp;
 
-import com.mantimetrics.orchestrator.MainApp;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
