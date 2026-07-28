@@ -80,6 +80,7 @@ public final class MilestoneAuditWriter {
                 "Cohen's Kappa is a classifier-evaluation metric and is not computed during Milestone 1 dataset extraction.");
 
         Path outputPath = resolveAuditPath(rawCsvPath);
+        java.nio.file.Files.createDirectories(outputPath.getParent());
         JSON.writeValue(outputPath.toFile(), audit);
     }
 
