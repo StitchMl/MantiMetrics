@@ -89,7 +89,7 @@ public final class ProgressBar implements AutoCloseable {
             active    = null;   // unregister before final render
             current   = total;
             doRender("");
-            System.out.println();
+            System.out.print(System.lineSeparator());
             System.out.flush();
         }
     }
