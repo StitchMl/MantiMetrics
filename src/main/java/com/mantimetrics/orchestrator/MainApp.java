@@ -1,6 +1,5 @@
 package com.mantimetrics.orchestrator;
 
-import com.mantimetrics.orchestrator.StartAnalysis;
 import com.mantimetrics.projectSelector.OptionsSelector;
 import com.mantimetrics.projectSelector.CliParser;
 import org.slf4j.Logger;
@@ -15,12 +14,14 @@ public final class MainApp {
     private static final Logger LOG = LoggerFactory.getLogger(MainApp.class);
     private static final String USAGE = """
             Uso:
-              --granularity=class|method|both
               --repo-url=<https://github.com/org/repo.git> --jira-key=<KEY> [--percentage=33]
+              [--proportion=total|incremental] [--github-issues] [--exclude-churn-zero]
             Note:
-              se --granularity manca, il default e' class
-              se --repo-url e' presente, il default di --percentage e' 33
               se --repo-url manca, la CLI chiede quale progetto analizzare
+              --percentage: frazione di release piu' vecchie da tenere (snoring); default 33
+              --proportion: variante di stima della Injected Version; default total
+              --github-issues: unisce i GitHub Issues ai ticket Jira
+              --exclude-churn-zero: scarta le classi con churn nullo nella release
             """;
 
     /**

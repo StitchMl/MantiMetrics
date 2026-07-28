@@ -37,6 +37,15 @@ abstract class DatasetRowBuilder<T extends DatasetRowBuilder<T>> {
     protected int maxLoc;
     protected int maxWmc;
     protected int maxNSmells;
+    protected int priorityMax;
+    protected double priorityAvg;
+    protected int typeRiskMax;
+    protected double typeRiskAvg;
+    protected int componentCountMax;
+    protected double componentCountAvg;
+    protected int openTickets;
+    protected double tlccLin;
+    protected double tlccLog;
 
     /** @param value project name @return current builder */
     public final T projectName(String value) { this.projectName = Objects.requireNonNull(value, "projectName"); return self(); }
@@ -88,6 +97,24 @@ abstract class DatasetRowBuilder<T extends DatasetRowBuilder<T>> {
     public final T maxWmc(int value) { this.maxWmc = value; return self(); }
     /** @param value max NSmells @return current builder */
     public final T maxNSmells(int value) { this.maxNSmells = value; return self(); }
+    /** @param value max priority @return current builder */
+    public final T priorityMax(int value) { this.priorityMax = value; return self(); }
+    /** @param value mean priority @return current builder */
+    public final T priorityAvg(double value) { this.priorityAvg = value; return self(); }
+    /** @param value max type-risk @return current builder */
+    public final T typeRiskMax(int value) { this.typeRiskMax = value; return self(); }
+    /** @param value mean type-risk @return current builder */
+    public final T typeRiskAvg(double value) { this.typeRiskAvg = value; return self(); }
+    /** @param value max component count @return current builder */
+    public final T componentCountMax(int value) { this.componentCountMax = value; return self(); }
+    /** @param value mean component count @return current builder */
+    public final T componentCountAvg(double value) { this.componentCountAvg = value; return self(); }
+    /** @param value open tickets @return current builder */
+    public final T openTickets(int value) { this.openTickets = value; return self(); }
+    /** @param value TLCC linear @return current builder */
+    public final T tlccLin(double value) { this.tlccLin = value; return self(); }
+    /** @param value TLCC log @return current builder */
+    public final T tlccLog(double value) { this.tlccLog = value; return self(); }
 
     /**
      * Copies all shared fields from an existing immutable payload.
@@ -120,7 +147,16 @@ abstract class DatasetRowBuilder<T extends DatasetRowBuilder<T>> {
                 .endLine(data.endLine())
                 .maxLoc(data.maxLoc())
                 .maxWmc(data.maxWmc())
-                .maxNSmells(data.maxNSmells());
+                .maxNSmells(data.maxNSmells())
+                .priorityMax(data.priorityMax())
+                .priorityAvg(data.priorityAvg())
+                .typeRiskMax(data.typeRiskMax())
+                .typeRiskAvg(data.typeRiskAvg())
+                .componentCountMax(data.componentCountMax())
+                .componentCountAvg(data.componentCountAvg())
+                .openTickets(data.openTickets())
+                .tlccLin(data.tlccLin())
+                .tlccLog(data.tlccLog());
     }
 
     /**
@@ -134,7 +170,10 @@ abstract class DatasetRowBuilder<T extends DatasetRowBuilder<T>> {
                 projectName, path, releaseId, metrics, commitHashes, buggy, codeSmells,
                 touches, totalTouches, issueTouches, totalIssueTouches, authors, totalAuthors,
                 addedLines, deletedLines, churn, totalChurn, prevCodeSmells, prevBuggy,
-                ageInReleases, startLine, endLine, maxLoc, maxWmc, maxNSmells);
+                ageInReleases, startLine, endLine, maxLoc, maxWmc, maxNSmells,
+                priorityMax, priorityAvg, typeRiskMax, typeRiskAvg,
+                componentCountMax, componentCountAvg, openTickets,
+                tlccLin, tlccLog);
     }
 
     /** Verifies that the mandatory shared fields were provided. */

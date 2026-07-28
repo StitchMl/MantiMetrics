@@ -32,12 +32,24 @@ import java.util.List;
  * @param maxLoc maximum LOC across releases
  * @param maxWmc maximum WMC across releases
  * @param maxNSmells maximum NSmells across releases
+ * @param priorityMax max ticket priority rank (TLP)
+ * @param priorityAvg mean ticket priority rank (TLP)
+ * @param typeRiskMax max ticket type-risk (TLP)
+ * @param typeRiskAvg mean ticket type-risk (TLP)
+ * @param componentCountMax max ticket component count (TLP)
+ * @param componentCountAvg mean ticket component count (TLP)
+ * @param openTickets tickets open at the release snapshot (TLP)
+ * @param tlccLin Temporal Locality (linear weighting)
+ * @param tlccLog Temporal Locality (logarithmic weighting)
  */
 record DatasetRowData(String projectName, String path, String releaseId, ClassMetrics metrics,
                       List<String> commitHashes, boolean buggy, int codeSmells, int touches, int totalTouches,
                       int issueTouches, int totalIssueTouches, int authors, int totalAuthors, int addedLines,
                       int deletedLines, int churn, int totalChurn, int prevCodeSmells, boolean prevBuggy,
-                      int ageInReleases, int startLine, int endLine, int maxLoc, int maxWmc, int maxNSmells) {
+                      int ageInReleases, int startLine, int endLine, int maxLoc, int maxWmc, int maxNSmells,
+                      int priorityMax, double priorityAvg, int typeRiskMax, double typeRiskAvg,
+                      int componentCountMax, double componentCountAvg, int openTickets,
+                      double tlccLin, double tlccLog) {
 
     /** Copies the commit hash list defensively. */
     DatasetRowData {

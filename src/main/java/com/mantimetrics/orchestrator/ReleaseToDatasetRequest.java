@@ -3,10 +3,13 @@ package com.mantimetrics.orchestrator;
 import com.mantimetrics.git.GitReleaseSnapshot;
 import com.mantimetrics.history.StoreReleaseInMemory;
 import com.mantimetrics.labeling.ReleaseLabeling;
+import com.mantimetrics.jira.JiraSnapshot;
 import com.mantimetrics.datasetSetting.DatasetRow;
 import com.mantimetrics.javaParsing.ScanResult;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Narrow request object passed to the dataset collector so the release pipeline stays explicit and testable.
@@ -20,6 +23,10 @@ import java.util.Map;
  * @param labelIndex historical bug labels used to mark buggy rows
  * @param sonarSmellsByFile SonarCloud file-level code-smell counts; empty map when SonarCloud is unconfigured
  * @param excludeChurnZero whether to drop rows whose current-release churn is zero
+ * @param ticketsByKey all resolved tickets keyed by issue key (for TLP aggregation)
+ * @param openTickets number of tickets open at this release snapshot (TLP)
+ * @param ticketTouchedPaths issue key -> touched paths (TLCC)
+ * @param orderedTicketKeys chronological ticket keys up to this release (TLCC window)
  */
 public record ReleaseToDatasetRequest(
         ScanResult releaseSources,
@@ -30,6 +37,10 @@ public record ReleaseToDatasetRequest(
         StoreReleaseInMemory historyStore,
         ReleaseLabeling labelIndex,
         Map<String, Integer> sonarSmellsByFile,
-        boolean excludeChurnZero
+        boolean excludeChurnZero,
+        Map<String, JiraSnapshot> ticketsByKey,
+        int openTickets,
+        Map<String, Set<String>> ticketTouchedPaths,
+        List<String> orderedTicketKeys
 ) {
 }

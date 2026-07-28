@@ -76,6 +76,16 @@ public class JiraFacade {
     }
 
     /**
+     * Fetches all resolved tickets (any issue type) for the ticket-level (TLP) features.
+     *
+     * @return resolved tickets of every type, carrying priority/type/components/resolution date
+     * @throws JiraClientException when Jira cannot be queried
+     */
+    public List<JiraSnapshot> fetchAllResolvedTickets() throws JiraClientException {
+        return projectReader.fetchAllResolvedTickets(requireSession());
+    }
+
+    /**
      * Fetches the normalized versions configured for a Jira project.
      *
      * @param projectKey Jira project key

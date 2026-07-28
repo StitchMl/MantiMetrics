@@ -11,11 +11,13 @@ import java.util.Properties;
  * @param baseUrl normalized Jira base URL
  * @param authHeader bearer authorization header
  * @param searchBase base search URL including the configured JQL
+ * @param allTicketsSearchBase base search URL with the issuetype=Bug filter removed (all resolved tickets, for TLP features)
  */
 record JiraProjectState(
         String baseUrl,
         String authHeader,
-        String searchBase
+        String searchBase,
+        String allTicketsSearchBase
 ) {
     /**
      * Builds a Jira session from the loaded properties and the selected project key.
@@ -39,10 +41,29 @@ record JiraProjectState(
                     .addParameter("jql", queryTemplate.replace("{projectKey}", projectKey))
                     .build()
                     .toString();
-            return new JiraProjectState(baseUrl, "Bearer " + pat, searchBase);
+            String allTicketsSearchBase = new URIBuilder(baseUrl + "/rest/api/2/search")
+                    .addParameter("jql", deriveAllTypesQuery(queryTemplate).replace("{projectKey}", projectKey))
+                    .build()
+                    .toString();
+            return new JiraProjectState(baseUrl, "Bearer " + pat, searchBase, allTicketsSearchBase);
         } catch (Exception exception) {
             throw new JiraClientException("JIRA URI construction error", exception);
         }
+    }
+
+    /**
+     * Derives an all-issue-types JQL by removing the {@code issuetype/type = Bug} clause so that
+     * ticket-level (TLP) features can be computed over every resolved ticket, not only bugs.
+     *
+     * @param jql configured bug-oriented JQL
+     * @return JQL without the issue-type Bug restriction
+     */
+    static String deriveAllTypesQuery(String jql) {
+        String s = jql;
+        s = s.replaceAll("(?i)\\s+AND\\s+(issuetype|type)\\s*=\\s*Bug", "");
+        s = s.replaceAll("(?i)(issuetype|type)\\s*=\\s*Bug\\s+AND\\s+", "");
+        s = s.replaceAll("(?i)(issuetype|type)\\s*=\\s*Bug", "");
+        return s.trim();
     }
 
     /**

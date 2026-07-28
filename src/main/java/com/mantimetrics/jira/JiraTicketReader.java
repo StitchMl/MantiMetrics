@@ -231,4 +231,133 @@ final class JiraTicketReader {
             tickets.add(new JiraSnapshot(key, createdDate, List.copyOf(affectedVersions)));
         }
     }
+
+    /**
+     * Fetches all resolved tickets (any issue type) with the fields needed by the TLP features.
+     *
+     * @param session initialized Jira project session
+     * @return resolved tickets of every type
+     * @throws JiraClientException when Jira cannot be queried
+     */
+    List<JiraSnapshot> fetchAllResolvedTickets(JiraProjectState session) throws JiraClientException {
+        List<JiraSnapshot> tickets = new ArrayList<>();
+        int startAt = 0;
+        try {
+            while (true) {
+                URI uri = new URIBuilder(session.allTicketsSearchBase())
+                        .addParameter(PARAM_FIELDS, "key,versions,created,resolutiondate,priority,issuetype,components")
+                        .addParameter("startAt", String.valueOf(startAt))
+                        .addParameter("maxResults", String.valueOf(PAGE_SIZE))
+                        .build();
+                JsonNode response = jsonClient.get(uri, session.authHeader());
+                collectFullTickets(response.path("issues"), tickets);
+
+                int total = response.path("total").asInt();
+                startAt += PAGE_SIZE;
+                if (startAt >= total) {
+                    break;
+                }
+            }
+        } catch (IOException exception) {
+            throw new JiraClientException("I/O Error to JIRA (all tickets)", exception);
+        } catch (Exception exception) {
+            throw new JiraClientException("Error fetchAllResolvedTickets", exception);
+        }
+        return List.copyOf(tickets);
+    }
+
+    /**
+     * Parses the extended ticket payload (priority, type, components, resolution date) for TLP.
+     *
+     * @param issues Jira issues array
+     * @param tickets target list receiving the extracted tickets
+     */
+    private void collectFullTickets(JsonNode issues, List<JiraSnapshot> tickets) {
+        for (JsonNode issue : issues) {
+            String key = issue.path("key").asText(null);
+            if (key == null || key.isBlank()) {
+                continue;
+            }
+            JsonNode fields = issue.path(PARAM_FIELDS);
+
+            Instant created = parseJiraDate(fields.path("created").asText(null));
+            Instant resolved = parseJiraDate(fields.path("resolutiondate").asText(null));
+
+            Set<String> affectedVersions = new LinkedHashSet<>();
+            JsonNode versionNodes = fields.path("versions");
+            if (versionNodes.isArray()) {
+                versionNodes.forEach(version -> {
+                    String name = version.path("name").asText(null);
+                    if (name != null && !name.isBlank()) {
+                        affectedVersions.add(JiraProjectState.normalize(name));
+                    }
+                });
+            }
+
+            int priorityRank = priorityRank(fields.path("priority").path("name").asText(""));
+            int typeRisk = typeRisk(fields.path("issuetype").path("name").asText(""));
+            JsonNode components = fields.path("components");
+            int componentCount = components.isArray() ? components.size() : 0;
+
+            tickets.add(new JiraSnapshot(
+                    key,
+                    created != null ? created : Instant.EPOCH,
+                    List.copyOf(affectedVersions),
+                    priorityRank,
+                    typeRisk,
+                    componentCount,
+                    resolved));
+        }
+    }
+
+    /**
+     * Parses a Jira timestamp, returning {@code null} when absent or malformed.
+     *
+     * @param raw raw Jira date string
+     * @return parsed instant, or {@code null}
+     */
+    private Instant parseJiraDate(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(raw, JIRA_DATE_FORMAT).toInstant();
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    /**
+     * Maps a Jira priority name to an ordinal rank (1=Trivial .. 5=Blocker; 0=unknown).
+     *
+     * @param name Jira priority name
+     * @return ordinal priority rank
+     */
+    private static int priorityRank(String name) {
+        return switch (name.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "blocker", "highest" -> 5;
+            case "critical", "high" -> 4;
+            case "major", "medium" -> 3;
+            case "minor", "low" -> 2;
+            case "trivial", "lowest" -> 1;
+            default -> 0;
+        };
+    }
+
+    /**
+     * Maps a Jira issue type to an empirical risk rank (0=unknown). New features are treated as the
+     * riskiest, tasks as the least risky.
+     *
+     * @param name Jira issue type name
+     * @return empirical type-risk rank
+     */
+    private static int typeRisk(String name) {
+        return switch (name.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "new feature" -> 4;
+            case "improvement" -> 3;
+            case "bug" -> 2;
+            case "task", "sub-task", "subtask" -> 1;
+            default -> 0;
+        };
+    }
 }

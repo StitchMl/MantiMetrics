@@ -13,12 +13,14 @@ import java.util.List;
  * @param timeline full chronological release timeline common to Git and Jira
  * @param selectedTags prefix of releases selected for dataset generation
  * @param resolvedTickets resolved bug tickets fetched from Jira
+ * @param allTickets all resolved tickets (any type) used for the ticket-level (TLP) features
  */
 public record ReleasePlan(
         String owner,
         String repo,
         ReleaseTimeline timeline,
         List<String> selectedTags,
-        List<JiraSnapshot> resolvedTickets
+        List<JiraSnapshot> resolvedTickets,
+        List<JiraSnapshot> allTickets
 ) {
 }

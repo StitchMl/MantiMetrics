@@ -16,7 +16,6 @@ public final class CSVWriter {
     /**
      * Builds the CSV header line for the selected granularity.
      *
-     * @param g target dataset granularity
      * @return comma-separated header line
      */
     private static String header() {
@@ -36,6 +35,9 @@ public final class CSVWriter {
                 "NR", "NFix", "NAuth", "LOC_Added", "LOC_Deleted", "Churn",
                 "totalNR", "totalNFix", "totalNAuth", "totalChurn", "Age",
                 "maxLOC", "maxWMC", "maxNSmells",
+                "PriorityMax", "PriorityAvg", "TypeRiskMax", "TypeRiskAvg",
+                "ComponentCountMax", "ComponentCountAvg", "OpenTickets",
+                "TLCC_Lin", "TLCC_Log",
                 "prevNSmells", "prevBuggy", "Buggy"
         };
     }

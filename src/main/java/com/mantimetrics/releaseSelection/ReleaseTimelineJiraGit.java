@@ -9,8 +9,6 @@ import com.mantimetrics.jira.JiraClientException;
 import com.mantimetrics.jira.JiraSnapshot;
 import com.mantimetrics.gitIssue.GitIssueClient;
 import com.mantimetrics.gitIssue.GitIssueMapper;
-import com.mantimetrics.releaseSelection.ReleaseTimeline;
-import com.mantimetrics.releaseSelection.ReleaseSnoringFilter;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,9 +90,17 @@ public final class ReleaseTimelineJiraGit {
             Instant jiraDate = jiraDates.get(JiraFacade.normalize(tag));
             tagDates.put(tag, jiraDate != null ? jiraDate : gitService.getTagDate(owner, repo, tag));
         }
+        List<JiraSnapshot> allTickets;
+        try {
+            allTickets = jiraClient.fetchAllResolvedTickets();
+            LOG.info("Found {} resolved tickets (all types) for TLP features", allTickets.size());
+        } catch (JiraClientException e) {
+            LOG.warn("Could not fetch all-type tickets for TLP: {}. TLP features will be empty.", e.getMessage());
+            allTickets = List.of();
+        }
         return new ReleasePlan(owner, repo,
                 new ReleaseTimeline(chronologicalTags, tagDates),
-                selectedTags, resolvedTickets);
+                selectedTags, resolvedTickets, allTickets);
     }
 
     /**

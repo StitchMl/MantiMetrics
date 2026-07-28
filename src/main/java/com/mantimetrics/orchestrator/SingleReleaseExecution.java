@@ -88,7 +88,11 @@ public final class SingleReleaseExecution {
                     context.historyStore(),
                     context.labelIndex(),
                     sonarSmells,
-                    context.excludeChurnZero()
+                    context.excludeChurnZero(),
+                    context.ticketsByKey(),
+                    context.openTicketsByRelease().getOrDefault(tag, 0),
+                    context.ticketTouchedPaths(),
+                    context.orderedTicketsByRelease().getOrDefault(tag, java.util.List.of())
             );
             List<? extends DatasetRow> rows = datasetCollector.collectClassRows(request);
 

@@ -4,6 +4,7 @@ import com.mantimetrics.history.ComulationMetricsCalculator;
 import com.mantimetrics.feature.ClassMetrics;
 import com.mantimetrics.datasetSetting.DatasetClassData;
 import com.mantimetrics.datasetSetting.DatasetRow;
+import com.mantimetrics.jira.JiraSnapshot;
 import com.mantimetrics.utility.PathUtility;
 
 import java.util.ArrayList;
@@ -31,6 +32,8 @@ final class DatasetRowEnricher {
             String relativePath = normalizedPath(row);
             List<String> commits = request.commitData().touchesFor(relativePath);
             int currentCodeSmells = codeSmellsForRow(row, request.sonarSmellsByFile());
+            TlpAggregate tlp = aggregateTlp(request.commitData().issueKeysFor(relativePath), request.ticketsByKey());
+            double[] tlcc = computeTlcc(relativePath, request.orderedTicketKeys(), request.ticketTouchedPaths());
             ComulationMetricsCalculator historyState = updateHistory(
                     row.getUniqueKey(), relativePath, request, row.getMetrics(), currentCodeSmells);
             DatasetClassData previous =
@@ -55,6 +58,15 @@ final class DatasetRowEnricher {
                     .maxLoc(historyState.maxLoc())
                     .maxWmc(historyState.maxWmc())
                     .maxNSmells(historyState.maxNSmells())
+                    .priorityMax(tlp.priorityMax())
+                    .priorityAvg(tlp.priorityAvg())
+                    .typeRiskMax(tlp.typeRiskMax())
+                    .typeRiskAvg(tlp.typeRiskAvg())
+                    .componentCountMax(tlp.componentCountMax())
+                    .componentCountAvg(tlp.componentCountAvg())
+                    .openTickets(request.openTickets())
+                    .tlccLin(tlcc[0])
+                    .tlccLog(tlcc[1])
                     .build());
         }
         return result;
@@ -146,5 +158,78 @@ final class DatasetRowEnricher {
     /** Counts the distinct authors touching a row. */
     private int distinctCount(List<String> authors) {
         return distinctAuthors(authors).size();
+    }
+
+    /**
+     * Aggregates the ticket-level (TLP) features (Priority, Type-risk, Component count) as Max and
+     * Mean over the tickets linked to a class in the current release.
+     *
+     * @param ticketKeys issue keys linked to the class in the current release
+     * @param ticketsByKey all resolved tickets keyed by issue key
+     * @return aggregated TLP values (zeros when no ticket is linked)
+     */
+    private TlpAggregate aggregateTlp(List<String> ticketKeys, java.util.Map<String, JiraSnapshot> ticketsByKey) {
+        List<Integer> priorities = new ArrayList<>();
+        List<Integer> typeRisks = new ArrayList<>();
+        List<Integer> componentCounts = new ArrayList<>();
+        for (String key : ticketKeys) {
+            JiraSnapshot ticket = ticketsByKey.get(key);
+            if (ticket != null) {
+                priorities.add(ticket.priorityRank());
+                typeRisks.add(ticket.typeRisk());
+                componentCounts.add(ticket.componentCount());
+            }
+        }
+        return new TlpAggregate(
+                maxOf(priorities), avgOf(priorities),
+                maxOf(typeRisks), avgOf(typeRisks),
+                maxOf(componentCounts), avgOf(componentCounts));
+    }
+
+    /** Returns the maximum of a list, or 0 when empty. */
+    private static int maxOf(List<Integer> values) {
+        return values.stream().mapToInt(Integer::intValue).max().orElse(0);
+    }
+
+    /** Returns the mean of a list, or 0.0 when empty. */
+    private static double avgOf(List<Integer> values) {
+        return values.isEmpty() ? 0.0 : values.stream().mapToInt(Integer::intValue).average().orElse(0.0);
+    }
+
+    /**
+     * Computes the Temporal Locality (TLCC) of a class over the ticket window up to the current
+     * release. {@code TLCC_Lin} weights the i-th ticket by 1/(1+N-i) (includes i=N, weight 1);
+     * {@code TLCC_Log} weights by 1/ln(1+N-i) (excludes i=N to avoid ln(1)=0). Both are divided by N.
+     *
+     * @param path normalized class path
+     * @param orderedTicketKeys chronological ticket keys up to the release (oldest first)
+     * @param ticketTouchedPaths issue key -> touched paths
+     * @return array {@code [tlccLin, tlccLog]}
+     */
+    private double[] computeTlcc(String path, List<String> orderedTicketKeys,
+                                 java.util.Map<String, java.util.Set<String>> ticketTouchedPaths) {
+        int n = orderedTicketKeys.size();
+        if (n == 0) {
+            return new double[]{0.0, 0.0};
+        }
+        double lin = 0.0;
+        double log = 0.0;
+        for (int idx = 0; idx < n; idx++) {
+            int i = idx + 1;
+            boolean touched = ticketTouchedPaths.getOrDefault(orderedTicketKeys.get(idx), java.util.Set.of()).contains(path);
+            if (!touched) {
+                continue;
+            }
+            lin += 1.0 / (1 + n - i);
+            if (i < n) {
+                log += 1.0 / Math.log(1 + n - i);
+            }
+        }
+        return new double[]{lin / n, log / n};
+    }
+
+    /** Immutable aggregated TLP values for one class-release row. */
+    private record TlpAggregate(int priorityMax, double priorityAvg, int typeRiskMax, double typeRiskAvg,
+                                int componentCountMax, double componentCountAvg) {
     }
 }

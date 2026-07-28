@@ -12,6 +12,7 @@ import com.mantimetrics.jira.JiraClientException;
 import com.mantimetrics.labeling.ReleaseLabeling;
 import com.mantimetrics.labeling.HistoricalBugTaker;
 import com.mantimetrics.labeling.Proportion;
+import com.mantimetrics.jira.JiraSnapshot;
 import com.mantimetrics.datasetOutput.MilestoneAuditWriter;
 import com.mantimetrics.releaseSelection.ReleaseException;
 import com.mantimetrics.smell.SonarClient;
@@ -25,10 +26,13 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Project-level orchestrator. It preloads the full release history once, builds the historical bug oracle,
@@ -149,8 +153,13 @@ public final class Orchestrator {
         int releasesTotal = plan.selectedTags().size();
         LOG.info("[5/5] Generating dataset — {} releases…", releasesTotal);
         List<Path> csvPaths = new ArrayList<>();
+        Map<String, JiraSnapshot> ticketsByKey = indexTicketsByKey(plan.allTickets());
+        Map<String, Integer> openTicketsByRelease = computeOpenTicketsByRelease(plan);
+        Map<String, Set<String>> ticketTouchedPaths = computeTicketTouchedPaths(releaseHistory);
+        Map<String, List<String>> orderedTicketsByRelease = computeOrderedTicketsByRelease(plan);
         List<SharedStatus> contexts = openContexts(plan, csvPaths, labelIndex,
-                sonarSmellsByTag, excludeChurnZero);
+                sonarSmellsByTag, excludeChurnZero, ticketsByKey, openTicketsByRelease,
+                ticketTouchedPaths, orderedTicketsByRelease);
         try (ProgressBar bar = new ProgressBar("Dataset", releasesTotal)) {
             int releasesDone = 0;
             try {
@@ -221,7 +230,11 @@ public final class Orchestrator {
             List<Path> csvPaths,
             ReleaseLabeling labelIndex,
             Map<String, Map<String, Integer>> sonarSmellsByTag,
-            boolean excludeChurnZero
+            boolean excludeChurnZero,
+            Map<String, JiraSnapshot> ticketsByKey,
+            Map<String, Integer> openTicketsByRelease,
+            Map<String, Set<String>> ticketTouchedPaths,
+            Map<String, List<String>> orderedTicketsByRelease
     ) throws CSVException {
         List<SharedStatus> contexts = new ArrayList<>();
         try {
@@ -237,7 +250,11 @@ public final class Orchestrator {
                     labelIndex,
                     writer,
                     sonarSmellsByTag,
-                    excludeChurnZero
+                    excludeChurnZero,
+                    ticketsByKey,
+                    openTicketsByRelease,
+                    ticketTouchedPaths,
+                    orderedTicketsByRelease
             ));
             return contexts;
         } catch (CSVException exception) {
@@ -323,6 +340,104 @@ public final class Orchestrator {
                 .mapToLong(s -> s.commitData().issueLinkedJavaCommits())
                 .sum();
         return totalJava == 0 ? 0.0 : (double) linkedJava / totalJava;
+    }
+
+    /**
+     * Indexes all resolved tickets by their issue key for TLP aggregation.
+     *
+     * @param tickets all resolved tickets (any type)
+     * @return ticket index keyed by issue key
+     */
+    private Map<String, JiraSnapshot> indexTicketsByKey(List<JiraSnapshot> tickets) {
+        Map<String, JiraSnapshot> index = new HashMap<>();
+        for (JiraSnapshot ticket : tickets) {
+            index.put(ticket.key(), ticket);
+        }
+        return index;
+    }
+
+    /**
+     * Counts, for each release, the tickets already created but not yet resolved at the release
+     * snapshot date (TLP "Open Tickets" workload proxy). Computed at the release date to avoid
+     * data leakage from the future.
+     *
+     * @param plan release plan carrying the timeline dates and all tickets
+     * @return open-ticket count keyed by release tag
+     */
+    private Map<String, Integer> computeOpenTicketsByRelease(ReleasePlan plan) {
+        Map<String, Integer> open = new LinkedHashMap<>();
+        Map<String, java.time.Instant> tagDates = plan.timeline().tagDates();
+        for (String tag : plan.timeline().orderedTags()) {
+            java.time.Instant releaseDate = tagDates.get(tag);
+            int count = 0;
+            if (releaseDate != null) {
+                for (JiraSnapshot ticket : plan.allTickets()) {
+                    boolean createdByNow = ticket.createdDate() != null && !ticket.createdDate().isAfter(releaseDate);
+                    boolean stillOpen = ticket.resolvedDate() == null || ticket.resolvedDate().isAfter(releaseDate);
+                    if (createdByNow && stillOpen) {
+                        count++;
+                    }
+                }
+            }
+            open.put(tag, count);
+        }
+        return open;
+    }
+
+    /**
+     * Inverts the per-release commit linkage into a ticket -> touched paths map (full history),
+     * used by the Temporal Locality (TLCC) feature.
+     *
+     * @param releaseHistory preloaded release snapshots
+     * @return map of issue key -> set of touched relative paths
+     */
+    private Map<String, Set<String>> computeTicketTouchedPaths(List<ReleaseSnapshot> releaseHistory) {
+        Map<String, Set<String>> touched = new HashMap<>();
+        for (ReleaseSnapshot snapshot : releaseHistory) {
+            snapshot.commitData().fileToIssueKeys().forEach((path, keys) -> {
+                for (String key : keys) {
+                    touched.computeIfAbsent(key, ignored -> new HashSet<>()).add(path);
+                }
+            });
+        }
+        return touched;
+    }
+
+    /**
+     * Builds, per release, the chronological sequence of ticket keys implemented up to the release
+     * snapshot date (oldest first). Used as the TLCC observation window; excludes future tickets.
+     *
+     * @param plan release plan carrying tickets and timeline dates
+     * @return map of release tag -> ordered ticket keys
+     */
+    private Map<String, List<String>> computeOrderedTicketsByRelease(ReleasePlan plan) {
+        List<JiraSnapshot> sorted = new ArrayList<>(plan.allTickets());
+        sorted.sort(Comparator.comparing(this::effectiveDate));
+        Map<String, java.time.Instant> tagDates = plan.timeline().tagDates();
+        Map<String, List<String>> byRelease = new LinkedHashMap<>();
+        for (String tag : plan.timeline().orderedTags()) {
+            java.time.Instant date = tagDates.get(tag);
+            List<String> seq = new ArrayList<>();
+            if (date != null) {
+                for (JiraSnapshot ticket : sorted) {
+                    if (!effectiveDate(ticket).isAfter(date)) {
+                        seq.add(ticket.key());
+                    }
+                }
+            }
+            byRelease.put(tag, seq);
+        }
+        return byRelease;
+    }
+
+    /**
+     * Returns the effective chronological date of a ticket (resolution date when present, else creation).
+     *
+     * @param ticket resolved ticket
+     * @return effective ordering instant
+     */
+    private java.time.Instant effectiveDate(JiraSnapshot ticket) {
+        return ticket.resolvedDate() != null ? ticket.resolvedDate() : ticket.createdDate();
     }
 
     /**
