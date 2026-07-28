@@ -12,7 +12,7 @@ import java.util.Objects;
  * @param key Jira issue key
  * @param createdDate timestamp when the ticket was created
  * @param affectedVersions normalized affected versions declared in Jira
- * @param priorityRank ordinal priority rank (1=Trivial .. 5=Blocker; 0=unknown)
+ * @param priorityRank ordinal priority rank (1=Trivial ... 5=Blocker; 0=unknown)
  * @param typeRisk empirical risk rank of the issue type (0=unknown)
  * @param componentCount number of Jira components attached to the ticket
  * @param resolvedDate resolution timestamp, or {@code null} when unresolved/unknown

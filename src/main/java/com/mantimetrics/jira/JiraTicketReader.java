@@ -328,7 +328,7 @@ final class JiraTicketReader {
     }
 
     /**
-     * Maps a Jira priority name to an ordinal rank (1=Trivial .. 5=Blocker; 0=unknown).
+     * Maps a Jira priority name to an ordinal rank (1=Trivial ... 5=Blocker; 0=unknown).
      *
      * @param name Jira priority name
      * @return ordinal priority rank

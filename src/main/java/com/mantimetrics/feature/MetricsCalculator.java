@@ -8,7 +8,7 @@ import com.mantimetrics.utility.JavaTypeUtility;
  * Computes the lean class-level metric set (LOC, WMC, LCOM) used by Milestone 1.
  */
 public class MetricsCalculator {
-    private final CiclomaticFeatureCalculator complexityCalculator = new CiclomaticFeatureCalculator();
+    private final CyclomaticFeatureCalculator complexityCalculator = new CyclomaticFeatureCalculator();
     private final CohesionFeatureCalculator cohesionCalculator = new CohesionFeatureCalculator();
 
     /**

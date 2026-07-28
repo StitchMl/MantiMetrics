@@ -12,7 +12,7 @@ import com.github.javaparser.ast.stmt.WhileStmt;
 /**
  * Computes structural complexity metrics from JavaParser AST nodes.
  */
-public final class CiclomaticFeatureCalculator {
+public final class CyclomaticFeatureCalculator {
 
     /**
      * Computes the cyclomatic complexity of a node.

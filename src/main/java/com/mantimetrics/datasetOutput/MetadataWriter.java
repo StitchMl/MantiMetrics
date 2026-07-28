@@ -29,7 +29,6 @@ public final class MetadataWriter {
      * @param arffArtifacts ARFF artifact paths by split name
      * @throws IOException when the metadata file cannot be written
      */
-    @SuppressWarnings("ClassEscapesDefinedScope")
     public void write(
             Path outputPath,
             Path rawCsvPath,

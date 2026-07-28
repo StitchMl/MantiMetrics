@@ -9,7 +9,6 @@ import java.util.Map;
 /**
  * Builds the milestone what-if dataset variants A, B+, B and C from the raw dataset.
  */
-@SuppressWarnings("ClassEscapesDefinedScope")
 public final class WhatIfDatasetBuilder {
 
     /**
