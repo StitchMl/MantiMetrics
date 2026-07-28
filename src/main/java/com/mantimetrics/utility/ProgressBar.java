@@ -30,9 +30,10 @@ public final class ProgressBar implements AutoCloseable {
     private static volatile ProgressBar active = null;
 
     // -- layout constants ------------------------------------------------------
-    private static final int    BAR_WIDTH   = 28;
-    private static final int    LABEL_WIDTH = 22;
-    private static final int    LINE_WIDTH  = 100;
+    private static final int    BAR_WIDTH   = 22;
+    private static final int    LABEL_WIDTH = 16;
+    // ANSI: clear entire line + carriage return (works even when the plain CR trick doesn't).
+    private static final String CLEAR_LINE  = "\u001b[2K\r";
     private static final String FILL        = "#";
     private static final String EMPTY       = ".";
 
@@ -107,8 +108,7 @@ public final class ProgressBar implements AutoCloseable {
      */
     static void clearLine() {
         if (active != null) {
-            String blank = " ".repeat(LINE_WIDTH + 2);
-            System.out.print("\r" + blank + "\r");
+            System.out.print(CLEAR_LINE);
             System.out.flush();
         }
     }
@@ -135,12 +135,8 @@ public final class ProgressBar implements AutoCloseable {
         int empty  = BAR_WIDTH - filled;
         String bar = buildBarString(detail, filled, empty);
 
-        // Pad to LINE_WIDTH to overwrite leftover chars from a previously longer line.
-        if (bar.length() < LINE_WIDTH) {
-            bar = String.format("%-" + LINE_WIDTH + "s", bar);
-        }
-
-        System.out.print("\r" + bar);
+        // ANSI clear-line + CR guarantees the same physical line is overwritten (no wrap accumulation).
+        System.out.print(CLEAR_LINE + bar);
         System.out.flush();
     }
 
@@ -150,7 +146,7 @@ public final class ProgressBar implements AutoCloseable {
 
         String detailPart = "";
         if (detail != null && !detail.isEmpty()) {
-            String d = detail.length() > 36 ? detail.substring(0, 33) + "..." : detail;
+            String d = detail.length() > 18 ? detail.substring(0, 15) + "..." : detail;
             detailPart = "  " + d;
         }
 
