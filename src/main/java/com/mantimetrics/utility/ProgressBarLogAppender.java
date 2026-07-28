@@ -26,7 +26,7 @@ import java.io.Serializable;
  * {@code packages="com.mantimetrics.util"} to the {@code <Configuration>} element and
  * replacing the standard {@code <Console>} element with {@code <ProgressBarLogAppender>}.
  */
-@SuppressWarnings({"java:S106", "unused"})
+@SuppressWarnings({"java:S106", "unused", "UseOfSystemOutOrSystemErr"})
 @Plugin(name = "ProgressBarLogAppender", category = "Core", elementType = "appender")
 public final class ProgressBarLogAppender extends AbstractAppender {
 

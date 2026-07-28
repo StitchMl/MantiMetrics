@@ -19,7 +19,7 @@ import org.jetbrains.annotations.NotNull;
  * }  // auto-calls finish() -> appends final newline
  * }</pre>
  */
-@SuppressWarnings("java:S106")
+@SuppressWarnings({"java:S106", "UseOfSystemOutOrSystemErr"})
 public final class ProgressBar implements AutoCloseable {
 
     // -- shared console lock ---------------------------------------------------
