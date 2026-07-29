@@ -137,6 +137,96 @@ public final class SonarPreScanOrchestrator {
         return newScans;
     }
 
+    /**
+     * Scans each tag and, immediately after (while it is the current SonarCloud state), exports that
+     * tag's file-level code-smell counts to {@code outDir/<safeTag>.tsv}. Capturing each snapshot right
+     * after its own scan keeps the export correct regardless of how SonarCloud serves historical
+     * analyses. Idempotent: a tag whose TSV already exists is skipped, so the phase is fully resumable.
+     *
+     * @param owner      GitHub repository owner
+     * @param repo       GitHub repository name
+     * @param tags       release tags to export (any order)
+     * @param projectKey SonarCloud project key
+     * @param outDir     directory where per-tag TSV snapshots are written
+     * @param bar        progress bar stepped once per tag
+     * @return number of tags newly exported
+     * @throws SonarException when the output directory cannot be created
+     */
+    public int exportSmellSnapshots(
+            String owner, String repo,
+            List<String> tags, String projectKey,
+            Path outDir, ProgressBar bar
+    ) throws SonarException {
+
+        if (sonarToken == null || sonarToken.isBlank()) {
+            LOG.warn("SONAR_TOKEN not set - cannot export smell snapshots.");
+            tags.forEach(bar::step);
+            return 0;
+        }
+        String scanner = findSonarScannerExecutable();
+        if (scanner == null) {
+            LOG.warn("sonar-scanner not found (set SONAR_SCANNER_HOME or add it to PATH) - " +
+                     "cannot export smell snapshots. Install the SonarScanner CLI.");
+            tags.forEach(bar::step);
+            return 0;
+        }
+
+        String organization = projectKey.contains("_")
+                ? projectKey.substring(0, projectKey.indexOf('_')).toLowerCase()
+                : projectKey.toLowerCase();
+        try {
+            Files.createDirectories(outDir);
+        } catch (IOException e) {
+            throw new SonarException("Cannot create smell output directory " + outDir, e);
+        }
+
+        // Each requested tag is (re)scanned to produce a fresh, path-aligned analysis: pre-existing
+        // SonarCloud analyses for a tag may carry mismatched paths and are therefore not trusted.
+        // Only a tag whose TSV already exists is skipped, keeping the phase resumable.
+        LOG.info("SonarCloud {}: exporting {} tag snapshot(s)", projectKey, tags.size());
+
+        int exported = 0;
+        boolean autoAnalysisBlocked = false;
+        for (String tag : tags) {
+            Path tsv = outDir.resolve(tag.replaceAll("[^a-zA-Z0-9._-]", "_") + ".tsv");
+            if (Files.exists(tsv) || autoAnalysisBlocked) {
+                bar.step(tag);
+                continue;
+            }
+            try {
+                scanRelease(owner, repo, tag, projectKey, organization, scanner);
+                // Current state == the tag just scanned; omit analysisId to read the live snapshot.
+                java.util.Map<String, Integer> smells = sonarClient.fetchFileSmells(projectKey, null);
+                writeSnapshot(tsv, smells);
+                LOG.info("SonarCloud export: {} -> {} files with smells", tag, smells.size());
+                exported++;
+            } catch (AutomaticAnalysisEnabledException e) {
+                autoAnalysisBlocked = true;
+                LOG.warn("+-----------------------------------------------------------------");
+                LOG.warn("|  SonarCloud Automatic Analysis is ON - manual scans are blocked.");
+                LOG.warn("|  Disable it here: https://sonarcloud.io/project/analysis_method?id={}", projectKey);
+                LOG.warn("|  Select \"Other CI tools\", save, then re-run.");
+                LOG.warn("+-----------------------------------------------------------------");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOG.warn("SonarCloud export interrupted for {} - {}", tag, e.getMessage());
+            } catch (Exception e) {
+                LOG.warn("SonarCloud export failed for {} - {}", tag, e.getMessage());
+            }
+            bar.step(tag);
+        }
+        return exported;
+    }
+
+    /** Writes a {@code path\tcount} snapshot file (UTF-8, one file per line). */
+    private static void writeSnapshot(Path tsv, java.util.Map<String, Integer> smells) throws IOException {
+        List<String> lines = new ArrayList<>(smells.size());
+        for (java.util.Map.Entry<String, Integer> e : smells.entrySet()) {
+            lines.add(e.getKey() + "\t" + e.getValue());
+        }
+        Files.write(tsv, lines, StandardCharsets.UTF_8);
+    }
+
     // -- private --------------------------------------------------------------
 
     /**
