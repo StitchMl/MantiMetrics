@@ -386,10 +386,16 @@ public final class Orchestrator {
             rawCommitsByTag = collectRawCommits(owner, repo, allTags, bar);
         }
 
+        int maxPct = 0;
+        for (int p : SNORING_PERCENTAGES) {
+            maxPct = Math.max(maxPct, p);
+        }
+        List<String> parseTags = variantSelector.selectFirstPercent(allTags, maxPct);
+
         if (config.sonarProjectKey() != null) {
-            LOG.info("[collect 2/3] SonarCloud pre-scan ({} releases)...", allTags.size());
-            try (ProgressBar bar = new ProgressBar("Sonar pre-scan", allTags.size())) {
-                sonarPreScanService.scanMissingReleases(owner, repo, allTags, config.sonarProjectKey(), bar);
+            LOG.info("[collect 2/3] SonarCloud pre-scan ({} dataset releases)...", parseTags.size());
+            try (ProgressBar bar = new ProgressBar("Sonar pre-scan", parseTags.size())) {
+                sonarPreScanService.scanMissingReleases(owner, repo, parseTags, config.sonarProjectKey(), bar);
             } catch (SonarException e) {
                 LOG.warn("SonarCloud pre-scan skipped: {}", e.getMessage());
             }
@@ -403,11 +409,6 @@ public final class Orchestrator {
         LOG.info("[diag] SonarCloud indexed {} distinct smell paths; samples: {}",
                 diagSonarPaths.size(), diagSonarPaths.stream().limit(3).toList());
 
-        int maxPct = 0;
-        for (int p : SNORING_PERCENTAGES) {
-            maxPct = Math.max(maxPct, p);
-        }
-        List<String> parseTags = variantSelector.selectFirstPercent(allTags, maxPct);
         LOG.info("[collect 3/3] Downloading & parsing sources ({} releases)...", parseTags.size());
         Map<String, List<DatasetClassData>> parsedClassesByTag;
         try (ProgressBar bar = new ProgressBar("Parse sources", parseTags.size())) {
