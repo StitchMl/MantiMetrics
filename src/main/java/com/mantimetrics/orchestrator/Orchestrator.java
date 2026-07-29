@@ -398,6 +398,10 @@ public final class Orchestrator {
         try (ProgressBar bar = new ProgressBar("Sonar index", allTags.size())) {
             sonarSmellsByTag = buildSonarSmellsByTag(plan, config, bar);
         }
+        Set<String> diagSonarPaths = new HashSet<>();
+        sonarSmellsByTag.values().forEach(m -> diagSonarPaths.addAll(m.keySet()));
+        LOG.info("[diag] SonarCloud indexed {} distinct smell paths; samples: {}",
+                diagSonarPaths.size(), diagSonarPaths.stream().limit(3).toList());
 
         int maxPct = 0;
         for (int p : SNORING_PERCENTAGES) {

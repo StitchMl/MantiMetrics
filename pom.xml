@@ -23,6 +23,7 @@
     <guava.version>32.1.2-jre</guava.version>                        <!-- Guava 32.1.2‑jre released Aug 2023 -->
     <okio.version>3.11.0</okio.version>                              <!-- Okio recommends 3.11.0 over 3.4.0 -->
     <log4j2.version>2.20.0</log4j2.version>                          <!-- Log4j 2.20.0 is the latest stable -->
+    <exec.mainClass>com.mantimetrics.orchestrator.MainApp</exec.mainClass>  <!-- default; override with -Dexec.mainClass=... -->
 
     <!-- Safe versions for override -->
     <groovy.version>2.4.21</groovy.version>
@@ -283,7 +284,7 @@
         <artifactId>exec-maven-plugin</artifactId>
         <version>3.6.3</version>
         <configuration>
-          <mainClass>com.mantimetrics.orchestrator.MainApp</mainClass>
+          <mainClass>${exec.mainClass}</mainClass>
         </configuration>
       </plugin>
     </plugins>

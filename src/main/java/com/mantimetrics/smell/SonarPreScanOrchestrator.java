@@ -90,10 +90,10 @@ public final class SonarPreScanOrchestrator {
             return 0;
         }
 
-        String mvn = findMavenExecutable();
-        if (mvn == null) {
-            LOG.warn("Maven executable not found (set MAVEN_HOME/M2_HOME or add mvn to PATH) - " +
-                     "skipping per-release pre-scan.");
+        String scanner = findSonarScannerExecutable();
+        if (scanner == null) {
+            LOG.warn("sonar-scanner not found (set SONAR_SCANNER_HOME or add sonar-scanner to PATH) - " +
+                     "skipping per-release pre-scan. Install the SonarScanner CLI to enable it.");
             tags.forEach(bar::step);
             return 0;
         }
@@ -116,7 +116,7 @@ public final class SonarPreScanOrchestrator {
                 continue;
             }
             try {
-                scanRelease(owner, repo, tag, projectKey, organization, mvn);
+                scanRelease(owner, repo, tag, projectKey, organization, scanner);
                 newScans++;
             } catch (AutomaticAnalysisEnabledException e) {
                 autoAnalysisBlocked = true;
@@ -162,7 +162,7 @@ public final class SonarPreScanOrchestrator {
      */
     private void scanRelease(
             String owner, String repo, String tag,
-            String projectKey, String organization, String mvn
+            String projectKey, String organization, String scanner
     ) throws IOException, InterruptedException, SonarException {
 
         LOG.info("SonarCloud pre-scan: scanning {}...", tag);
@@ -180,12 +180,12 @@ public final class SonarPreScanOrchestrator {
         try {
             gitService.extractReleaseFull(owner, repo, tag, tempDir);
 
-            // Locate the Maven project root (maybe a subdirectory, e.g. lang/java/ for Avro)
-            Path mavenRoot = findJavaPom(tempDir)
-                    .orElseThrow(() -> new IOException("No pom.xml found in extracted ZIP for " + tag));
-            LOG.debug("SonarCloud pre-scan: using pom.xml at {}", tempDir.relativize(mavenRoot));
+            // Scan straight from the extracted repo root so component paths match the dataset paths
+            // (e.g. lang/java/src/java/org/apache/avro/...). Works for Ant or Maven releases (no build).
+            Path repoRoot = resolveRepoRoot(tempDir);
+            LOG.debug("SonarCloud pre-scan: scanning sources under {}", repoRoot.getFileName());
 
-            runMavenSonar(mvn, mavenRoot, projectKey, organization, tag);
+            runSonarScanner(scanner, repoRoot, projectKey, organization, tag);
             waitForAnalysis(projectKey, tag);
             LOG.info("SonarCloud pre-scan: {} [OK]", tag);
         } finally {
@@ -279,28 +279,22 @@ public final class SonarPreScanOrchestrator {
      * Tests are skipped so the scan is fast; SCM is disabled to avoid Git access issues inside
      * the extracted temp directory.
      */
-    private void runMavenSonar(
-            String mvn, Path workDir,
+    private void runSonarScanner(
+            String scanner, Path workDir,
             String projectKey, String organization, String tag
     ) throws IOException, InterruptedException {
 
         List<String> cmd = new ArrayList<>();
-        cmd.add(mvn);
-        cmd.add("sonar:sonar");
-        cmd.add("-Dsonar.projectKey="    + projectKey);
-        cmd.add("-Dsonar.organization="  + organization);
+        cmd.add(scanner);
+        cmd.add("-Dsonar.projectKey="     + projectKey);
+        cmd.add("-Dsonar.organization="   + organization);
         cmd.add("-Dsonar.projectVersion=" + tag);
         cmd.add("-Dsonar.host.url=https://sonarcloud.io");
-        cmd.add("-Dsonar.token="         + sonarToken);
-        cmd.add("-Dsonar.scm.disabled=true");
-        // Allow source-only analysis: avoids "binary files not found" when the project
-        // has never been compiled inside this temp directory
+        cmd.add("-Dsonar.token="          + sonarToken);
+        cmd.add("-Dsonar.sources=.");
+        // dummy path lets the Java analyzer run source-only (no compiled classes required)
         cmd.add("-Dsonar.java.binaries=.");
-        cmd.add("-DskipTests=true");
-        cmd.add("-Dmaven.test.skip=true");
-        // Suppress most Maven output - sonar goal is still verbose but this keeps it manageable
-        cmd.add("--batch-mode");
-        cmd.add("--no-transfer-progress");
+        cmd.add("-Dsonar.scm.disabled=true");
 
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.directory(workDir.toFile());
@@ -320,7 +314,7 @@ public final class SonarPreScanOrchestrator {
         boolean finished = proc.waitFor(MVN_TIMEOUT_MIN, TimeUnit.MINUTES);
         if (!finished) {
             proc.destroyForcibly();
-            throw new IOException("mvn sonar:sonar timed out after " + MVN_TIMEOUT_MIN + " min for " + tag);
+            throw new IOException("sonar-scanner timed out after " + MVN_TIMEOUT_MIN + " min for " + tag);
         }
         if (proc.exitValue() != 0) {
             String outputStr = output.toString();
@@ -328,8 +322,8 @@ public final class SonarPreScanOrchestrator {
             if (outputStr.contains("Automatic Analysis is enabled")) {
                 throw new AutomaticAnalysisEnabledException();
             }
-            LOG.debug("mvn sonar:sonar output for {}:\n{}", tag, outputStr);
-            throw new IOException("mvn sonar:sonar exited with code " + proc.exitValue() + " for " + tag);
+            LOG.debug("sonar-scanner output for {}:\n{}", tag, outputStr);
+            throw new IOException("sonar-scanner exited with code " + proc.exitValue() + " for " + tag);
         }
     }
 
@@ -403,6 +397,52 @@ public final class SonarPreScanOrchestrator {
         AutomaticAnalysisEnabledException() {
             super("SonarCloud Automatic Analysis is enabled - manual scan blocked");
         }
+    }
+
+    /**
+     * Resolves the repository root inside the extracted ZIP (GitHub archives wrap everything in a
+     * single top-level folder). Component paths are relative to this root, matching dataset paths.
+     */
+    private static Path resolveRepoRoot(Path tempDir) throws IOException {
+        try (Stream<Path> entries = Files.list(tempDir)) {
+            List<Path> list = entries.toList();
+            if (list.size() == 1 && Files.isDirectory(list.get(0))) {
+                return list.get(0);
+            }
+        }
+        return tempDir;
+    }
+
+    /**
+     * Locates the {@code sonar-scanner} CLI via {@code SONAR_SCANNER_HOME} or the PATH.
+     *
+     * @return path/command, or {@code null} when not found
+     */
+    static String findSonarScannerExecutable() {
+        boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        String binaryName = windows ? "sonar-scanner.bat" : "sonar-scanner";
+        String home = System.getenv("SONAR_SCANNER_HOME");
+        if (home != null && !home.isBlank()) {
+            Path bin = Path.of(home, "bin", binaryName);
+            if (Files.isRegularFile(bin)) {
+                return bin.toString();
+            }
+        }
+        try {
+            Process probe = new ProcessBuilder(binaryName, "--version")
+                    .redirectErrorStream(true).start();
+            try (InputStream is = probe.getInputStream()) {
+                is.transferTo(OutputStream.nullOutputStream());
+            }
+            if (probe.waitFor(15, TimeUnit.SECONDS)) {
+                return binaryName;
+            }
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        } catch (IOException ignored) {
+            // not on PATH
+        }
+        return null;
     }
 
     /** Recursively deletes a directory tree, silently ignoring errors. */
