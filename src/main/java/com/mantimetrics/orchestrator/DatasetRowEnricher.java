@@ -222,7 +222,7 @@ final class DatasetRowEnricher {
             }
             lin += 1.0 / (1 + n - i);
             if (i < n) {
-                log += 1.0 / Math.log(1 + n - i);
+                log += 1.0 / Math.log(1 + (double)n - i);
             }
         }
         return new double[]{lin / n, log / n};
