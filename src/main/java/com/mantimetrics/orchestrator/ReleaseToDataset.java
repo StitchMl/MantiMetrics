@@ -1,9 +1,9 @@
 package com.mantimetrics.orchestrator;
 
 import com.mantimetrics.feature.MetricsCalculator;
-import com.mantimetrics.datasetSetting.DatasetClassData;
-import com.mantimetrics.datasetSetting.DatasetRow;
-import com.mantimetrics.javaParsing.JavaSourceParser;
+import com.mantimetrics.datasetsetting.DatasetClassData;
+import com.mantimetrics.datasetsetting.DatasetRow;
+import com.mantimetrics.javaparsing.JavaSourceParser;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -37,7 +37,7 @@ public final class ReleaseToDataset {
      * @param tag release identifier
      * @return raw class rows with product metrics only
      */
-    public List<DatasetClassData> parse(com.mantimetrics.javaParsing.ScanResult sources, String repo, String tag) {
+    public List<DatasetClassData> parse(com.mantimetrics.javaparsing.ScanResult sources, String repo, String tag) {
         return parser.parseClasses(sources, sources, repo, tag, calculator, java.util.Map.of());
     }
 

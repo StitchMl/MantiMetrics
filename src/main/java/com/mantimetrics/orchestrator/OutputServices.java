@@ -1,7 +1,7 @@
 package com.mantimetrics.orchestrator;
 
-import com.mantimetrics.datasetOutput.MilestoneAuditWriter;
-import com.mantimetrics.datasetOutput.DatasetArtifactGenerator;
+import com.mantimetrics.datasetoutput.MilestoneAuditWriter;
+import com.mantimetrics.datasetoutput.DatasetArtifactGenerator;
 
 /**
  * Groups the two output-oriented services passed to {@link Orchestrator}, reducing its

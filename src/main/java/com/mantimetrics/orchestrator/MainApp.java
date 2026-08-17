@@ -1,7 +1,7 @@
 package com.mantimetrics.orchestrator;
 
-import com.mantimetrics.projectSelector.OptionsSelector;
-import com.mantimetrics.projectSelector.CliParser;
+import com.mantimetrics.projectselector.OptionsSelector;
+import com.mantimetrics.projectselector.CliParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -1,9 +1,9 @@
 package com.mantimetrics.orchestrator;
 
-import com.mantimetrics.javaParsing.JavaSourceParser;
+import com.mantimetrics.javaparsing.JavaSourceParser;
 
 import com.mantimetrics.feature.MetricsCalculator;
-import com.mantimetrics.datasetSetting.DatasetClassData;
+import com.mantimetrics.datasetsetting.DatasetClassData;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;

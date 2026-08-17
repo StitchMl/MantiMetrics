@@ -1,7 +1,7 @@
 package com.mantimetrics.orchestrator;
 
 import com.mantimetrics.jira.JiraSnapshot;
-import com.mantimetrics.releaseSelection.ReleaseTimeline;
+import com.mantimetrics.releaseselection.ReleaseTimeline;
 
 import java.util.List;
 

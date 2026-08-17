@@ -1,7 +1,7 @@
 package com.mantimetrics.git;
 
-import com.mantimetrics.javaParsing.ParsedFileRappresentation;
-import com.mantimetrics.javaParsing.ScanResult;
+import com.mantimetrics.javaparsing.ParsedFileRappresentation;
+import com.mantimetrics.javaparsing.ScanResult;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;

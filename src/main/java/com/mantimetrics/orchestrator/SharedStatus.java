@@ -1,9 +1,9 @@
 package com.mantimetrics.orchestrator;
 
-import com.mantimetrics.datasetOutput.CSVWriter;
+import com.mantimetrics.datasetoutput.CSVWriter;
 import com.mantimetrics.history.StoreReleaseInMemory;
 import com.mantimetrics.labeling.ReleaseLabeling;
-import com.mantimetrics.datasetSetting.DatasetRow;
+import com.mantimetrics.datasetsetting.DatasetRow;
 import com.mantimetrics.jira.JiraSnapshot;
 
 import java.io.BufferedWriter;

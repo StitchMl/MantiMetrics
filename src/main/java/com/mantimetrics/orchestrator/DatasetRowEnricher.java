@@ -2,8 +2,8 @@ package com.mantimetrics.orchestrator;
 
 import com.mantimetrics.history.ComulationMetricsCalculator;
 import com.mantimetrics.feature.ClassMetrics;
-import com.mantimetrics.datasetSetting.DatasetClassData;
-import com.mantimetrics.datasetSetting.DatasetRow;
+import com.mantimetrics.datasetsetting.DatasetClassData;
+import com.mantimetrics.datasetsetting.DatasetRow;
 import com.mantimetrics.jira.JiraSnapshot;
 import com.mantimetrics.utility.PathUtility;
 

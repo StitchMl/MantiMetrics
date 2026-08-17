@@ -1,6 +1,6 @@
 package com.mantimetrics.labeling;
 
-import com.mantimetrics.releaseSelection.ReleaseTimeline;
+import com.mantimetrics.releaseselection.ReleaseTimeline;
 
 import com.mantimetrics.orchestrator.ReleaseSnapshot;
 import com.mantimetrics.git.GitReleaseSnapshot;

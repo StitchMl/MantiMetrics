@@ -1,10 +1,10 @@
 package com.mantimetrics.orchestrator;
 
-import com.mantimetrics.releaseSelection.ReleaseTimelineJiraGit;
+import com.mantimetrics.releaseselection.ReleaseTimelineJiraGit;
 
-import com.mantimetrics.datasetOutput.CSVWriter;
-import com.mantimetrics.datasetOutput.CSVException;
-import com.mantimetrics.datasetOutput.DatasetArtifactGenerator;
+import com.mantimetrics.datasetoutput.CSVWriter;
+import com.mantimetrics.datasetoutput.CSVException;
+import com.mantimetrics.datasetoutput.DatasetArtifactGenerator;
 import com.mantimetrics.git.GitFacade;
 import com.mantimetrics.git.GitConfig;
 import com.mantimetrics.history.StoreReleaseInMemory;
@@ -15,13 +15,13 @@ import com.mantimetrics.labeling.Proportion;
 import com.mantimetrics.jira.JiraSnapshot;
 import com.mantimetrics.git.RawReleaseCommits;
 import com.mantimetrics.git.GitReleaseSnapshot;
-import com.mantimetrics.datasetSetting.DatasetClassData;
-import com.mantimetrics.datasetSetting.DatasetRow;
-import com.mantimetrics.releaseSelection.ReleaseSnoringFilter;
-import com.mantimetrics.releaseSelection.ReleaseTimeline;
-import com.mantimetrics.javaParsing.JavaParsingException;
-import com.mantimetrics.datasetOutput.MilestoneAuditWriter;
-import com.mantimetrics.releaseSelection.ReleaseException;
+import com.mantimetrics.datasetsetting.DatasetClassData;
+import com.mantimetrics.datasetsetting.DatasetRow;
+import com.mantimetrics.releaseselection.ReleaseSnoringFilter;
+import com.mantimetrics.releaseselection.ReleaseTimeline;
+import com.mantimetrics.javaparsing.JavaParsingException;
+import com.mantimetrics.datasetoutput.MilestoneAuditWriter;
+import com.mantimetrics.releaseselection.ReleaseException;
 import com.mantimetrics.smell.SonarClient;
 import com.mantimetrics.smell.SonarException;
 import com.mantimetrics.smell.SonarPreScanOrchestrator;

@@ -4,8 +4,8 @@ import com.mantimetrics.git.GitReleaseSnapshot;
 import com.mantimetrics.history.StoreReleaseInMemory;
 import com.mantimetrics.labeling.ReleaseLabeling;
 import com.mantimetrics.jira.JiraSnapshot;
-import com.mantimetrics.datasetSetting.DatasetRow;
-import com.mantimetrics.javaParsing.ScanResult;
+import com.mantimetrics.datasetsetting.DatasetRow;
+import com.mantimetrics.javaparsing.ScanResult;
 
 import java.util.List;
 import java.util.Map;

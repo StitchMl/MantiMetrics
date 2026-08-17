@@ -1,10 +1,10 @@
 package com.mantimetrics.orchestrator;
 
-import com.mantimetrics.datasetOutput.CSVException;
-import com.mantimetrics.datasetSetting.DatasetRow;
-import com.mantimetrics.javaParsing.JavaSourceParser;
-import com.mantimetrics.javaParsing.JavaParsingException;
-import com.mantimetrics.javaParsing.ScanResult;
+import com.mantimetrics.datasetoutput.CSVException;
+import com.mantimetrics.datasetsetting.DatasetRow;
+import com.mantimetrics.javaparsing.JavaSourceParser;
+import com.mantimetrics.javaparsing.JavaParsingException;
+import com.mantimetrics.javaparsing.ScanResult;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +44,7 @@ public final class SingleReleaseExecution {
      * @return raw parsed class rows
      * @throws JavaParsingException when the release sources cannot be loaded or parsed
      */
-    public List<com.mantimetrics.datasetSetting.DatasetClassData> parseRelease(String owner, String repo, String tag)
+    public List<com.mantimetrics.datasetsetting.DatasetClassData> parseRelease(String owner, String repo, String tag)
             throws JavaParsingException {
         ScanResult sources = codeParser.loadReleaseSources(owner, repo, tag);
         return datasetCollector.parse(sources, repo, tag);
@@ -57,8 +57,8 @@ public final class SingleReleaseExecution {
      * @param request per-release request for the current variant
      * @return enriched rows
      */
-    public List<com.mantimetrics.datasetSetting.DatasetClassData> enrich(
-            List<com.mantimetrics.datasetSetting.DatasetClassData> rawRows, ReleaseToDatasetRequest request) {
+    public List<com.mantimetrics.datasetsetting.DatasetClassData> enrich(
+            List<com.mantimetrics.datasetsetting.DatasetClassData> rawRows, ReleaseToDatasetRequest request) {
         return datasetCollector.enrich(rawRows, request);
     }
 

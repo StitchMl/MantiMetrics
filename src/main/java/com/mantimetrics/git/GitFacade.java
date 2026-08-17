@@ -1,6 +1,6 @@
 package com.mantimetrics.git;
 
-import com.mantimetrics.javaParsing.ScanResult;
+import com.mantimetrics.javaparsing.ScanResult;
 
 import java.io.IOException;
 import java.nio.file.Path;
