@@ -88,7 +88,6 @@ public final class GitIssueClient {
     /**
      * Performs a GitHub API GET request and parses the JSON response.
      *
-     *
      * @param url fully qualified GitHub API URL
      * @return parsed JSON response
      * @throws IOException when the request fails or returns a non-success status
