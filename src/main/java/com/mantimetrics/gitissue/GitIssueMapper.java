@@ -1,4 +1,4 @@
-package com.mantimetrics.gitIssue;
+package com.mantimetrics.gitissue;
 
 import com.mantimetrics.jira.JiraSnapshot;
 

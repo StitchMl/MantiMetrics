@@ -88,6 +88,16 @@ public final class Orchestrator {
         this.milestoneAuditService = outputServices.milestoneAuditService();
     }
 
+    private void printLog(GitConfig config, ReleasePlan plan){
+        String s = "+---------------------------------------------------------------------";
+        LOG.info(s);
+        LOG.info("|  Project  : {}", config.name());
+        LOG.info("|  Releases : {} total  ->  {} selected ({}%)  |  {} bug tickets",
+                plan.timeline().size(), plan.selectedTags().size(),
+                config.percentage(), plan.resolvedTickets().size());
+        LOG.info(s);
+    }
+
     /**
      * Executes the end-to-end analysis for one project and all requested granularities.
      *
@@ -98,20 +108,15 @@ public final class Orchestrator {
      * @throws JiraClientException when Jira metadata cannot be loaded
      * @throws CSVException when a dataset CSV file cannot be written or closed
      */
+    @SuppressWarnings("unused")
     public void process(GitConfig config, boolean useGithubIssues, Proportion.Variant proportionVariant,
-            boolean excludeChurnZero)
+                        boolean excludeChurnZero)
             throws JiraClientException, CSVException {
         ReleasePlan plan = releasePlanner.plan(config, useGithubIssues);
         if (plan == null) {
             return;
         }
-
-        LOG.info("+---------------------------------------------------------------------");
-        LOG.info("|  Project  : {}", config.name());
-        LOG.info("|  Releases : {} total  ->  {} selected ({}%)  |  {} bug tickets",
-                plan.timeline().size(), plan.selectedTags().size(),
-                config.percentage(), plan.resolvedTickets().size());
-        LOG.info("+---------------------------------------------------------------------");
+        printLog(config, plan);
 
         // -- Phase 1: Git commit history --------------------------------------
         LOG.info("[1/5] Preloading Git commit history ({} releases)...", plan.timeline().size());
@@ -373,11 +378,7 @@ public final class Orchestrator {
         String repo = plan.repo();
         List<String> allTags = plan.timeline().orderedTags();
 
-        LOG.info("+---------------------------------------------------------------------");
-        LOG.info("|  Project  : {}  ({} releases | {} bug / {} all / {} GH tickets)",
-                repo, plan.timeline().size(), plan.resolvedTickets().size(),
-                plan.allTickets().size(), plan.ghTickets().size());
-        LOG.info("+---------------------------------------------------------------------");
+        printLog(config, plan);
 
         // ---- COLLECT ONCE ----
         LOG.info("[collect 1/3] Fetching raw commit history ({} releases)...", allTags.size());

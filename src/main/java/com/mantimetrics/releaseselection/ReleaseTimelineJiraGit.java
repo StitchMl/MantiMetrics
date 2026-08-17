@@ -7,8 +7,8 @@ import com.mantimetrics.git.GitConfig;
 import com.mantimetrics.jira.JiraFacade;
 import com.mantimetrics.jira.JiraClientException;
 import com.mantimetrics.jira.JiraSnapshot;
-import com.mantimetrics.gitIssue.GitIssueClient;
-import com.mantimetrics.gitIssue.GitIssueMapper;
+import com.mantimetrics.gitissue.GitIssueClient;
+import com.mantimetrics.gitissue.GitIssueMapper;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,6 +54,7 @@ public final class ReleaseTimelineJiraGit {
      * @return release plan, or {@code null} when the project has no valid releases in common between Git and Jira
      * @throws JiraClientException when Jira metadata cannot be loaded
      */
+    @SuppressWarnings("unused")
     @Nullable
     public ReleasePlan plan(GitConfig config, boolean useGithubIssues) throws JiraClientException {
         String owner = config.owner();

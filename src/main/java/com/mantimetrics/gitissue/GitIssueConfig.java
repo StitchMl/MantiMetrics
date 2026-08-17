@@ -1,4 +1,4 @@
-package com.mantimetrics.gitIssue;
+package com.mantimetrics.gitissue;
 
 /**
  * Configuration for the GitHub Issues integration (flag {@code use_github_issues}).

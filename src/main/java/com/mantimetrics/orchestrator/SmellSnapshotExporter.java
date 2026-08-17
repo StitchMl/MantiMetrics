@@ -34,7 +34,7 @@ import java.util.Set;
  * ({@code https://sonarcloud.io/project/analysis_method?id=<key>} -> "Other CI tools" -> Save):
  * <pre>
  *   mvnw -q exec:java "-Dexec.mainClass=com.mantimetrics.orchestrator.SmellSnapshotExporter" ^
- *        "-Dexec.args=--repo-url=https://github.com/apache/avro --sonar-key=StitchMl_avro"
+ *        "-Dexec.args=--repo-url=<a href="https://github.com/apache/avro">...</a> --sonar-key=StitchMl_avro"
  * </pre>
  *
  * <p>Options (all optional):
@@ -91,14 +91,6 @@ public final class SmellSnapshotExporter {
         }
     }
 
-    /**
-     * Returns the value of {@code name=<value>} from {@code args}, or {@code def} when absent.
-     *
-     * @param args command-line arguments
-     * @param name flag name including leading dashes (e.g. {@code --sonar-key})
-     * @param def  default value when the flag is absent
-     * @return resolved flag value
-     */
     /**
      * Parses an explicit comma-separated {@code --tags} value into a de-duplicated ordered list.
      *

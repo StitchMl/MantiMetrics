@@ -19,7 +19,7 @@ import com.mantimetrics.datasetoutput.DatasetTableWriter;
 import com.mantimetrics.datasetm3.WhatIfDatasetBuilder;
 import com.mantimetrics.git.GitFacade;
 import com.mantimetrics.git.GitConfig;
-import com.mantimetrics.gitIssue.GitIssueClient;
+import com.mantimetrics.gitissue.GitIssueClient;
 import com.mantimetrics.jira.JiraFacade;
 import com.mantimetrics.feature.MetricsCalculator;
 import com.mantimetrics.javaparsing.JavaSourceParser;

@@ -65,6 +65,15 @@ public final class SonarPreScanOrchestrator {
         this.sonarToken  = sonarToken;
     }
 
+    private void printLog(String projectKey){
+        LOG.warn("+-----------------------------------------------------------------");
+        LOG.warn("|  SonarCloud Automatic Analysis is ON - manual scans are blocked.");
+        LOG.warn("|  Disable it here: https://sonarcloud.io/project/analysis_method?id={}", projectKey);
+        LOG.warn("|  Select \"Other CI tools\", save, then re-run.");
+        LOG.warn("|  Pre-scan skipped for all remaining releases.");
+        LOG.warn("+-----------------------------------------------------------------");
+    }
+
     /**
      * Scans every release tag in {@code tags} that does not yet have a versioned analysis on
      * SonarCloud.  Already-scanned tags are skipped so the phase is fully resumable.
@@ -120,12 +129,7 @@ public final class SonarPreScanOrchestrator {
                 newScans++;
             } catch (AutomaticAnalysisEnabledException e) {
                 autoAnalysisBlocked = true;
-                LOG.warn("+-----------------------------------------------------------------");
-                LOG.warn("|  SonarCloud Automatic Analysis is ON - manual scans are blocked.");
-                LOG.warn("|  Disable it here: https://sonarcloud.io/project/analysis_method?id={}", projectKey);
-                LOG.warn("|  Select \"Other CI tools\", save, then re-run.");
-                LOG.warn("|  Pre-scan skipped for all remaining releases.");
-                LOG.warn("+-----------------------------------------------------------------");
+                printLog(projectKey);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 LOG.debug("SonarCloud pre-scan interrupted for {} - {}", tag, e.getMessage());
@@ -202,11 +206,7 @@ public final class SonarPreScanOrchestrator {
                 exported++;
             } catch (AutomaticAnalysisEnabledException e) {
                 autoAnalysisBlocked = true;
-                LOG.warn("+-----------------------------------------------------------------");
-                LOG.warn("|  SonarCloud Automatic Analysis is ON - manual scans are blocked.");
-                LOG.warn("|  Disable it here: https://sonarcloud.io/project/analysis_method?id={}", projectKey);
-                LOG.warn("|  Select \"Other CI tools\", save, then re-run.");
-                LOG.warn("+-----------------------------------------------------------------");
+                printLog(projectKey);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 LOG.warn("SonarCloud export interrupted for {} - {}", tag, e.getMessage());
@@ -298,6 +298,7 @@ public final class SonarPreScanOrchestrator {
      * @param root extraction root of the release ZIP
      * @return parent directory of the selected {@code pom.xml}, or empty when none is found
      */
+    @SuppressWarnings("unused")
     private static Optional<Path> findJavaPom(Path root) throws IOException {
         // 1) Root pom.xml with src/main/java present -> straightforward Java project
         if (Files.isRegularFile(root.resolve(POM_XML))
@@ -441,6 +442,7 @@ public final class SonarPreScanOrchestrator {
      *
      * @return absolute path string, or {@code null} when not found
      */
+    @SuppressWarnings("unused")
     static String findMavenExecutable() {
         boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
         String suffix = windows ? "\\bin\\mvn.cmd" : "/bin/mvn";
