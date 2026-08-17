@@ -42,39 +42,75 @@ public final class CliParser {
      */
     private int consumeArg(String[] args, int index, ParseState state) {
         String arg = args[index];
-        if (arg.startsWith("--repo-url=")) {
-            state.repoUrl = arg.substring("--repo-url=".length());
-        } else if (arg.equals("--repo-url") || arg.equals("-r")) {
-            index++;
-            state.repoUrl = nextValue(args, index, arg);
-        } else if (arg.startsWith("--jira-key=")) {
-            state.jiraKey = arg.substring("--jira-key=".length());
-        } else if (arg.equals("--jira-key") || arg.equals("-j")) {
-            index++;
-            state.jiraKey = nextValue(args, index, arg);
-        } else if (arg.startsWith("--sonar-key=")) {
-            state.sonarKey = arg.substring("--sonar-key=".length());
-        } else if (arg.equals("--sonar-key") || arg.equals("-s")) {
-            index++;
-            state.sonarKey = nextValue(args, index, arg);
-        } else if (arg.startsWith("--percentage=")) {
-            state.percentage = parsePercentage(arg.substring("--percentage=".length()));
-        } else if (arg.equals("--percentage") || arg.equals("-p")) {
-            index++;
-            state.percentage = parsePercentage(nextValue(args, index, arg));
-        } else if (arg.startsWith("--proportion=")) {
-            state.proportionRaw = arg.substring("--proportion=".length());
-        } else if (arg.equals("--proportion")) {
-            index++;
-            state.proportionRaw = nextValue(args, index, arg);
-        } else if (arg.equals("--exclude-churn-zero")) {
-            state.excludeChurnZero = true;
-        } else if (arg.equals("--github-issues")) {
-            state.useGithubIssues = true;
-        } else {
-            throw new IllegalArgumentException("Argomento non riconosciuto: " + arg);
+
+        if (arg.startsWith("--") && arg.contains("=")) {
+            consumeInlineArg(arg, state);
+            return index + 1;
         }
-        return index + 1;
+
+        return consumeSeparateArg(args, index, state, arg);
+    }
+
+    private void consumeInlineArg(String arg, ParseState state) {
+        int separator = arg.indexOf('=');
+        String option = arg.substring(0, separator);
+        String value = arg.substring(separator + 1);
+
+        switch (option) {
+            case "--repo-url" -> state.repoUrl = value;
+            case "--jira-key" -> state.jiraKey = value;
+            case "--sonar-key" -> state.sonarKey = value;
+            case "--percentage" -> state.percentage = parsePercentage(value);
+            case "--proportion" -> state.proportionRaw = value;
+            default -> throw unknownArgument(arg);
+        }
+    }
+
+    private int consumeSeparateArg(
+            String[] args,
+            int index,
+            ParseState state,
+            String arg
+    ) {
+        switch (arg) {
+            case "--repo-url", "-r" -> {
+                state.repoUrl = nextValue(args, index + 1, arg);
+                return index + 2;
+            }
+            case "--jira-key", "-j" -> {
+                state.jiraKey = nextValue(args, index + 1, arg);
+                return index + 2;
+            }
+            case "--sonar-key", "-s" -> {
+                state.sonarKey = nextValue(args, index + 1, arg);
+                return index + 2;
+            }
+            case "--percentage", "-p" -> {
+                state.percentage = parsePercentage(
+                        nextValue(args, index + 1, arg)
+                );
+                return index + 2;
+            }
+            case "--proportion" -> {
+                state.proportionRaw = nextValue(args, index + 1, arg);
+                return index + 2;
+            }
+            case "--exclude-churn-zero" -> {
+                state.excludeChurnZero = true;
+                return index + 1;
+            }
+            case "--github-issues" -> {
+                state.useGithubIssues = true;
+                return index + 1;
+            }
+            default -> throw unknownArgument(arg);
+        }
+    }
+
+    private IllegalArgumentException unknownArgument(String arg) {
+        return new IllegalArgumentException(
+                "Argomento non riconosciuto: " + arg
+        );
     }
 
     /** Mutable accumulator used while scanning CLI arguments. */

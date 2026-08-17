@@ -55,72 +55,57 @@ public final class HistoricalBugTaker {
 
         // Sub-bar 2a - scan commit history for bug-fix references
         try (ProgressBar bar = new ProgressBar("Scanning commits", releaseHistory.size())) {
-            collectFixHistory(releaseHistory, timeline, ticketsByKey.keySet(),
-                    fixReleaseByTicket, touchedPathsByTicket, bar);
+            collectFixHistory(
+                    releaseHistory,
+                    timeline,
+                    ticketsByKey.keySet(),
+                    fixReleaseByTicket,
+                    touchedPathsByTicket,
+                    bar
+            );
         }
+
         LOG.info("  {} tickets linked to at least one fix commit", fixReleaseByTicket.size());
 
-        // Sub-bar 2b - calibrate Proportion P (per-ticket contributions from tickets with affected versions)
         int linkedCount = fixReleaseByTicket.size();
         Map<String, Double> contributions = new HashMap<>();
+
         double globalP;
         try (ProgressBar bar = new ProgressBar("Proportion P", linkedCount)) {
-            globalP = computeContributions(ticketsByKey, fixReleaseByTicket, timeline, contributions, bar);
+            globalP = computeContributions(
+                    ticketsByKey,
+                    fixReleaseByTicket,
+                    timeline,
+                    contributions,
+                    bar
+            );
         }
-        LOG.info("  Proportion variant = {} (global mean P = {})", variant, String.format("%.4f", globalP));
 
-        // Sub-bar 2c - label every ticket range, in fix-release order so INCREMENTAL uses only past defects
+        LOG.info(
+                "  Proportion variant = {} (global mean P = {})",
+                variant,
+                String.format("%.4f", globalP)
+        );
+
         Map<String, Set<String>> buggyPathsByRelease = new HashMap<>();
-        int withAffectedVersions = 0;
-        int withProportionFallback = 0;
 
-        List<Map.Entry<String, Integer>> orderedTickets = new ArrayList<>(fixReleaseByTicket.entrySet());
-        orderedTickets.sort(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue)
-                .thenComparing(Map.Entry::getKey));
+        LabelingStats stats = labelReleases(
+                timeline,
+                ticketsByKey,
+                fixReleaseByTicket,
+                touchedPathsByTicket,
+                contributions,
+                buggyPathsByRelease,
+                variant,
+                globalP
+        );
 
-        double runningSum = 0.0;
-        int runningCount = 0;
-        try (ProgressBar bar = new ProgressBar("Labeling releases", linkedCount)) {
-            for (Map.Entry<String, Integer> entry : orderedTickets) {
-                JiraSnapshot ticket = ticketsByKey.get(entry.getKey());
-                if (ticket == null) {
-                    bar.step();
-                    continue;
-                }
-
-                int fixIndex = entry.getValue();
-                double pForTicket = variant == Proportion.Variant.INCREMENTAL
-                        ? (runningCount == 0 ? 1.0 : runningSum / runningCount)
-                        : globalP;
-                boolean hadAffectedVersions = ticket.hasAffectedVersions();
-                int injectedIndex = resolveInjectedVersionIndex(ticket, timeline, fixIndex, pForTicket);
-
-                if (hadAffectedVersions && injectedIndex < fixIndex) {
-                    withAffectedVersions++;
-                } else if (!hadAffectedVersions && injectedIndex < fixIndex) {
-                    withProportionFallback++;
-                }
-
-                if (injectedIndex < fixIndex) {
-                    Set<String> touchedPaths = touchedPathsByTicket.getOrDefault(ticket.key(), Set.of());
-                    for (int releaseIndex = injectedIndex; releaseIndex < fixIndex; releaseIndex++) {
-                        String releaseTag = timeline.orderedTags().get(releaseIndex);
-                        buggyPathsByRelease.computeIfAbsent(releaseTag, ignored -> new LinkedHashSet<>())
-                                .addAll(touchedPaths);
-                    }
-                }
-
-                double contribution = contributions.getOrDefault(entry.getKey(), -1.0);
-                if (contribution >= 0) {
-                    runningSum += contribution;
-                    runningCount++;
-                }
-                bar.step(ticket.key());
-            }
-        }
-
-        LOG.info("  Oracle built - {} releases with buggy paths  (IV-JIRA: {}  /  Proportion: {})",
-                buggyPathsByRelease.size(), withAffectedVersions, withProportionFallback);
+        LOG.info(
+                "  Oracle built - {} releases with buggy paths  (IV-JIRA: {}  /  Proportion: {})",
+                buggyPathsByRelease.size(),
+                stats.withAffectedVersions(),
+                stats.withProportionFallback()
+        );
 
         return new ReleaseLabeling(
                 immutableSetValues(buggyPathsByRelease),
@@ -128,8 +113,8 @@ public final class HistoricalBugTaker {
                         "proportion-fallback",
                         resolvedTickets.size(),
                         fixReleaseByTicket.size(),
-                        withAffectedVersions,
-                        withProportionFallback,
+                        stats.withAffectedVersions(),
+                        stats.withProportionFallback(),
                         timeline.size(),
                         datasetTags.size(),
                         "The oracle uses affected versions when available. When absent, the injected version "
@@ -138,6 +123,131 @@ public final class HistoricalBugTaker {
                                 + "). When no calibration data exists, P defaults to 1.0 (IV=OV)."
                 )
         );
+    }
+
+    private LabelingStats labelReleases(
+            ReleaseTimeline timeline,
+            Map<String, JiraSnapshot> ticketsByKey,
+            Map<String, Integer> fixReleaseByTicket,
+            Map<String, Set<String>> touchedPathsByTicket,
+            Map<String, Double> contributions,
+            Map<String, Set<String>> buggyPathsByRelease,
+            Proportion.Variant variant,
+            double globalP
+    ) {
+        List<Map.Entry<String, Integer>> orderedTickets =
+                new ArrayList<>(fixReleaseByTicket.entrySet());
+
+        orderedTickets.sort(
+                Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue)
+                        .thenComparing(Map.Entry::getKey)
+        );
+
+        int withAffectedVersions = 0;
+        int withProportionFallback = 0;
+        double runningSum = 0.0;
+        int runningCount = 0;
+
+        try (ProgressBar bar = new ProgressBar("Labeling releases", orderedTickets.size())) {
+            for (Map.Entry<String, Integer> entry : orderedTickets) {
+                JiraSnapshot ticket = ticketsByKey.get(entry.getKey());
+
+                if (ticket == null) {
+                    bar.step();
+                    continue;
+                }
+
+                int fixIndex = entry.getValue();
+
+                double pForTicket = proportionForTicket(
+                        variant,
+                        globalP,
+                        runningSum,
+                        runningCount
+                );
+
+                int injectedIndex = resolveInjectedVersionIndex(
+                        ticket,
+                        timeline,
+                        fixIndex,
+                        pForTicket
+                );
+
+                if (injectedIndex < fixIndex) {
+                    if (ticket.hasAffectedVersions()) {
+                        withAffectedVersions++;
+                    } else {
+                        withProportionFallback++;
+                    }
+
+                    addBuggyPaths(
+                            ticket,
+                            timeline,
+                            injectedIndex,
+                            fixIndex,
+                            touchedPathsByTicket,
+                            buggyPathsByRelease
+                    );
+                }
+
+                double contribution = contributions.getOrDefault(entry.getKey(), -1.0);
+                if (contribution >= 0) {
+                    runningSum += contribution;
+                    runningCount++;
+                }
+
+                bar.step(ticket.key());
+            }
+        }
+
+        return new LabelingStats(
+                withAffectedVersions,
+                withProportionFallback
+        );
+    }
+
+    private double proportionForTicket(
+            Proportion.Variant variant,
+            double globalP,
+            double runningSum,
+            int runningCount
+    ) {
+        if (variant != Proportion.Variant.INCREMENTAL) {
+            return globalP;
+        }
+
+        return runningCount == 0
+                ? 1.0
+                : runningSum / runningCount;
+    }
+
+    private void addBuggyPaths(
+            JiraSnapshot ticket,
+            ReleaseTimeline timeline,
+            int injectedIndex,
+            int fixIndex,
+            Map<String, Set<String>> touchedPathsByTicket,
+            Map<String, Set<String>> buggyPathsByRelease
+    ) {
+        Set<String> touchedPaths =
+                touchedPathsByTicket.getOrDefault(ticket.key(), Set.of());
+
+        for (int releaseIndex = injectedIndex;
+             releaseIndex < fixIndex;
+             releaseIndex++) {
+
+            String releaseTag = timeline.orderedTags().get(releaseIndex);
+
+            buggyPathsByRelease
+                    .computeIfAbsent(releaseTag, ignored -> new LinkedHashSet<>())
+                    .addAll(touchedPaths);
+        }
+    }
+
+    private record LabelingStats(
+            int withAffectedVersions,
+            int withProportionFallback
+    ) {
     }
 
     /**

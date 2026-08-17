@@ -27,10 +27,10 @@ final class JiraTicketReader {
     private static final Logger LOG = LoggerFactory.getLogger(JiraTicketReader.class);
     private static final int PAGE_SIZE = 100;
     private static final String PARAM_FIELDS = "fields";
-    private static final String s1 = "startAt";
-    private static final String s2 = "maxResults";
-    private static final String s3 = "issues";
-    private static final String s4 = "total";
+    private static final String S1 = "startAt";
+    private static final String S2 = "maxResults";
+    private static final String S3 = "issues";
+    private static final String S4 = "total";
 
     private final JiraClient jsonClient;
 
@@ -57,13 +57,13 @@ final class JiraTicketReader {
         try {
             while (true) {
                 URI uri = new URIBuilder(session.searchBase())
-                        .addParameter(s1, String.valueOf(startAt))
-                        .addParameter(s2, String.valueOf(PAGE_SIZE))
+                        .addParameter(S1, String.valueOf(startAt))
+                        .addParameter(S2, String.valueOf(PAGE_SIZE))
                         .build();
                 JsonNode response = jsonClient.get(uri, session.authHeader());
-                collectIssueKeys(response.path(s3), keys);
+                collectIssueKeys(response.path(S3), keys);
 
-                int total = response.path(s4).asInt();
+                int total = response.path(S4).asInt();
                 LOG.debug("JIRA total: {} startAt: {}", total, startAt);
                 startAt += PAGE_SIZE;
                 if (startAt >= total) {
@@ -164,13 +164,13 @@ final class JiraTicketReader {
             while (true) {
                 URI uri = new URIBuilder(session.searchBase())
                         .addParameter(PARAM_FIELDS, "key,versions,created")
-                        .addParameter(s1, String.valueOf(startAt))
-                        .addParameter(s2, String.valueOf(PAGE_SIZE))
+                        .addParameter(S1, String.valueOf(startAt))
+                        .addParameter(S2, String.valueOf(PAGE_SIZE))
                         .build();
                 JsonNode response = jsonClient.get(uri, session.authHeader());
-                collectTickets(response.path(s3), tickets);
+                collectTickets(response.path(S3), tickets);
 
-                int total = response.path(s4).asInt();
+                int total = response.path(S4).asInt();
                 startAt += PAGE_SIZE;
                 if (startAt >= total) {
                     break;
@@ -250,13 +250,13 @@ final class JiraTicketReader {
             while (true) {
                 URI uri = new URIBuilder(session.allTicketsSearchBase())
                         .addParameter(PARAM_FIELDS, "key,versions,created,resolutiondate,priority,issuetype,components")
-                        .addParameter(s1, String.valueOf(startAt))
-                        .addParameter(s2, String.valueOf(PAGE_SIZE))
+                        .addParameter(S1, String.valueOf(startAt))
+                        .addParameter(S2, String.valueOf(PAGE_SIZE))
                         .build();
                 JsonNode response = jsonClient.get(uri, session.authHeader());
-                collectFullTickets(response.path(s3), tickets);
+                collectFullTickets(response.path(S3), tickets);
 
-                int total = response.path(s4).asInt();
+                int total = response.path(S4).asInt();
                 startAt += PAGE_SIZE;
                 if (startAt >= total) {
                     break;

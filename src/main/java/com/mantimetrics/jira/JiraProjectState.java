@@ -60,7 +60,10 @@ record JiraProjectState(
      */
     static String deriveAllTypesQuery(String jql) {
         String s = jql;
-        s = s.replaceAll("(?i)\\s+AND\\s+(issuetype|type)\\s*=\\s*Bug", "");
+        s = s.replaceAll(
+                "(?i)AND\\s+(?:issue)?type\\s*=\\s*Bug",
+                ""
+        );
         s = s.replaceAll("(?i)(issuetype|type)\\s*=\\s*Bug\\s+AND\\s+", "");
         s = s.replaceAll("(?i)(issuetype|type)\\s*=\\s*Bug", "");
         return s.trim();
