@@ -52,27 +52,34 @@ public final class GitIssueClient {
     public List<RawIssue> fetchClosedBugIssues(String owner, String repo) throws IOException {
         List<RawIssue> issues = new ArrayList<>();
         int page = 1;
-        while (true) {
+        boolean done = false;
+
+        while (!done) {
             String url = String.format(
                     "%s/repos/%s/%s/issues?state=%s&labels=%s&per_page=%d&page=%d",
                     GitIssueConfig.API_BASE, owner, repo,
                     GitIssueConfig.STATE, GitIssueConfig.BUG_LABEL, PAGE_SIZE, page);
+
             JsonNode array = get(url);
+
             if (!array.isArray() || array.isEmpty()) {
-                break;
-            }
-            for (JsonNode node : array) {
-                if (node.has("pull_request")) {
-                    continue; // /issues also returns PRs; skip them
+                done = true;
+            } else {
+                for (JsonNode node : array) {
+                    // /issues also returns PRs; skip them
+                    if (!node.has("pull_request")) {
+                        issues.add(new RawIssue(
+                                node.path("number").asInt(),
+                                Instant.parse(node.path("created_at").asText())));
+                    }
                 }
-                issues.add(new RawIssue(
-                        node.path("number").asInt(),
-                        Instant.parse(node.path("created_at").asText())));
+
+                done = array.size() < PAGE_SIZE;
+
+                if (!done) {
+                    page++;
+                }
             }
-            if (array.size() < PAGE_SIZE) {
-                break;
-            }
-            page++;
         }
         LOG.info("GitHub Issues: fetched {} closed bug issues for {}/{}", issues.size(), owner, repo);
         return issues;
