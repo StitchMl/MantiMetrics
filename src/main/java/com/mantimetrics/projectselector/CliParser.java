@@ -9,6 +9,8 @@ import com.mantimetrics.labeling.Proportion;
  */
 public final class CliParser {
     private static final int DEFAULT_CLI_PERCENTAGE = 33;
+    private static final String S1 = "--jira-key";
+    private static final String S2 = "--percentage";
 
     /**
      * Parses the raw JVM arguments.
@@ -58,9 +60,9 @@ public final class CliParser {
 
         switch (option) {
             case "--repo-url" -> state.repoUrl = value;
-            case "--jira-key" -> state.jiraKey = value;
+            case S1 -> state.jiraKey = value;
             case "--sonar-key" -> state.sonarKey = value;
-            case "--percentage" -> state.percentage = parsePercentage(value);
+            case S2 -> state.percentage = parsePercentage(value);
             case "--proportion" -> state.proportionRaw = value;
             default -> throw unknownArgument(arg);
         }
@@ -77,7 +79,7 @@ public final class CliParser {
                 state.repoUrl = nextValue(args, index + 1, arg);
                 return index + 2;
             }
-            case "--jira-key", "-j" -> {
+            case S1, "-j" -> {
                 state.jiraKey = nextValue(args, index + 1, arg);
                 return index + 2;
             }
@@ -85,7 +87,7 @@ public final class CliParser {
                 state.sonarKey = nextValue(args, index + 1, arg);
                 return index + 2;
             }
-            case "--percentage", "-p" -> {
+            case S2, "-p" -> {
                 state.percentage = parsePercentage(
                         nextValue(args, index + 1, arg)
                 );
@@ -134,8 +136,8 @@ public final class CliParser {
      */
     private GitConfig buildCliProject(String repoUrl, String jiraKey, Integer percentage, String sonarKey) {
         if (repoUrl == null || repoUrl.isBlank()) {
-            rejectOptionWithoutRepoUrl(jiraKey, "--jira-key");
-            rejectOptionWithoutRepoUrl(percentage, "--percentage");
+            rejectOptionWithoutRepoUrl(jiraKey, S1);
+            rejectOptionWithoutRepoUrl(percentage, S2);
             return null;
         }
         if (jiraKey == null || jiraKey.isBlank()) {
